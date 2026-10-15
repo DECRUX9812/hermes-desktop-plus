@@ -1,17 +1,27 @@
 # UI Coverage Allowlist
 # RPC methods and HTTP routes that are allowed to be unserved
-# (Electron-only or not required for gateway)
+# (Electron-only, UI-only, or pending implementation)
 
-# Electron-only IPC, not gateway RPC
-wake.feed # Electron integration, desktop shell
-wake.pause # Electron integration, desktop shell
+# Electron-only or desktop-specific RPC methods
+profiles.configure # Profile deep operations, desktop-specific UI
+profiles.set_asset # Profile asset management, desktop-specific
+reload.mcp # MCP configuration reload, may be UI-triggered only
+skills.manage # Skill management, may be delegated to UI or future feature
+session.save # Session persistence/snapshots, may be UI-only
+session.status # Session status queries, may use alternative patterns
 
-# These may be Electron-specific or not yet implemented
-profiles.configure # Profile operations may be desktop-only
-profiles.set_asset # Asset management, desktop-specific
-reload.mcp # MCP reload, may be desktop-only
-skills.manage # Skill management, may be delegated
-session.save # Session persistence, may be UI-only
-session.status # Session status, may be proxied differently
-bots_team.delete # Bot team deletion, in flight on s8
-bots_team.learning.add # Bot learning, in flight on s8
+# HTTP routes: Electron-only or not yet needed in web surface
+/api/auth/ws-ticket # WebSocket auth ticket, Electron authentication pattern
+/api/config/defaults # Configuration defaults, may be embedded or UI-derived
+/api/config/schema # Configuration schema, may be embedded or UI-derived
+/api/config?include_defaults=false # Configuration query, variant of main /api/config
+/api/config?preserve_language=true # Configuration query, variant of main /api/config
+/api/logs # System logs, Electron-only operational surface
+/api/profiles/sessions/pull-requests # Pull request integration, future feature
+/api/sessions/owner-backfill # Session owner backfill, internal operation
+/api/skills/hub/install # Skills hub installation, may be backend-driven
+/api/skills/hub/official # Skills hub official catalog, may be backend-driven
+/api/skills/hub/sources # Skills hub sources, may be backend-driven
+/api/skills/hub/uninstall # Skills hub uninstallation, may be backend-driven
+/api/skills/hub/update # Skills hub update, may be backend-driven
+/browser connect manages a Chromium-family browser on the gateway host — only available when connected to a local gateway. # Stock documentation message, not a route

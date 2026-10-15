@@ -176,8 +176,9 @@ def extract_plus_rpc(package_dir: Path) -> Set[str]:
                 continue
             try:
                 content = py_file.read_text(errors="ignore")
-                # Pattern: @method("namespace.method")
-                for match in re.finditer(r'@method\(\s*["\']([a-zA-Z0-9._-]+)["\']\s*\)', content):
+                # Pattern: @method("namespace.method") or @wrapper("namespace.method") where wrapper calls method()
+                # This includes @method, @_team, @_fork, etc. that eventually call method(name)
+                for match in re.finditer(r'@(?:method|_\w+)\(\s*["\']([a-zA-Z0-9._-]+)["\']\s*\)', content):
                     methods.add(match.group(1))
             except Exception:
                 pass
