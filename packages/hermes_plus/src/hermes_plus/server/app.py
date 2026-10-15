@@ -16,7 +16,7 @@ from hermes_plus import __version__, adapter
 from hermes_plus.http import ROUTERS, files, uploads
 from hermes_plus.server import multiplexer, proxy, static
 from hermes_plus.server import auth as auth_module
-from hermes_plus.server.auth import AuthMiddleware, login_page
+from hermes_plus.server.auth import AuthMiddleware, FrontDoorAuth, login_page
 from hermes_plus.server.bridge_rpc import bridge_rpc
 from hermes_plus.server.runtime import Runtime
 from hermes_plus.settings import ServeSettings
@@ -57,6 +57,20 @@ def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
             }
         )
 
+    async def ws_ticket(request: Any) -> JSONResponse:
+        """Mint the single-use credential the renderer dials /api/ws with.
+
+        Upstream's dashboard serves this route for cookie-authenticated
+        clients; the sidecar is the front door, so it mints its own.
+        """
+        auth: FrontDoorAuth = request.app.state.auth
+        return JSONResponse(
+            {
+                "ticket": auth.mint_ws_ticket(),
+                "ttl_seconds": auth_module.WS_TICKET_TTL_SECONDS,
+            }
+        )
+
     async def ws_rpc(websocket: Any) -> None:
         await multiplexer.handle_websocket(websocket, runtime)
 
@@ -86,6 +100,7 @@ def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
         Route("/healthz", healthz),
         Route("/api/plus/info", plus_info),
         Route("/api/plus/bridge/rpc", bridge_rpc, methods=["POST"]),
+        Route("/api/auth/ws-ticket", ws_ticket, methods=["POST"]),
     ]
     if settings.auth == "password":
         routes.append(Route("/login", login_page, methods=["GET", "POST"]))

@@ -17,16 +17,17 @@ _IMMUTABLE = "public, max-age=31536000, immutable"
 _NO_CACHE = "no-cache"
 # Vite-style content hashes: ``assets/index-B3k2x9Qz.js``.
 _HASHED_ASSET = re.compile(r"-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]{1,8}$")
+# Dev fallback: a local packages/ui build next to the Python package. Module
+# level so a test can point it away from a checkout that has been built.
+_DEV_UI_DIR = Path(__file__).resolve().parents[3].parent / "ui" / "dist-webapp"
 
 
 def _ui_root(settings: Any) -> Path | None:
     root = Path(settings.ui_dir)
     if (root / "index.html").is_file():
         return root
-    # Dev fallback: a local packages/ui build next to the Python package.
-    dev = Path(__file__).resolve().parents[3].parent / "ui" / "dist-webapp"
-    if (dev / "index.html").is_file():
-        return dev
+    if (_DEV_UI_DIR / "index.html").is_file():
+        return _DEV_UI_DIR
     return root if root.is_dir() else None
 
 
@@ -38,19 +39,26 @@ def _script_escape(value: Any) -> str:
 def _inject(html: str, settings: Any, runtime: Any) -> str:
     base_path = settings.base_path if settings.base_path not in ("", "/") else ""
     compat = runtime.compat
+    # The renderer reads this object as-is, so it is serialised, never
+    # hand-written: a stray brace here kills the whole bootstrap script and the
+    # app boots into "Desktop IPC bridge is unavailable".
+    plus_config = {
+        "apiBase": "",
+        "wsBase": "",
+        "basePath": settings.base_path,
+        "version": __version__,
+        "compat": {
+            "status": getattr(compat, "status", "unknown"),
+            "message": getattr(compat, "message", ""),
+        },
+    }
     bootstrap = (
         "<script>"
         f"window.__HERMES_SESSION_TOKEN__={_script_escape(runtime.auth.token)};"
         f"window.__HERMES_BASE_PATH__={_script_escape(base_path)};"
         f"window.__HERMES_AUTH_REQUIRED__={'true' if settings.auth != 'none' else 'false'};"
         f"window.__HERMES_UI_SURFACE__={_script_escape('dashboard')};"
-        f"window.__HERMES_PLUS__={{apiBase:'',wsBase:'',"
-        f"basePath:{_script_escape(settings.base_path)},"
-        f"version:{_script_escape(__version__)},"
-        "compat:{"
-        f"status:{_script_escape(getattr(compat, 'status', 'unknown'))},"
-        f"message:{_script_escape(getattr(compat, 'message', ''))}"
-        "}}};"
+        f"window.__HERMES_PLUS__={_script_escape(plus_config)};"
         "</script>"
     )
     lowered = html.lower()
