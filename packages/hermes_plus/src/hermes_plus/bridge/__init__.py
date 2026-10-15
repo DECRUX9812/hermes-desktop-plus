@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import hooks, paths, prompts, tools
+from . import hooks, paths, prompts, spool, tools
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,9 @@ def _guarded(ctx: Any, getattr_name: str, feature: str) -> Any:
 
 def _register(ctx: Any) -> None:
     features: list[str] = []
+
+    # Prime the spool writer with the ctx-resolved plus home before hooks may fire.
+    spool.get_spool(paths.plus_home(ctx))
 
     register_hook = _guarded(ctx, "register_hook", "hooks")
     if register_hook is not None:
