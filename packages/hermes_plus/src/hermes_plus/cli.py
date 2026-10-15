@@ -734,34 +734,111 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if has_fails else 0
 
 
-def _detect_upgrade_command() -> list[str]:
-    """Detect installation method to construct upgrade command."""
+def _resolve_github_release_tag(repo: str, timeout: int = 5) -> str:
+    """Resolve the latest release tag from a GitHub repo.
+
+    Args:
+        repo: GitHub repo in owner/name format (e.g., DECRUX9812/hermes-desktop-plus).
+        timeout: HTTP request timeout in seconds.
+
+    Returns:
+        The tag name (e.g., "v0.1.0").
+
+    Raises:
+        Exception: if the request fails or the response is invalid.
+    """
+    import urllib.error
+    import urllib.request
+
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    try:
+        request = urllib.request.Request(url)
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            data = json.loads(response.read().decode())
+            tag = data.get("tag_name")
+            if not tag:
+                raise ValueError("Latest release has no tag_name")
+            return tag
+    except urllib.error.URLError as exc:
+        raise Exception(f"Could not fetch latest release from {url}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise Exception(f"Invalid JSON from {url}: {exc}") from exc
+
+
+def _build_wheel_url(repo: str, tag: str, version: str) -> str:
+    """Build a wheel URL for a GitHub release.
+
+    Args:
+        repo: GitHub repo in owner/name format.
+        tag: Release tag (e.g., "v0.1.0").
+        version: Package version (e.g., "0.1.0"), used to construct the wheel filename.
+
+    Returns:
+        The full URL to the wheel on GitHub.
+    """
+    return (
+        f"https://github.com/{repo}/releases/download/{tag}/"
+        f"hermes_plus-{version}-py3-none-any.whl"
+    )
+
+
+def _detect_upgrade_command(
+    repo: str = "DECRUX9812/hermes-desktop-plus",
+    version: str = "0.1.0",
+    source: str | None = None,
+) -> list[str]:
+    """Detect installation method and build upgrade command.
+
+    Args:
+        repo: GitHub repo in owner/name format.
+        version: Package version for wheel filename construction.
+        source: Override the package source (wheel URL, directory, git URL, or package name).
+
+    Returns:
+        A command suitable for the tool manager (uv tool install/upgrade or pipx install/upgrade).
+    """
     prefix = sys.prefix
     uv_tool_dir = os.environ.get("UV_TOOL_DIR", "")
-    if (
+    is_uv = (
         "uv/tools" in prefix
         or (uv_tool_dir and uv_tool_dir in prefix)
         or "uv" in Path(prefix).parts
-    ):
-        return ["uv", "tool", "upgrade", "hermes-plus"]
+    )
 
     pipx_home = os.environ.get("PIPX_HOME", "")
-    if (
+    is_pipx = (
         "pipx" in prefix
         or (pipx_home and pipx_home in prefix)
         or "pipx" in Path(prefix).parts
-    ):
-        return ["pipx", "upgrade", "hermes-plus"]
+    )
 
-    if hasattr(sys, "base_prefix") and sys.prefix != sys.base_prefix:
-        return [sys.executable, "-m", "pip", "install", "-U", "hermes-plus"]
+    is_venv = hasattr(sys, "base_prefix") and sys.prefix != sys.base_prefix
 
-    return ["pip", "install", "-U", "hermes-plus"]
+    # Resolve the package source.
+    if source is None:
+        # Default: fetch latest release from GitHub and build wheel URL.
+        try:
+            tag = _resolve_github_release_tag(repo)
+        except Exception as exc:
+            sys.stderr.write(f"Error resolving latest release: {exc}\n")
+            sys.exit(1)
+        source = _build_wheel_url(repo, tag, version)
+
+    # Build the upgrade command based on the detected installation method.
+    if is_uv:
+        return ["uv", "tool", "install", "--force", source]
+    elif is_pipx:
+        return ["pipx", "install", "--force", source]
+    elif is_venv:
+        return [sys.executable, "-m", "pip", "install", "-U", source]
+    else:
+        return ["pip", "install", "-U", source]
 
 
 def cmd_update(args: argparse.Namespace) -> int:
     """Detect installation method, upgrade package, re-install plugins, and run doctor."""
-    upgrade_cmd = _detect_upgrade_command()
+    source = getattr(args, "source", None)
+    upgrade_cmd = _detect_upgrade_command(source=source)
 
     if getattr(args, "check", False):
         print("Upgrade Check:")
@@ -953,6 +1030,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_update = subparsers.add_parser("update", help="Update hermes-plus installation")
     p_update.add_argument(
         "--check", action="store_true", help="Print what update would do without executing"
+    )
+    p_update.add_argument(
+        "--source", default=None, help="Package source override (wheel URL, directory, git URL, or package name)"
     )
     p_update.add_argument("--profile", "-p", default=None, help="Hermes profile name")
     p_update.set_defaults(func=cmd_update)

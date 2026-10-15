@@ -11,10 +11,9 @@ the web UI, multiplexes the gateway connection, and fronts a loopback-only stock
 ## Install in one command
 
 ```sh
-curl -fsSL https://<INSTALL_URL>/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DECRUX9812/hermes-desktop-plus/v0.1.0/install.sh | sh
 ```
 
-`<INSTALL_URL>` is a placeholder until this project publishes a download host.
 The script finds stock Hermes on `PATH`, installs the sidecar into its own tool
 environment, copies the bridge plugin into your Hermes home, runs migrations,
 and finishes with `hermes-plus doctor`.
@@ -22,7 +21,7 @@ and finishes with `hermes-plus doctor`.
 Without the script:
 
 ```sh
-uv tool install hermes-plus    # or: pipx install hermes-plus
+uv tool install https://github.com/DECRUX9812/hermes-desktop-plus/releases/download/v0.1.0/hermes_plus-0.1.0-py3-none-any.whl
 hermes-plus install
 ```
 
