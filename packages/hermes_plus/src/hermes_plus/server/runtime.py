@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
 from pathlib import Path
@@ -53,7 +54,34 @@ class Runtime:
         self.mcp = McpClientManager()
         self._stores: dict[Path, Store] = {}
         self._stores_lock = threading.RLock()
+        self._clients: set[tuple[Any, asyncio.Lock]] = set()
         self.started = False
+
+    def register_client(self, client: tuple[Any, asyncio.Lock]) -> None:
+        self._clients.add(client)
+
+    def unregister_client(self, client: tuple[Any, asyncio.Lock]) -> None:
+        self._clients.discard(client)
+
+    async def broadcast(
+        self, event_name: str, payload: dict[str, Any], session_id: str | None = None
+    ) -> None:
+        event_params: dict[str, Any] = {"type": event_name, "payload": payload}
+        if session_id:
+            event_params["session_id"] = session_id
+        message = {"jsonrpc": "2.0", "method": "event", "params": event_params}
+        raw = json.dumps(message, ensure_ascii=False, separators=(",", ":"))
+        for ws, lock in list(self._clients):
+            try:
+                async with lock:
+                    await ws.send_text(raw)
+            except Exception:
+                pass
+
+    async def emit(
+        self, event_name: str, payload: dict[str, Any], session_id: str | None = None
+    ) -> None:
+        await self.broadcast(event_name, payload, session_id=session_id)
 
     async def start(self) -> None:
         if self.started:

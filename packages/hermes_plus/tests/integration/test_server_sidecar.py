@@ -347,6 +347,56 @@ async def test_owned_method_reaches_upstream_with_namespaced_ids(sidecar: Sideca
             assert reply["result"]["approval"]["status"] == "allowed"
 
 
+@pytest.mark.asyncio
+async def test_mailbox_send_and_update_with_two_ws_clients(sidecar: Sidecar):
+    async with await _ws_open(sidecar) as ws1, await _ws_open(sidecar) as ws2:
+        # Client 1 sends a note
+        send_reply = await _ws_call(
+            ws1,
+            "bots_mailbox.send",
+            {"to": "researcher", "title": "Collaborate on S8", "body": "Please review"},
+        )
+        assert "error" not in send_reply, send_reply
+        note = send_reply["result"]["note"]
+        assert note["title"] == "Collaborate on S8"
+        note_id = note["id"]
+
+        # Client 2 should receive the broadcast events from Client 1's send
+        received_events = []
+        async with asyncio.timeout(10):
+            while len(received_events) < 2:
+                raw = await ws2.recv()
+                frame = json.loads(raw)
+                if frame.get("method") == "event":
+                    received_events.append(frame["params"])
+
+        event_types = [e["type"] for e in received_events]
+        assert "bot_relay.outbox.pending" in event_types
+        assert "mailbox.updated" in event_types
+
+        # Now Client 2 updates the note status
+        update_reply = await _ws_call(
+            ws2,
+            "bots_mailbox.update",
+            {"id": note_id, "status": "accepted", "reply": "I am working on it"},
+        )
+        assert "error" not in update_reply, update_reply
+        assert update_reply["result"]["note"]["status"] == "accepted"
+
+        # Client 1 should receive the broadcast events from Client 2's update
+        client1_events = []
+        async with asyncio.timeout(10):
+            while len(client1_events) < 2:
+                raw = await ws1.recv()
+                frame = json.loads(raw)
+                if frame.get("method") == "event":
+                    client1_events.append(frame["params"])
+
+        c1_event_types = [e["type"] for e in client1_events]
+        assert "bot_relay.outbox.pending" in c1_event_types
+        assert "mailbox.updated" in c1_event_types
+
+
 def test_http_api_proxy(sidecar: Sidecar):
     reply = httpx.get(
         f"{sidecar.url}/api/health",

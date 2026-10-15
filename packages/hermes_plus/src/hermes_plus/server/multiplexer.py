@@ -106,17 +106,20 @@ async def _dispatch_local(
         mcp=runtime.mcp,
     )
 
-    async def emit(event_name: str, payload: dict[str, Any], session_id: str | None = None) -> None:
-        event_params: dict[str, Any] = {"type": event_name, "payload": payload}
-        if session_id:
-            event_params["session_id"] = session_id
-        await _send_json(
-            websocket,
-            send_lock,
-            {"jsonrpc": "2.0", "method": "event", "params": event_params},
-        )
+    if hasattr(runtime, "emit"):
+        context.emit = runtime.emit
+    else:
+        async def emit(event_name: str, payload: dict[str, Any], session_id: str | None = None) -> None:
+            event_params: dict[str, Any] = {"type": event_name, "payload": payload}
+            if session_id:
+                event_params["session_id"] = session_id
+            await _send_json(
+                websocket,
+                send_lock,
+                {"jsonrpc": "2.0", "method": "event", "params": event_params},
+            )
 
-    context.emit = emit
+        context.emit = emit
     response = await dispatch(context, request)
     if response is not None:
         await _send_json(websocket, send_lock, response)
@@ -144,6 +147,9 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
 
     await websocket.accept()
     send_lock = asyncio.Lock()
+    client_entry = (websocket, send_lock)
+    if hasattr(runtime, "register_client"):
+        runtime.register_client(client_entry)
     link = _UpstreamLink(upstream, send_lock)
     taps = TapDispatcher(runtime, connection_profile)
     local_tasks: set[asyncio.Task[None]] = set()
@@ -255,4 +261,6 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
             await websocket.close(code=1012 if failure else 1000)
         except RuntimeError:
             pass
+        if hasattr(runtime, "unregister_client"):
+            runtime.unregister_client(client_entry)
         await taps.close()
