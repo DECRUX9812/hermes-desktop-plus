@@ -44,6 +44,42 @@ def stock_install(stock_hermes: str):
     return detect(stock_hermes)
 
 
+@pytest.fixture(scope="session")
+def stock_checkout() -> Path:
+    """The upstream checkout a pm-managed install was installed from.
+
+    Resolution order: HERMES_PLUS_TEST_HERMES_CHECKOUT, then
+    ``$HERMES_HOME/hermes-agent`` (the CI provisioning layout), then this
+    machine's local default.
+    """
+    candidates = [os.environ.get("HERMES_PLUS_TEST_HERMES_CHECKOUT")]
+    hermes_home = os.environ.get("HERMES_HOME")
+    if hermes_home:
+        candidates.append(str(Path(hermes_home) / "hermes-agent"))
+    candidates.append(str(Path.home() / "Code" / "ship-test" / "sh" / "hermes-agent"))
+    for candidate in candidates:
+        path = Path(candidate).expanduser() if candidate else None
+        if path is not None and (path / ".git").exists():
+            return path
+    pytest.skip(
+        "no upstream checkout for the stock install "
+        "(set HERMES_PLUS_TEST_HERMES_CHECKOUT or HERMES_HOME)"
+    )
+
+
+@pytest.fixture(scope="session")
+def expected_compat() -> frozenset[str]:
+    """Compat statuses the detected install may report (never unsupported unless listed)."""
+    raw = os.environ.get("HERMES_PLUS_TEST_EXPECT_COMPAT", "supported")
+    allowed = {item.strip().lower() for item in raw.split(",") if item.strip()}
+    unknown = allowed - {"supported", "untested", "unsupported"}
+    if not allowed or unknown:
+        pytest.fail(
+            f"HERMES_PLUS_TEST_EXPECT_COMPAT names unknown statuses: {sorted(unknown)}"
+        )
+    return frozenset(allowed)
+
+
 DASHBOARD_PORTS = range(9300, 9400)
 
 

@@ -10,9 +10,13 @@ from hermes_plus.adapter.version import resolve_hermes_bin
 
 
 def run_hermes(
-    args: list[str], *, profile: str | None = None, timeout: int = 120
+    args: list[str], *, profile: str | None = None, timeout: int = 300
 ) -> subprocess.CompletedProcess[str]:
-    """Run the installed Hermes CLI, binding an optional profile through HERMES_HOME."""
+    """Run the installed Hermes CLI, binding an optional profile through HERMES_HOME.
+
+    The generous default covers a cold HERMES_HOME: the stock CLI lazily
+    prepares its isolated runtime (60-110s+) on first real command there.
+    """
     binary = resolve_hermes_bin()
     if binary is None:
         raise FileNotFoundError(

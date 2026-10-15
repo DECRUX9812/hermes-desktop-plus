@@ -68,6 +68,10 @@ jobs:
   contract:
     name: contract vs the pinned known-good tag
     runs-on: ubuntu-latest
+    env:
+      # The pinned tag is a proven known-good: the install must report
+      # `supported`, not merely `untested`.
+      HERMES_PLUS_TEST_EXPECT_COMPAT: supported
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
@@ -80,7 +84,8 @@ jobs:
           uv pip install --python .venv/bin/python -e 'packages/hermes_plus[test]'
       - name: Provision stock Hermes at the pinned tag
         # The real install layout: <root>/hermes-agent with HERMES_HOME=<root>.
-        # setup-hermes.sh publishes the `hermes` launcher into $HOME/.local/bin.
+        # setup-hermes.sh --runtime-only exits before publishing launchers, so
+        # the entry point is the pm environment's venv (no $HOME writes at all).
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/hroot"
@@ -89,11 +94,13 @@ jobs:
             https://github.com/NousResearch/hermes-agent "$root/hermes-agent"
           cd "$root/hermes-agent"
           HERMES_HOME="$root" HERMES_RUNTIME_DIR="$root/runtime" ./setup-hermes.sh --runtime-only
-          test -x "$HOME/.local/bin/hermes"
+          hermes_bin="$(ls "$root"/installs/*/environments/*/venv/bin/hermes | head -1)"
+          test -x "$hermes_bin"
+          echo "HERMES_BIN=$hermes_bin" >> "$GITHUB_ENV"
       - name: Contract tests
         run: |
           set -euo pipefail
-          export HERMES_PLUS_TEST_HERMES="$HOME/.local/bin/hermes"
+          export HERMES_PLUS_TEST_HERMES="$HERMES_BIN"
           export HERMES_HOME="$RUNNER_TEMP/hroot"
           .venv/bin/pytest packages/hermes_plus/tests -q -m contract
 

@@ -1,6 +1,7 @@
 """Tests for hermes-plus CLI running as real subprocesses (zero mocks)."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,15 @@ def _run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.Comple
         env=env,
         timeout=30,
     )
+
+
+def _stock_hermes() -> str | None:
+    """The stock launcher under test: HERMES_PLUS_TEST_HERMES, then the shared install."""
+    candidate = os.environ.get("HERMES_PLUS_TEST_HERMES") or str(
+        Path.home() / "Code/ship-test/venv/bin/hermes"
+    )
+    path = Path(candidate).expanduser()
+    return str(path) if path.is_file() and os.access(path, os.X_OK) else None
 
 
 def test_cli_help() -> None:
@@ -54,8 +64,18 @@ def test_cli_serve_auth_none_external_refused() -> None:
     assert "Refusing auth='none' on non-loopback host" in res.stderr
 
 
-def test_cli_doctor_json() -> None:
-    res = _run_cli("doctor", "--json")
+def test_cli_doctor_json(tmp_path: Path) -> None:
+    # Hermetic: doctor must inspect the stock install under test, never
+    # whatever `hermes` the ambient PATH happens to expose (it may be another
+    # install, or hang repairing an unrelated one). Pinning
+    # HERMES_PLUS_HERMES_BIN takes precedence over PATH resolution.
+    env = os.environ.copy()
+    env["HERMES_HOME"] = str(tmp_path / "hermes-home")
+    env.pop("HERMES_PLUS_HERMES_BIN", None)
+    stock = _stock_hermes()
+    if stock:
+        env["HERMES_PLUS_HERMES_BIN"] = stock
+    res = _run_cli("doctor", "--json", env=env)
     # Doctor should output valid JSON regardless of exit code (0 or 1)
     assert res.returncode in (0, 1)
     data = json.loads(res.stdout)
