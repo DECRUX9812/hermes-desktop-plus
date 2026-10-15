@@ -1,0 +1,17 @@
+.oc/*
+!.oc/SHIP-PLAN.md
+!.oc/QUEUE.md
+!.oc/SHIP-PROGRESS.md
+!.oc/SHIP-DONE.md
+!.oc/research/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+packages/hermes_plus/src/hermes_plus/ui_dist/
+packages/ui/dist-webapp/
+.pytest_cache/
+.task/
