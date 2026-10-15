@@ -58,15 +58,19 @@ async def test_goal_tree_links_a_task_under_a_parent(call):
     assert linked["goal"]["parent_id"] == parent["id"]
 
 
-async def test_spawn_task_is_feature_unavailable_on_stock_upstream(call):
+async def test_spawn_task_creates_kanban_task_and_links_to_goal(call):
     team_id = await _create(call)
     ok(await call("bots_team.member.upsert", {"team_id": team_id, "profile": "lead", "lead": True}))
     goal = ok(await call("bots_team.goal.upsert", {"team_id": team_id, "title": "Launch"}))["goal"]
-    error = fault(await call("bots_team.goal.spawn_task", {
-        "team_id": team_id, "goal_id": goal["id"], "title": "Draft", "assignee": "lead",
+    result = ok(await call("bots_team.goal.spawn_task", {
+        "team_id": team_id, "goal_id": goal["id"], "title": "Draft spec", "assignee": "lead",
     }))
-    assert error["code"] == -32004
-    assert error["data"]["capability"] == "kanban.task.create"
+    assert "task_id" in result
+    assert result["assignee"] == "lead"
+    assert "team" in result
+    team_goals = result["team"]["goals"]
+    matching_goal = next(g for g in team_goals if g["id"] == goal["id"])
+    assert result["task_id"] in matching_goal["task_ids"]
 
 
 async def test_spawn_task_for_unknown_goal_is_refused_before_capability_check(call):

@@ -54,6 +54,14 @@ class RpcContext:
     profile: str | None = None
     capabilities: Any = None
     emit: Any = None
+    mcp: Any = None
+
+    @property
+    def mcp_manager(self) -> Any:
+        if self.mcp is None:
+            from hermes_plus.adapter.mcp import McpClientManager
+            self.mcp = McpClientManager()
+        return self.mcp
 
     @cached_property
     def identities(self) -> BotIdentities:

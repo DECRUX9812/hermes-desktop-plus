@@ -14,6 +14,7 @@ KNOWN_METHODS: dict[str, dict[str, dict[str, Any]]] = {
     "sessions": {"session.list": {"limit": 1}},
     "configuration": {"config.get": {"key": "theme"}},
     "profiles": {"profiles.list": {}},
+    "bot_relay": {"bot_relay.roster.sync": {"agents": []}},
 }
 
 
