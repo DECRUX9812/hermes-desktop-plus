@@ -13,6 +13,10 @@ import pytest
 from hermes_plus.adapter import DashboardProcess, detect, run_hermes
 
 
+# Track all temp HERMES_HOME directories created during the session for cleanup
+_temp_homes: list[Path] = []
+
+
 @contextmanager
 def _environment(**values: str):
     previous = {key: os.environ.get(key) for key in values}
@@ -94,6 +98,46 @@ def loopback_port() -> int:
     pytest.skip("no free loopback port in 9300-9399 for the stock dashboard")
 
 
+def assert_no_orphaned_processes(home: Path) -> None:
+    """Assert that no live processes are using the given HERMES_HOME.
+
+    Uses pgrep to check for processes with the exact home path in their environment.
+    """
+    if os.name == "nt":
+        return  # pgrep not available on Windows
+
+    try:
+        result = subprocess.run(
+            ["pgrep", "-a", "-f", str(home)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            # pgrep found matching processes (exit code 0 means match found)
+            pytest.fail(f"orphaned processes still using {home}:\n{result.stdout}")
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # pgrep timeout or not available
+
+
+def _stop_gateway_daemons(home: Path) -> None:
+    """Stop all gateway daemons associated with the given HERMES_HOME."""
+    try:
+        # Set HERMES_HOME in environment and run hermes gateway stop
+        env = os.environ.copy()
+        env["HERMES_HOME"] = str(home)
+        subprocess.run(
+            ["hermes", "gateway", "stop"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # Timeout or hermes not in PATH; will be caught by process check
+
+
 def start_dashboard(stock_install, home: Path) -> DashboardProcess:
     """Start a real dashboard child with no web dist; the adapter must stub one."""
     inst = replace(stock_install, hermes_home=home)
@@ -130,6 +174,8 @@ def make_dashboard(stock_install, tmp_path):
 @pytest.fixture(scope="session")
 def dashboard(stock_hermes: str, stock_install, tmp_path_factory):
     home = tmp_path_factory.mktemp("hermes-plus-contract-home")
+    _temp_homes.append(home)
+
     with _environment(HERMES_HOME=str(home), HERMES_PLUS_HERMES_BIN=stock_hermes):
         configured = run_hermes(["config", "set", "display.compact", "true"], timeout=120)
     if configured.returncode:
@@ -142,3 +188,18 @@ def dashboard(stock_hermes: str, stock_install, tmp_path_factory):
         yield process, home
     finally:
         stop_dashboard(process)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_gateway_daemons(request):
+    """Session-scoped finalizer to stop all gateway daemons and verify cleanup."""
+    def cleanup():
+        for home in _temp_homes:
+            _stop_gateway_daemons(home)
+            # Give processes a moment to shut down
+            import time
+            time.sleep(1)
+            # Assert no orphaned processes remain
+            assert_no_orphaned_processes(home)
+
+    request.addfinalizer(cleanup)

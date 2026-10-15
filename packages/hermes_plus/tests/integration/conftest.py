@@ -20,6 +20,9 @@ import httpx
 import pytest
 import websockets
 
+# Track all temp HERMES_HOME directories created during the session for cleanup
+_temp_homes: list[Path] = []
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 HERMES_PLUS_BIN = REPO_ROOT / ".venv" / "bin" / "hermes-plus"
 HERMES_BIN = Path(
@@ -36,6 +39,46 @@ def free_port() -> int:
                 continue
             return port
     raise RuntimeError("no free port in the 9300-9399 test range")
+
+
+def assert_no_orphaned_processes(home: Path) -> None:
+    """Assert that no live processes are using the given HERMES_HOME.
+
+    Uses pgrep to check for processes with the exact home path in their environment.
+    """
+    if os.name == "nt":
+        return  # pgrep not available on Windows
+
+    try:
+        result = subprocess.run(
+            ["pgrep", "-a", "-f", str(home)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            # pgrep found matching processes (exit code 0 means match found)
+            pytest.fail(f"orphaned processes still using {home}:\n{result.stdout}")
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # pgrep timeout or not available
+
+
+def _stop_gateway_daemons(home: Path) -> None:
+    """Stop all gateway daemons associated with the given HERMES_HOME."""
+    try:
+        # Set HERMES_HOME in environment and run hermes gateway stop
+        env = os.environ.copy()
+        env["HERMES_HOME"] = str(home)
+        subprocess.run(
+            [str(HERMES_BIN), "gateway", "stop"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # Timeout or hermes not available; will be caught by process check
 
 
 class Sidecar:
@@ -141,9 +184,26 @@ def sidecar(tmp_path_factory: pytest.TempPathFactory):
         pytest.skip(f"stock Hermes binary not available at {HERMES_BIN}")
     if not HERMES_PLUS_BIN.exists():
         pytest.skip("hermes-plus is not installed in the worktree venv")
-    server = make_sidecar(tmp_path_factory.mktemp("hermes-home"))
+    tmp_path = tmp_path_factory.mktemp("hermes-home")
+    hermes_home = tmp_path / "hermes-home"
+    _temp_homes.append(hermes_home)
+    server = make_sidecar(tmp_path)
     yield server
     server.stop()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_gateway_daemons(request):
+    """Session-scoped finalizer to stop all gateway daemons and verify cleanup."""
+    def cleanup():
+        for home in _temp_homes:
+            _stop_gateway_daemons(home)
+            # Give processes a moment to shut down
+            time.sleep(1)
+            # Assert no orphaned processes remain
+            assert_no_orphaned_processes(home)
+
+    request.addfinalizer(cleanup)
 
 
 async def ws_open(sidecar: Sidecar, query: str = ""):
