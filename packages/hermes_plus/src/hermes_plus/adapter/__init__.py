@@ -6,6 +6,7 @@ from hermes_plus.adapter.compat import Compat, check_compat
 from hermes_plus.adapter.config import enable_plugin, load_config
 from hermes_plus.adapter.dashboard import DashboardProcess
 from hermes_plus.adapter.gateway import GatewayClient, RpcError
+from hermes_plus.adapter.mcp import McpClientManager
 from hermes_plus.adapter.paths import hermes_home, list_profiles, plus_home
 from hermes_plus.adapter.version import HermesInstall, detect
 
@@ -18,6 +19,7 @@ __all__ = [
     "DashboardProcess",
     "GatewayClient",
     "HermesInstall",
+    "McpClientManager",
     "RpcError",
     "check_compat",
     "detect",

@@ -103,6 +103,7 @@ async def _dispatch_local(
         profile=profile,
         capabilities=runtime.capabilities,
         internal=GatewayUpstream(runtime.internal) if runtime.internal is not None else None,
+        mcp=runtime.mcp,
     )
 
     async def emit(event_name: str, payload: dict[str, Any], session_id: str | None = None) -> None:
@@ -165,7 +166,7 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
                 if isinstance(frame, dict):
                     taps.offer(frame)
                     method_name = frame.get("method")
-                    if isinstance(method_name, str) and owns(method_name):
+                    if isinstance(method_name, str) and owns(method_name, capabilities=runtime.capabilities):
                         task = asyncio.create_task(
                             _dispatch_local(
                                 websocket, send_lock, runtime, link, connection_profile, frame
@@ -182,7 +183,7 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
                         if (
                             isinstance(item, dict)
                             and isinstance(item.get("method"), str)
-                            and owns(item["method"])
+                            and owns(item["method"], capabilities=runtime.capabilities)
                         ):
                             local_items.append(item)
                         else:

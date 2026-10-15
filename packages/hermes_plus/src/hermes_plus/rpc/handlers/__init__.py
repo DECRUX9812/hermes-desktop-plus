@@ -8,6 +8,7 @@ from hermes_plus.rpc.handlers import (
     fork_memory,
     fork_onboarding,
     fork_routines,
+    mcp_apps,
     session_side,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "fork_memory",
     "fork_onboarding",
     "fork_routines",
+    "mcp_apps",
     "session_side",
 ]

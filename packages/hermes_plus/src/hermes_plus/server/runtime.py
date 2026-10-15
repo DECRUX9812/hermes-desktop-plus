@@ -12,6 +12,7 @@ import httpx
 
 from hermes_plus import adapter
 from hermes_plus.adapter import Capabilities, DashboardProcess, GatewayClient, probe_capabilities
+from hermes_plus.adapter.mcp import McpClientManager
 from hermes_plus.server.auth import FrontDoorAuth
 from hermes_plus.settings import ServeSettings
 from hermes_plus.store import Store, open_store
@@ -49,6 +50,7 @@ class Runtime:
         self.upstream_http_origin = ""
         self.upstream_token = ""
         self.http_client: httpx.AsyncClient | None = None
+        self.mcp = McpClientManager()
         self._stores: dict[Path, Store] = {}
         self._stores_lock = threading.RLock()
         self.started = False
@@ -130,6 +132,11 @@ class Runtime:
                 await http_client.aclose()
             except Exception:
                 log.exception("Failed to close the sidecar HTTP client")
+
+        try:
+            await self.mcp.close_all()
+        except Exception:
+            log.exception("Failed to close MCP client connections")
 
         with self._stores_lock:
             stores = list(self._stores.values())
