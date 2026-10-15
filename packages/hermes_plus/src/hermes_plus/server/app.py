@@ -26,6 +26,15 @@ _API_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
 
 def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
+    # Register public paths (share viewing, mobile pairing)
+    from hermes_plus.server.auth import PUBLIC_PATHS
+    PUBLIC_PATHS.update({
+        "/share/view",
+        "/api/share/view",
+        "/mobile",
+        "/api/mobile/pair",
+    })
+
     async def healthz(request: Any) -> JSONResponse:
         install = runtime.install
         return JSONResponse(

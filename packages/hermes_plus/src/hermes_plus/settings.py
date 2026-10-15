@@ -39,6 +39,7 @@ class ServeSettings:
     dev_ui_url: str | None = None
     base_path: str = "/"
     log_level: str = "info"
+    host_terminal: bool | None = None
 
     def __post_init__(self) -> None:
         if self.ui_dir is None:
@@ -57,6 +58,16 @@ class ServeSettings:
 
         if isinstance(self.trust_proxy_headers, str):
             self.trust_proxy_headers = self.trust_proxy_headers.lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+
+        if self.host_terminal is None:
+            self.host_terminal = _is_loopback(self.host)
+        elif isinstance(self.host_terminal, str):
+            self.host_terminal = self.host_terminal.lower() in (
                 "1",
                 "true",
                 "yes",
@@ -115,6 +126,7 @@ class ServeSettings:
             "dev_ui_url": ("HERMES_PLUS_DEV_UI_URL", str, None),
             "base_path": ("HERMES_PLUS_BASE_PATH", str, "/"),
             "log_level": ("HERMES_PLUS_LOG_LEVEL", str, "info"),
+            "host_terminal": ("HERMES_PLUS_HOST_TERMINAL", bool, None),
         }
 
         resolved: dict[str, Any] = {}
