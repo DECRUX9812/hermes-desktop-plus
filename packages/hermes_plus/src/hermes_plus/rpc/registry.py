@@ -27,7 +27,7 @@ NAMESPACES = (
 )
 # Upstream owns these namespaces; plus may add individual methods there, but the
 # multiplexer must keep routing every other name in them to the stock gateway.
-SHARED_NAMESPACES = ("session", "bot_relay")
+SHARED_NAMESPACES = ("session", "bot_relay", "profiles")
 
 Handler = Callable[[RpcContext, dict[str, Any]], Any]
 _handlers: dict[str, Handler] = {}
@@ -92,11 +92,16 @@ async def _dispatch(ctx: RpcContext, message: Any) -> str | None:
             raise RpcFault(INVALID_PARAMS, "params must be an object")
         handler = _handlers.get(name)
         if handler is None:
-            raise RpcFault(METHOD_NOT_FOUND, f"unknown method {name}")
-        if inspect.iscoroutinefunction(handler):
-            result = await handler(ctx, params)
+            # Forward unknown methods to upstream if available, like the multiplexer does.
+            if ctx.upstream is not None:
+                result = await ctx.upstream.call(name, params)
+            else:
+                raise RpcFault(METHOD_NOT_FOUND, f"unknown method {name}")
         else:
-            result = await asyncio.to_thread(handler, ctx, params)
+            if inspect.iscoroutinefunction(handler):
+                result = await handler(ctx, params)
+            else:
+                result = await asyncio.to_thread(handler, ctx, params)
     except RpcFault as fault:
         failure: RpcFault | None = fault
     except UpstreamRpcError as err:

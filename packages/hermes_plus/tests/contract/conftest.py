@@ -4,13 +4,15 @@ import json
 import os
 import socket
 import subprocess
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from hermes_plus.adapter import DashboardProcess, detect, run_hermes
+from hermes_plus.adapter import DashboardProcess, GatewayClient, detect, run_hermes
+from hermes_plus.rpc import RpcContext
+from hermes_plus.rpc.context import GatewayUpstream
 
 
 # Track all temp HERMES_HOME directories created during the session for cleanup
@@ -203,3 +205,14 @@ def _cleanup_gateway_daemons(request):
             assert_no_orphaned_processes(home)
 
     request.addfinalizer(cleanup)
+
+
+@pytest.fixture
+async def ctx(dashboard, store):
+    """Override the parent ctx fixture to include upstream from the dashboard."""
+    process, _ = dashboard
+    client = GatewayClient(process.ws_url, process.token)
+    await client.connect()
+    context = RpcContext(store, upstream=GatewayUpstream(client))
+    yield context
+    await client.close()
