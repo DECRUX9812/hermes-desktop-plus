@@ -67,6 +67,8 @@ jobs:
           uv pip install --python .venv/bin/python -e 'packages/hermes_plus[test]'
       - name: Provision stock Hermes at ${{ matrix.hermes_ref }}
         # The real install layout: <root>/hermes-agent with HERMES_HOME=<root>.
+        # setup-hermes.sh --runtime-only exits before publishing launchers, so
+        # the entry point is the pm environment's venv (no $HOME writes at all).
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/hroot"
@@ -75,20 +77,22 @@ jobs:
             https://github.com/NousResearch/hermes-agent "$root/hermes-agent"
           cd "$root/hermes-agent"
           HERMES_HOME="$root" HERMES_RUNTIME_DIR="$root/runtime" ./setup-hermes.sh --runtime-only
-          test -x "$HOME/.local/bin/hermes"
+          hermes_bin="$(ls "$root"/installs/*/environments/*/venv/bin/hermes | head -1)"
+          test -x "$hermes_bin"
+          echo "HERMES_BIN=$hermes_bin" >> "$GITHUB_ENV"
       - name: Contract and integration tests
         run: |
           set -euo pipefail
-          export HERMES_PLUS_TEST_HERMES="$HOME/.local/bin/hermes"
+          export HERMES_PLUS_TEST_HERMES="$HERMES_BIN"
           export HERMES_HOME="$RUNNER_TEMP/hroot"
           .venv/bin/pytest packages/hermes_plus/tests -q -m "not model"
       - name: Clean-install smoke
         run: |
           set -euo pipefail
           export HERMES_PLUS_SOURCE="$PWD"
-          export HERMES_PLUS_HERMES_BIN="$HOME/.local/bin/hermes"
+          export HERMES_PLUS_HERMES_BIN="$HERMES_BIN"
           export HERMES_HOME="$RUNNER_TEMP/hroot"
-          export PATH="$HOME/.local/bin:$PATH"
+          export PATH="$HOME/.local/bin:$PATH"  # uv tool installs hermes-plus here
           sh install.sh
           hermes-plus version --json
           hermes-plus doctor --json > "$RUNNER_TEMP/doctor.json" || true
