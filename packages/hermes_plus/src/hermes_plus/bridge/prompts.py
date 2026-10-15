@@ -1,10 +1,15 @@
-"""Prompt sections for the fork's policies and setup prompts.
+"""Prompt sections for the fork's policies, its setup prompts and a bot's team context.
 
-The fork carried these on first user messages (``start_chat`` tail, ``/initiate-setup`` command).
-Stock Hermes' only plugin surface for prompts is ``register_system_prompt_section``, whose rendered
-content is frozen into each new session's system prompt, so every section here is static per
-session (the prompt-caching invariant). Conditions the fork checked per message are approximated
-per session: the matching skill must be installed under ``<HERMES_HOME>/skills/``.
+The fork carried the setup prompts on first user messages (``start_chat`` tail, ``/initiate-setup``
+command) and its policies in the agent loop; stock Hermes' only plugin surface for prompts is
+``register_system_prompt_section``, whose rendered content is frozen into each new session's system
+prompt. Every section here is therefore static per session (the prompt-caching invariant), and the
+per-message conditions the fork checked become per-session ones: the matching skill must be
+installed under ``<HERMES_HOME>/skills/``, or the profile must hold a seat on a team.
+
+What is not portable: the fork's policies *enforced* a cost cap and stopped a stuck turn from the
+loop. The retry tripwire is enforced by ``policies.py`` through ``pre_tool_call``; the cost cap has
+no public hook and is not claimed here.
 """
 
 from __future__ import annotations
@@ -13,16 +18,23 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from . import paths
+from . import paths, sidecar
 
 log = logging.getLogger(__name__)
 
+# The fork's agent/system_prompt.py::_team_parts limits (tools/bot_team.py).
+_PROMPT_MAX_TEAMS = 2
+_PROMPT_TEAMS_SCANNED = 20
+_PROMPT_RPC_TIMEOUT = 2.0
+_MAX_TEAM_CHARS = 3800  # upstream caps a section at 4000 chars
+
 _POLICIES_SECTION = """\
 Turn guardrails (Hermes Plus): this session runs under the fork's turn policies.
-- A hard session cost cap may stop the loop when reached (config `agent.policies.max_cost_usd`);
-  if a turn ends with a cost-cap diagnostic, report it plainly and wait for the user.
-- A retry-loop tripwire stops a turn that calls the same tool with the same arguments repeatedly
-  (default 6 identical calls). If it trips, change approach or ask the user instead of retrying."""
+- The retry-loop tripwire refuses a tool call that repeats the same tool with the same arguments 6+
+  times in one turn. If a tool call comes back blocked with that diagnostic, change approach or ask
+  the user instead of retrying it.
+- A session cost cap (`agent.policies.max_cost_usd`) is not enforced on stock Hermes: watch spend
+  yourself and stop when the user's budget is reached."""
 
 _FIRST_TASK_SECTION = """\
 Setup handoff (Hermes Plus): if this conversation was opened to hand off a setup task, follow the
@@ -35,12 +47,17 @@ Initiate setup (Hermes Plus): when the user asks to set up their machine, follow
 card first, read machine facts from the skill's JSON block, and never re-ask a closed card."""
 
 
-def _skills_dir() -> Path:
-    return paths.hermes_home(None) / "skills"
+def _home() -> Path:
+    return paths.hermes_home(None)
+
+
+def _profile_name(home: Path) -> str:
+    """The active profile's name the way the fork's tools/bot_mode_probe.py reads it."""
+    return home.name if home.parent.name == "profiles" else "default"
 
 
 def _skill_installed(name: str) -> bool:
-    return (_skills_dir() / name / "SKILL.md").is_file()
+    return (_home() / "skills" / name / "SKILL.md").is_file()
 
 
 def register_sections(register: Any) -> list[str]:
@@ -50,6 +67,7 @@ def register_sections(register: Any) -> list[str]:
         ("hermes-plus.policies", _POLICIES_SECTION),
         ("hermes-plus.first-task", _first_task_content),
         ("hermes-plus.initiate-setup", _initiate_setup_content),
+        ("hermes-plus.team", _team_content),
     )
     for section_id, content in candidates:
         try:
@@ -71,3 +89,33 @@ def _initiate_setup_content(session_info: Any) -> str:
     if not _skill_installed("initiate-setup"):
         return ""
     return _INITIATE_SETUP_SECTION
+
+
+def _team_content(session_info: Any) -> str:
+    """The fork's ``tools/bot_team.py::prompt_section``: "## Team" plus one brief per team the
+    profile holds a seat on, rendered from the sidecar (the team store lives in plus.db).
+
+    Empty when the sidecar is not running, when the profile sits on no team, or on any malformed
+    reply — a missing team section must never break a session start.
+    """
+    plus_home = paths.plus_home(None)
+    profile = _profile_name(_home())
+    listing = sidecar.call(plus_home, "bots_team.list", {}, timeout=_PROMPT_RPC_TIMEOUT)
+    teams = listing.get("teams") if isinstance(listing, dict) else None
+    if not isinstance(teams, list):
+        return ""
+    blocks: list[str] = []
+    for summary in teams[:_PROMPT_TEAMS_SCANNED]:
+        team_id = summary.get("id") if isinstance(summary, dict) else None
+        if not isinstance(team_id, str) or not team_id:
+            continue
+        brief = sidecar.call(plus_home, "bots_team.brief", {"team_id": team_id, "member": profile},
+                             timeout=_PROMPT_RPC_TIMEOUT)
+        text = brief.get("brief") if isinstance(brief, dict) else None
+        if isinstance(text, str) and text.strip():
+            blocks.append(text.strip())
+        if len(blocks) >= _PROMPT_MAX_TEAMS:
+            break
+    if not blocks:
+        return ""
+    return ("## Team\n" + "\n\n".join(blocks))[:_MAX_TEAM_CHARS]

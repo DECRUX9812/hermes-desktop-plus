@@ -116,7 +116,11 @@ def _update_task(args: dict[str, Any], **_kw: Any) -> str:
     if not str(args.get("note") or ""):
         return _dump({"error": "note is required — the mbx_… id from the task marker."})
     params = {"id": args.get("note"), "status": args.get("status"), "reply": args.get("reply") or ""}
-    return _dump(sidecar.call(paths.plus_home(None), "bots_mailbox.update", params))
+    result = sidecar.call(paths.plus_home(None), "bots_mailbox.update", params)
+    # The fork's update_task_tool returns {"ok": True, "note": …}; the RPC itself returns {"note": …}.
+    if "error" not in result:
+        result = {"ok": True, **result}
+    return _dump(result)
 
 
 # --- in-process tools ---------------------------------------------------------------

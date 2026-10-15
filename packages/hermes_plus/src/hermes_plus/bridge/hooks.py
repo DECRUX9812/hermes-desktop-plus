@@ -163,6 +163,7 @@ def _record_computer_step(session_id: str, tool_call_id: str, tool_name: str,
         "command": _first(parsed, ("command", "cmd", "script", "code")),
         "path": _first(parsed, ("path", "file_path", "filename", "target")),
         "url": _first(parsed, ("url", "current_url", "page_url")),
+        "page_title": _first(parsed, ("page_title", "title")),
         "screenshot_path": _first(parsed, ("screenshot_path", "screenshot", "image_path")),
     }
     _get_spool().append("computer_step", session_id, {
@@ -170,7 +171,7 @@ def _record_computer_step(session_id: str, tool_call_id: str, tool_name: str,
         "tool_name": tool_name,
         "status": payload["status"],
         "error_message": payload["error_message"],
-        "detail": detail,
+        "detail": {key: value for key, value in detail.items() if value},
     })
 
 
@@ -183,6 +184,8 @@ def pre_approval_request(**kwargs: Any) -> None:
             "pattern_key": kwargs.get("pattern_key"),
             "session_key": kwargs.get("session_key"),
             "surface": kwargs.get("surface"),
+            "tool_call_id": kwargs.get("tool_call_id"),
+            "turn_id": kwargs.get("turn_id"),
         })
     except Exception:
         log.exception("hermes-plus pre_approval_request observer failed")
@@ -197,6 +200,8 @@ def post_approval_response(**kwargs: Any) -> None:
             "session_key": kwargs.get("session_key"),
             "choice": kwargs.get("choice"),
             "decided_by": kwargs.get("decided_by"),
+            "tool_call_id": kwargs.get("tool_call_id"),
+            "turn_id": kwargs.get("turn_id"),
         })
     except Exception:
         log.exception("hermes-plus post_approval_response observer failed")

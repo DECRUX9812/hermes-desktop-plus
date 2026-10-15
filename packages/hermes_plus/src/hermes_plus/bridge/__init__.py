@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import hooks, paths, prompts, spool, tools
+from . import hooks, paths, policies, prompts, spool, tools
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ def _register(ctx: Any) -> None:
     register_hook = _guarded(ctx, "register_hook", "hooks")
     if register_hook is not None:
         features.extend(hooks.register_hooks(register_hook))
+        features.extend(policies.register_policy_hooks(ctx, register_hook))
 
     register_section = _guarded(ctx, "register_system_prompt_section", "prompt sections")
     if register_section is not None:
