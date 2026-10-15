@@ -24,6 +24,15 @@ def _version_tuple(value: str) -> tuple[int, int, int] | None:
     return tuple(int(part) for part in match.groups()) if match else None
 
 
+def _same_commit(left: str, right: str) -> bool:
+    """Match abbreviated commit forms of the same upstream sha (7+ hex chars)."""
+    left, right = left.strip().lower(), right.strip().lower()
+    return (
+        len(left) >= 7 and len(right) >= 7
+        and (left.startswith(right) or right.startswith(left))
+    )
+
+
 def _matrix() -> dict:
     raw = files("hermes_plus").joinpath("compat/matrix.json").read_text(encoding="utf-8")
     matrix = json.loads(raw)
@@ -38,13 +47,21 @@ def check_compat(inst: HermesInstall) -> Compat:
         matrix = _matrix()
         minimum = _version_tuple(str(matrix["min"]))
         known_good = {str(item) for item in matrix["known_good"]}
+        known_good_commits = [str(item) for item in matrix.get("known_good_commits", [])]
     except (OSError, KeyError, TypeError, ValueError):
         return Compat("untested", "Hermes compatibility matrix is unavailable or invalid.")
     if minimum is None:
         return Compat("untested", "Hermes compatibility matrix has an invalid minimum version.")
     tested_main = matrix.get("tested_main")
-    if inst.upstream_commit and tested_main and inst.upstream_commit.startswith(str(tested_main)):
-        return Compat("supported", f"Hermes commit {inst.upstream_commit} matches tested upstream main.")
+    if inst.upstream_commit:
+        commit_allowlist = [str(tested_main)] if tested_main else []
+        commit_allowlist.extend(known_good_commits)
+        for candidate in commit_allowlist:
+            if _same_commit(inst.upstream_commit, candidate):
+                return Compat(
+                    "supported",
+                    f"Hermes commit {inst.upstream_commit} is a known-good upstream commit.",
+                )
     if inst.version_tuple is None or inst.version is None:
         return Compat("untested", "Could not parse the installed Hermes version.")
     if inst.version_tuple < minimum:
