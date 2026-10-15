@@ -42,6 +42,9 @@ def check_compat(inst: HermesInstall) -> Compat:
         return Compat("untested", "Hermes compatibility matrix is unavailable or invalid.")
     if minimum is None:
         return Compat("untested", "Hermes compatibility matrix has an invalid minimum version.")
+    tested_main = matrix.get("tested_main")
+    if inst.upstream_commit and tested_main and inst.upstream_commit.startswith(str(tested_main)):
+        return Compat("supported", f"Hermes commit {inst.upstream_commit} matches tested upstream main.")
     if inst.version_tuple is None or inst.version is None:
         return Compat("untested", "Could not parse the installed Hermes version.")
     if inst.version_tuple < minimum:

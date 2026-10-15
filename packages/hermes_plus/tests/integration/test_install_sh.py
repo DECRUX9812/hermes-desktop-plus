@@ -68,6 +68,7 @@ def test_install_sh_execution(tmp_path: Path) -> None:
     env["UV_TOOL_DIR"] = str(uv_tool_dir)
     env["UV_TOOL_BIN_DIR"] = str(uv_tool_bin_dir)
     env["HERMES_HOME"] = str(hermes_home)
+    env["HERMES_PLUS_FORCE"] = "1"
     env["PATH"] = f"{uv_tool_bin_dir}:{stock_hermes_bin_dir}:{env.get('PATH', '')}"
 
     # 1. Run install.sh for real

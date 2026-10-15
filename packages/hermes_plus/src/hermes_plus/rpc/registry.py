@@ -22,16 +22,19 @@ from hermes_plus.rpc.errors import (
 log = logging.getLogger(__name__)
 
 NAMESPACES = (
-    "fork.bot.identity", "fork.memory", "fork.onboarding", "fork.approvals", "fork.routines", "session",
+    "fork.bot.identity", "fork.memory", "fork.onboarding", "fork.approvals", "fork.routines",
     "bots_team", "bots_mailbox",
 )
+# Upstream owns these namespaces; plus may add individual methods there, but the
+# multiplexer must keep routing every other name in them to the stock gateway.
+SHARED_NAMESPACES = ("session",)
 
 Handler = Callable[[RpcContext, dict[str, Any]], Any]
 _handlers: dict[str, Handler] = {}
 
 
 def method(name: str) -> Callable[[Handler], Handler]:
-    if not name.startswith(tuple(f"{ns}." for ns in NAMESPACES)):
+    if not name.startswith(tuple(f"{ns}." for ns in NAMESPACES + SHARED_NAMESPACES)):
         raise ValueError(f"{name} is outside the plus RPC surface")
 
     def register(fn: Handler) -> Handler:
@@ -45,6 +48,11 @@ def method(name: str) -> Callable[[Handler], Handler]:
 
 def methods() -> tuple[str, ...]:
     return tuple(sorted(_handlers))
+
+
+def owns(name: str) -> bool:
+    """Whether the plus gateway claims this method name or namespace."""
+    return name in _handlers or any(name.startswith(f"{namespace}.") for namespace in NAMESPACES)
 
 
 def _reply(rid: Any, *, result: Any = None, fault: RpcFault | None = None) -> str:
@@ -91,6 +99,12 @@ async def _dispatch(ctx: RpcContext, message: Any) -> str | None:
     else:
         return None if notification else _reply(rid, result=result)
     return None if notification else _reply(rid, fault=failure)
+
+
+async def dispatch(ctx: RpcContext, request: dict[str, Any]) -> dict[str, Any] | None:
+    """Dispatch one parsed JSON-RPC request and return its response object."""
+    serialized = await _dispatch(ctx, request)
+    return json.loads(serialized) if serialized is not None else None
 
 
 async def handle_text(ctx: RpcContext, text: str) -> str | None:

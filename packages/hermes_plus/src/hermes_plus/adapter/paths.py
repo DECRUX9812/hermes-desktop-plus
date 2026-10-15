@@ -31,12 +31,9 @@ def _current_home() -> Path:
 
 
 def _root_of(home: Path) -> Path:
-    native = _native_home()
-    try:
-        home.resolve(strict=False).relative_to(native.resolve(strict=False))
-    except ValueError:
-        return home.parent.parent if home.parent.name == "profiles" else home
-    return native
+    if home.parent.name == "profiles":
+        return home.parent.parent
+    return home
 
 
 def hermes_home(profile: str | None = None) -> Path:

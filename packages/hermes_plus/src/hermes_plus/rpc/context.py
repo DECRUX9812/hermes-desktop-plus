@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Any, Protocol
 
@@ -51,6 +51,9 @@ class RpcContext:
     store: Store
     upstream: UpstreamCaller | None = None
     internal: UpstreamCaller | None = None
+    profile: str | None = None
+    capabilities: Any = None
+    emit: Any = None
 
     @cached_property
     def identities(self) -> BotIdentities:

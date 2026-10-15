@@ -55,8 +55,16 @@ class DashboardProcess:
         env = os.environ.copy()
         env.pop("HERMES_WEB_DIST", None)
         env.update(self.extra_env)
-        env["HERMES_HOME"] = str(self._home())
+        home = self._home()
+        env["HERMES_HOME"] = str(home)
         env["HERMES_DASHBOARD_SESSION_TOKEN"] = self.token
+        if "HERMES_WEB_DIST" not in env:
+            web_stub = home / "hermes-plus" / "web-stub"
+            web_stub.mkdir(parents=True, exist_ok=True)
+            index_file = web_stub / "index.html"
+            if not index_file.exists():
+                index_file.write_text("<!doctype html><html><body>hermes-plus stub</body></html>")
+            env["HERMES_WEB_DIST"] = str(web_stub)
         return env
 
     def start(self, timeout: float = 60) -> None:
