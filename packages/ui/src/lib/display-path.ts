@@ -98,9 +98,9 @@ function inferredHomePrefix(path: string): string {
 /**
  * Format a filesystem path for UI chrome.
  *
- *   /Users/brooklyn/www/hermes-agent  →  ~/www/hermes-agent
- *   /Users/brooklyn                   →  ~
- *   C:\Users\brooklyn\src             →  ~/src
+ *   /Users/me/www/hermes-agent  →  ~/www/hermes-agent
+ *   /Users/me                   →  ~
+ *   C:\Users\me\src             →  ~/src
  *   /var/log                          →  /var/log
  *   already/relative                  →  already/relative
  */

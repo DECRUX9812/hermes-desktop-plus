@@ -211,12 +211,12 @@ describe('desktop filesystem facade', () => {
     $connection.set({ connectionId: 'mr-small', mode: 'remote', profile: 'default' } as never)
     setApiRequestConnection('mr-small')
 
-    await readDesktopDir('/home/Doug/default-profile-workspace')
-    await readDesktopFileText('/home/Doug/default-profile-workspace/IDEA.md')
-    await readDesktopFileDataUrl('/home/Doug/default-profile-workspace/IDEA.md')
-    await desktopGitRoot('/home/Doug/default-profile-workspace')
+    await readDesktopDir('/home/User/default-profile-workspace')
+    await readDesktopFileText('/home/User/default-profile-workspace/IDEA.md')
+    await readDesktopFileDataUrl('/home/User/default-profile-workspace/IDEA.md')
+    await desktopGitRoot('/home/User/default-profile-workspace')
     await desktopDefaultCwd()
-    await desktopFileDiff('/home/Doug/default-profile-workspace', 'IDEA.md')
+    await desktopFileDiff('/home/User/default-profile-workspace', 'IDEA.md')
 
     expect(api).toHaveBeenCalledTimes(6)
 

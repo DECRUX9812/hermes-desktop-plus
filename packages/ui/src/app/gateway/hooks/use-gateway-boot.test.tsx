@@ -2023,7 +2023,7 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
 
     desktop.settings = {
       getDefaultProjectDir: vi.fn(async () => ({
-        defaultLabel: 'C:\\Users\\sonny',
+        defaultLabel: 'C:\\Users\\Me',
         dir: 'C:\\Hermes',
         resolvedCwd: 'C:\\Hermes'
       })),
