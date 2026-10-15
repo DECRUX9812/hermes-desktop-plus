@@ -23,6 +23,8 @@
 #   HERMES_PLUS_PROOF_LOCK    lock file (default /tmp/hermes-build.lock; "none" = already held)
 #   HERMES_PLUS_PROOF_PORT    sidecar port (default 9230)
 #   SHOTS_DIR                 screenshot output (default ~/Videos/ship-shots)
+#   TMPDIR                    scratch root for the tool install and the temp home
+#                             (default /tmp; point it at disk when /tmp is a tmpfs)
 #
 # The model id is whatever the local cliproxy actually serves. TASK.md names
 # `gemini-3.7-flash-high`, which this proxy rejects with
@@ -37,8 +39,12 @@ PORT=${HERMES_PLUS_PROOF_PORT:-9230}
 SHOTS_DIR=${SHOTS_DIR:-"$HOME/Videos/ship-shots"}
 LOCK=${HERMES_PLUS_PROOF_LOCK:-/tmp/hermes-build.lock}
 
-WORK=$(mktemp -d /tmp/hp-proof-work-XXXXXX)
-HOME_DIR=$(mktemp -d /tmp/hp-proof-XXXXXX)
+# The proof installs a real tool and a real HERMES_HOME, so it needs room: honor
+# TMPDIR (set it to a disk-backed dir on hosts where /tmp is a small tmpfs).
+TMP_ROOT=${TMPDIR:-/tmp}
+mkdir -p "$TMP_ROOT"
+WORK=$(mktemp -d "$TMP_ROOT/hp-proof-work-XXXXXX")
+HOME_DIR=$(mktemp -d "$TMP_ROOT/hp-proof-XXXXXX")
 LOG_DIR="$WORK/logs"
 mkdir -p "$LOG_DIR" "$SHOTS_DIR"
 
