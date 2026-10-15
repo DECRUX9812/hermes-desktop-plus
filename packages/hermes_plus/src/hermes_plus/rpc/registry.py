@@ -21,19 +21,17 @@ from hermes_plus.rpc.errors import (
 
 log = logging.getLogger(__name__)
 
-NAMESPACES = ("fork.bot.identity", "fork.memory", "fork.onboarding", "fork.approvals", "bots_team", "bots_mailbox")
-DEFERRED = frozenset({
-    "fork.onboarding.ensure_setup_profile",
-    "fork.onboarding.ensure_setup_session",
-    "fork.onboarding.reset_setup_profile",
-})
+NAMESPACES = (
+    "fork.bot.identity", "fork.memory", "fork.onboarding", "fork.approvals", "fork.routines", "session",
+    "bots_team", "bots_mailbox",
+)
 
 Handler = Callable[[RpcContext, dict[str, Any]], Any]
 _handlers: dict[str, Handler] = {}
 
 
 def method(name: str) -> Callable[[Handler], Handler]:
-    if name in DEFERRED or not name.startswith(tuple(f"{ns}." for ns in NAMESPACES)):
+    if not name.startswith(tuple(f"{ns}." for ns in NAMESPACES)):
         raise ValueError(f"{name} is outside the plus RPC surface")
 
     def register(fn: Handler) -> Handler:

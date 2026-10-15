@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
+import socket
+import subprocess
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -41,6 +44,60 @@ def stock_install(stock_hermes: str):
     return detect(stock_hermes)
 
 
+DASHBOARD_PORTS = range(9300, 9400)
+
+
+def loopback_port() -> int:
+    for port in DASHBOARD_PORTS:
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    pytest.skip("no free loopback port in 9300-9399 for the stock dashboard")
+
+
+def start_dashboard(stock_install, home: Path, web_dist: Path) -> DashboardProcess:
+    inst = replace(stock_install, hermes_home=home)
+    process = DashboardProcess(
+        inst, port=loopback_port(), extra_env={"HERMES_HOME": str(home), "HERMES_WEB_DIST": str(web_dist)}
+    )
+    process.start(timeout=120)
+    return process
+
+
+def stop_dashboard(process: DashboardProcess) -> None:
+    child = process.process
+    pid = child.pid if child is not None else None
+    process.stop()
+    if child is not None:
+        assert child.poll() is not None, "stock dashboard process was not reaped"
+    if pid is not None and os.name != "nt":
+        with pytest.raises(ProcessLookupError):
+            os.killpg(pid, 0)
+
+
+def placeholder_web_dist(directory: Path) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "index.html").write_text("<!doctype html><title>hermes</title>", encoding="utf-8")
+    return directory
+
+
+@pytest.fixture
+def make_dashboard(stock_install, tmp_path):
+    started: list[DashboardProcess] = []
+
+    def start(home: Path) -> DashboardProcess:
+        process = start_dashboard(stock_install, home, placeholder_web_dist(tmp_path / f"web-{len(started)}"))
+        started.append(process)
+        return process
+
+    yield start
+    for process in started:
+        stop_dashboard(process)
+
+
 @pytest.fixture(scope="session")
 def dashboard(stock_hermes: str, stock_install, tmp_path_factory):
     home = tmp_path_factory.mktemp("hermes-plus-contract-home")
@@ -53,17 +110,8 @@ def dashboard(stock_hermes: str, stock_install, tmp_path_factory):
             "stock Hermes could not initialize the contract home with config set: "
             f"{configured.stderr.strip() or configured.stdout.strip()}"
         )
-    inst = replace(stock_install, hermes_home=home)
-    process = DashboardProcess(inst, port=0, extra_env={"HERMES_HOME": str(home)})
-    process.start(timeout=120)
+    process = start_dashboard(stock_install, home, placeholder_web_dist(tmp_path_factory.mktemp("web-dist")))
     try:
         yield process, home
     finally:
-        child = process.process
-        pid = child.pid if child is not None else None
-        process.stop()
-        if child is not None:
-            assert child.poll() is not None, "stock dashboard process was not reaped"
-        if pid is not None and os.name != "nt":
-            with pytest.raises(ProcessLookupError):
-                os.killpg(pid, 0)
+        stop_dashboard(process)

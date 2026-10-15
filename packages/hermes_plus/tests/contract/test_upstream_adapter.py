@@ -28,10 +28,10 @@ pytestmark = pytest.mark.contract
 def test_stock_version_and_compat_detection(stock_hermes, stock_install) -> None:
     assert stock_install.hermes_bin == stock_hermes
     assert stock_install.python is not None
-    assert stock_install.version is None
-    assert stock_install.version_tuple is None
-    assert stock_install.upstream_commit == "379cf12"
-    assert check_compat(stock_install).status == "untested"
+    assert stock_install.version == "0.21.6"
+    assert stock_install.version_tuple == (0, 21, 6)
+    assert stock_install.upstream_commit == "0e427d78"
+    assert check_compat(stock_install).status == "unsupported"
     assert detect(stock_hermes).upstream_commit == stock_install.upstream_commit
 
 

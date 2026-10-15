@@ -20,6 +20,7 @@ _COMMIT_RE = re.compile(
     r"\b(?:upstream|commit)\s*(?:[:=]\s*)?([0-9a-f]{7,40})\b|\bvgit\.([0-9a-f]{7,40})\b",
     re.IGNORECASE,
 )
+_POLYGLOT_LAUNCHER_PREFIX = """'''exec' "$(dirname -- "$(realpath -- "$0")")"/"""
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,10 @@ def _python_from_launcher(hermes_bin: str) -> str | None:
             return python
 
     for line in text.splitlines():
+        if line.startswith(_POLYGLOT_LAUNCHER_PREFIX):
+            name = line.removeprefix(_POLYGLOT_LAUNCHER_PREFIX).split("'")[1]
+            candidate = path.resolve().parent / name
+            return str(candidate) if candidate.is_file() else None
         if not line.startswith("exec "):
             continue
         lexer = shlex.shlex(line.removeprefix("exec "), posix=True)

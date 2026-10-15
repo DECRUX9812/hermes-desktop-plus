@@ -7,6 +7,8 @@ from hermes_plus.rpc.handlers import (
     fork_bot_identity,
     fork_memory,
     fork_onboarding,
+    fork_routines,
+    session_side,
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "fork_bot_identity",
     "fork_memory",
     "fork_onboarding",
+    "fork_routines",
+    "session_side",
 ]

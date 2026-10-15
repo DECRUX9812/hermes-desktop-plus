@@ -11,7 +11,12 @@ SURFACE = sorted([
     "fork.bot.identity.get", "fork.bot.identity.set",
     "fork.memory.list", "fork.memory.add", "fork.memory.update", "fork.memory.remove",
     "fork.onboarding.state", "fork.onboarding.mark_seen", "fork.onboarding.record_failed_start",
+    "fork.onboarding.ensure_setup_profile", "fork.onboarding.ensure_setup_session",
+    "fork.onboarding.reset_setup_profile",
     "fork.approvals.list", "fork.approvals.decide",
+    "fork.routines.list", "fork.routines.create", "fork.routines.update", "fork.routines.pause",
+    "fork.routines.resume", "fork.routines.remove", "fork.routines.run_now",
+    "session.ask", "session.predict_next",
     "bots_team.list", "bots_team.get", "bots_team.room_lead", "bots_team.create", "bots_team.update",
     "bots_team.delete", "bots_team.member.upsert", "bots_team.member.remove", "bots_team.goal.upsert",
     "bots_team.goal.link_task", "bots_team.goal.spawn_task", "bots_team.approval.request",
@@ -26,21 +31,11 @@ def test_surface_is_exactly_the_contracted_methods():
     assert list(methods()) == SURFACE
 
 
-def test_routines_and_setup_profile_methods_are_not_exposed():
-    names = set(methods())
-    assert not any(name.startswith("fork.routines.") for name in names)
-    assert not names & {
-        "fork.onboarding.ensure_setup_profile",
-        "fork.onboarding.ensure_setup_session",
-        "fork.onboarding.reset_setup_profile",
-    }
-
-
 def test_registry_refuses_names_outside_the_surface():
     with pytest.raises(ValueError):
-        method("fork.routines.list")
+        method("fork.nope.list")
     with pytest.raises(ValueError):
-        method("fork.onboarding.reset_setup_profile")
+        method("sessions.ask")
 
 
 async def test_unparseable_line_gets_parse_error(ctx):
@@ -56,7 +51,7 @@ async def test_wrong_protocol_version_is_an_invalid_request(ctx):
 
 
 async def test_unknown_method_is_method_not_found(call):
-    reply = await call("fork.routines.list")
+    reply = await call("fork.nope.list")
     assert reply["error"]["code"] == -32601
 
 

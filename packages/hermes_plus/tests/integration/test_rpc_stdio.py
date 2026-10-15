@@ -60,7 +60,11 @@ def test_team_lifecycle_over_stdio_survives_restart(tmp_path):
 
 
 @pytest.mark.integration
-def test_identity_and_memory_persist_across_processes(tmp_path):
+def test_identity_and_memory_persist_across_processes(tmp_path, monkeypatch):
+    profile = tmp_path / "hermes" / "profiles" / "demo"
+    profile.mkdir(parents=True)
+    (profile / "config.yaml").write_text("", encoding="utf-8")
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
     plus_home = tmp_path / "plus-home"
     _run(plus_home, [
         _request(1, "fork.bot.identity.set", {"profile": "demo", "display_name": "Demo Bot", "role": "Support"}),
