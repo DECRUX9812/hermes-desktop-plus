@@ -1,4 +1,21 @@
-"""Host terminal PTY policy and frame protocol handler."""
+"""Webapp host terminal: OUR PTY in the user's home or the requested cwd.
+
+This is not a proxy of upstream ``/api/pty`` — the fork's webapp terminal runs
+a shell on the HOST under the server's own identity, so the sidecar owns the
+PTY (ptyprocess) end to end and speaks the fork's frame protocol
+(web_host_terminal.py + web_host_terminal_sessions.py):
+
+  * first message: ``\\0HERMES_TERMINAL_META:`` + JSON ``{shell, terminalId,
+    cwd, reconnected, retentionSeconds, truncated}``;
+  * then raw terminal output frames (text);
+  * inbound raw keystroke frames, resizes as ``\\x1b[RESIZE:<cols>;<rows>``;
+  * ``?attach=<terminalId>`` reattaches a retained shell and replays the
+    bounded buffer; ``?action=close&attach=`` closes it;
+  * close codes: 4403 denied, 4410 expired, 1013 registry full.
+
+Sessions survive viewer disconnects for RETENTION_SECONDS and die with the
+process. Always requires auth (enforced by the middleware + route policy).
+"""
 
 from __future__ import annotations
 
@@ -6,100 +23,62 @@ import asyncio
 import json
 import logging
 import os
-import sys
+import re
+import secrets
+import select
+import shutil
+import time
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-# Frame protocol: terminal I/O and metadata as JSON-framed records.
-# Each frame: 4-byte big-endian length prefix + JSON object.
-# Object types: {"type": "init", "rows": int, "cols": int, "cwd": str?, "shell": str?}
-#              {"type": "input", "data": bytes (base64)}
-#              {"type": "output", "data": bytes (base64)}
-#              {"type": "resize", "rows": int, "cols": int}
-#              {"type": "error", "message": str}
-#              {"type": "close", "exit_code": int?}
+META_PREFIX = "\0HERMES_TERMINAL_META:"
+RETENTION_SECONDS = 15 * 60.0
+MAX_SESSIONS = 16
+BUFFER_CAP = 1024 * 1024
+TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+RESIZE_RE = re.compile(rb"\x1b\[RESIZE:(\d+);(\d+)\]")
 
-META_PREFIX = "\x00HERMES_TERMINAL_META:"
+_COLS_DEFAULT, _COLS_MAX = 80, 2000
+_ROWS_DEFAULT, _ROWS_MAX = 24, 1000
 
 
 def request_allowed(settings: Any) -> bool:
-    """Allow host shells only when enabled and either authenticated or loopback."""
-    if not settings.host_terminal:
-        return False
-    # Settings will have auth mode; for loopback-only, the auth middleware will allow it.
-    return True
+    """Allow host shells only when the setting enables them (default: loopback on)."""
+    return bool(settings.host_terminal)
+
+
+def _shell_command(candidate: str) -> str | None:
+    """An executable path for ``candidate``; relative paths are refused."""
+    raw = (candidate or "").strip()
+    if not raw or (not raw.startswith("/") and os.name != "nt"):
+        return None
+    found = shutil.which(raw) or (raw if os.access(raw, os.X_OK) else None)
+    return found
 
 
 def shell_spec() -> tuple[list[str], str]:
-    """Resolve the interactive shell command and name."""
+    """Resolve the same interactive-shell ladder the fork and native Desktop use."""
     override = (os.environ.get("HERMES_DESKTOP_SHELL") or "").strip()
-    if os.name != "nt":
-        override = override or (os.environ.get("SHELL") or "").strip()
-
-    command: str | None = None
-    if override:
-        command = _find_command(override)
-
-    if os.name == "nt":
-        if not command:
-            command = _find_command("pwsh.exe") or _find_command("pwsh")
-        if not command:
-            system_root = (
-                os.environ.get("SystemRoot")
-                or os.environ.get("windir")
-                or r"C:\Windows"
-            )
-            ps_path = str(
-                Path(system_root)
-                / "System32"
-                / "WindowsPowerShell"
-                / "v1.0"
-                / "powershell.exe"
-            )
-            command = _find_command(ps_path)
-        command = command or _find_command("powershell.exe") or _find_command("cmd.exe") or "cmd.exe"
-    else:
-        if not command:
-            for candidate in ("/bin/zsh", "/bin/bash", "/bin/sh"):
-                if (resolved := _find_command(candidate)):
-                    command = resolved
-                    break
-        command = command or "/bin/sh"
-
+    override = override or (os.environ.get("SHELL") or "").strip()
+    command = _shell_command(override)
+    if not command:
+        command = next(
+            (
+                resolved
+                for candidate in ("/bin/zsh", "/bin/bash", "/bin/sh")
+                if (resolved := _shell_command(candidate))
+            ),
+            "/bin/sh",
+        )
     name = Path(command).name.lower()
-    if name.startswith(("pwsh", "powershell")):
-        args = ["-NoLogo"]
-    elif name.startswith("cmd"):
-        args = []
-    elif "zsh" in name or "bash" in name:
-        args = ["-il"]
-    else:
-        args = ["-i"]
-
+    args = ["-il"] if "zsh" in name or "bash" in name else ["-i"]
     return [command, *args], name
 
 
-def _find_command(candidate: str) -> str | None:
-    """Check if a command exists and is executable."""
-    raw = (candidate or "").strip()
-    if not raw:
-        return None
-    # Don't resolve relative paths; the PTY will chdir before exec.
-    if not os.path.isabs(raw):
-        return None
-    try:
-        if os.path.isfile(raw) and os.access(raw, os.X_OK):
-            return raw
-    except (OSError, ValueError):
-        pass
-    return None
-
-
 def safe_cwd(requested: str | None) -> str:
-    """Resolve and validate a working directory."""
-    fallback = str(Path.home())
+    fallback = Path.home()
     try:
         candidate = Path((requested or "").strip() or fallback).expanduser().resolve()
         if candidate.is_dir():
@@ -108,192 +87,248 @@ def safe_cwd(requested: str | None) -> str:
             return str(candidate.parent)
     except (OSError, RuntimeError, ValueError):
         pass
-    return fallback
+    return str(fallback)
 
 
-def build_env(base_env: dict[str, str] | None = None) -> dict[str, str]:
-    """Build environment for the PTY process."""
-    env = dict(os.environ)
-    if base_env:
-        env.update(base_env)
-
-    # Clean up Node/npm variables that leak from our own process.
-    for key in list(env):
-        if key == "npm_config_prefix" or key.startswith(("npm_config_", "npm_package_")):
-            env.pop(key, None)
-
-    # Set terminal and locale.
+def build_env() -> dict[str, str]:
+    """A clean child env: no npm leakage, truecolor xterm (fork web_host_terminal.py:120-137)."""
+    env = {key: value for key, value in os.environ.items() if not key.startswith(
+        ("npm_config_", "npm_package_"))}
     for key in ("NO_COLOR", "FORCE_COLOR", "COLORFGBG"):
         env.pop(key, None)
     env["COLORTERM"] = "truecolor"
     env["TERM"] = "xterm-256color"
-    env["TERM_PROGRAM"] = "Hermes"
-    env["HERMES_DESKTOP_TERMINAL"] = "1"
+    env["TERM_PROGRAM"] = "Hermes Plus"
     env.setdefault("LC_CTYPE", "UTF-8")
-
     return env
 
 
-async def handle_host_terminal_ws(websocket: Any, runtime: Any) -> None:
-    """Handle a WebSocket connection for interactive host terminal."""
+def query_dimension(raw: Any, default: int, maximum: int) -> int:
     try:
-        await websocket.accept()
-    except RuntimeError:
+        value = int(raw or default)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(2, min(maximum, value))
+
+
+class _Session:
+    """One retained host shell: ptyprocess owned here, one attached viewer."""
+
+    def __init__(self, token: str, proc: Any, shell: str, cwd: str) -> None:
+        self.token = token
+        self.proc = proc
+        self.shell = shell
+        self.cwd = cwd
+        self.buffer = bytearray()
+        self.truncated = False
+        self.websocket: Any = None
+        self.last_detached_at: float | None = None
+        self.closed = False
+
+    def _append(self, chunk: bytes) -> None:
+        self.buffer.extend(chunk)
+        if len(self.buffer) > BUFFER_CAP:
+            del self.buffer[: len(self.buffer) - BUFFER_CAP]
+            self.truncated = True
+
+    def _read_blocking(self) -> bytes:
+        if self.closed or not self.proc.isalive():
+            return b""
+        ready, _, _ = select.select([self.proc.fd], [], [], 0.5)
+        return os.read(self.proc.fd, 65536) if ready else b""
+
+    def metadata(self, *, reconnected: bool) -> str:
+        return META_PREFIX + json.dumps({
+            "shell": self.shell, "terminalId": self.token, "cwd": self.cwd,
+            "reconnected": reconnected, "retentionSeconds": RETENTION_SECONDS,
+            "truncated": self.truncated,
+        }, separators=(",", ":"))
+
+    async def run(self) -> None:
+        """Drain the PTY into the buffer and the attached viewer until exit."""
+        loop = asyncio.get_running_loop()
+        while not self.closed:
+            chunk = await loop.run_in_executor(None, self._read_blocking)
+            if not chunk:
+                if not self.proc.isalive():
+                    break
+                continue
+            self._append(chunk)
+            viewer = self.websocket
+            if viewer is not None:
+                try:
+                    await viewer.send_text(chunk.decode("utf-8", "replace"))
+                except Exception:
+                    pass
+        await registry.remove(self.token)
+
+
+class HostTerminalRegistry:
+    def __init__(self) -> None:
+        self._sessions: dict[str, _Session] = {}
+        self._tasks: set[asyncio.Task] = set()
+        self._reaper: asyncio.Task | None = None
+
+    def start(self) -> None:
+        if self._reaper is None:
+            self._reaper = asyncio.create_task(self._reap(), name="hermes-plus-host-terminal-reaper")
+
+    async def _reap(self) -> None:
+        while True:
+            await asyncio.sleep(1.0)
+            now = time.monotonic()
+            for token, session in list(self._sessions.items()):
+                if session.closed or not session.proc.isalive() or (
+                    session.websocket is None
+                    and session.last_detached_at is not None
+                    and now - session.last_detached_at > RETENTION_SECONDS
+                ):
+                    await self.remove(token)
+
+    async def create(self, websocket: Any, requested_cwd: str | None, cols: int, rows: int) -> _Session:
+        from ptyprocess import PtyProcess
+
+        if len(self._sessions) >= MAX_SESSIONS:
+            raise _RegistryFull()
+        argv, shell = shell_spec()
+        cwd = safe_cwd(requested_cwd)
+        token = secrets.token_urlsafe(32)
+        try:
+            proc = PtyProcess.spawn(
+                argv, cwd=cwd, env=build_env(), dimensions=(rows, cols))
+        except (OSError, ImportError) as exc:
+            raise _PtyUnavailable(str(exc)) from exc
+        session = _Session(token, proc, shell, cwd)
+        self._sessions[token] = session
+        self.start()
+        task = asyncio.create_task(session.run(), name=f"hermes-plus-pty-{token[:8]}")
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return session
+
+    async def resolve(self, token: str) -> _Session | None:
+        session = self._sessions.get(token)
+        if session is None or session.closed:
+            return None
+        return session
+
+    async def remove(self, token: str) -> None:
+        session = self._sessions.pop(token, None)
+        if session is None:
+            return
+        session.closed = True
+        viewer, session.websocket = session.websocket, None
+        if not session.proc.isalive():
+            if viewer is not None:
+                await _send_closed(viewer, token)
+        else:
+            try:
+                session.proc.terminate(force=True)
+            except Exception:
+                pass
+            if viewer is not None:
+                await _send_closed(viewer, token)
+        try:
+            session.proc.close(force=True)
+        except Exception:
+            pass
+
+
+class _RegistryFull(Exception):
+    pass
+
+
+class _PtyUnavailable(Exception):
+    pass
+
+
+registry = HostTerminalRegistry()
+
+
+async def _send_closed(websocket: Any, token: str) -> None:
+    try:
+        await websocket.send_text(META_PREFIX + json.dumps({"terminalId": token, "closed": True}))
+        await websocket.close(code=1000)
+    except Exception:
+        pass
+
+
+async def handle_host_terminal_ws(websocket: Any) -> None:
+    """Route handler; auth was enforced by the middleware, policy is checked here."""
+    runtime = websocket.app.state.runtime
+    if not request_allowed(runtime.settings):
+        await websocket.close(code=4403, reason="host terminal requires authenticated Webapp")
         return
 
+    params = websocket.query_params
+    token = params.get("attach")
+    action = params.get("action")
+    if action not in (None, "close"):
+        await websocket.close(code=4403, reason="Terminal belongs to another identity or profile")
+        return
+    if token is not None and not TOKEN_RE.fullmatch(token):
+        await websocket.close(code=4410, reason="Terminal or profile expired; open a new terminal")
+        return
+
+    if action == "close":
+        if token is not None:
+            await registry.remove(token)
+        else:
+            await websocket.close(code=4403)
+            return
+        await websocket.accept()
+        await _send_closed(websocket, token)
+        return
+
+    cols = query_dimension(params.get("cols"), _COLS_DEFAULT, _COLS_MAX)
+    rows = query_dimension(params.get("rows"), _ROWS_DEFAULT, _ROWS_MAX)
+    reconnected = token is not None
+    if token is None:
+        try:
+            session = await registry.create(websocket, params.get("cwd"), cols, rows)
+        except _RegistryFull:
+            await websocket.close(code=1013, reason="Terminal capacity reached; close a terminal and retry")
+            return
+        except _PtyUnavailable as exc:
+            await websocket.accept()
+            await websocket.send_text(META_PREFIX + json.dumps({"error": str(exc)}))
+            await websocket.close(code=1011, reason="Pseudo-terminal support is not available")
+            return
+        await websocket.accept()
+    else:
+        session = await registry.resolve(token)
+        if session is None:
+            await websocket.close(code=4410, reason="Terminal or profile expired; open a new terminal")
+            return
+        await websocket.accept()
+
+    session.last_detached_at = None
+    session.websocket = websocket
     try:
-        # First message must be init frame with rows/cols/cwd
-        init_frame = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
-        try:
-            msg = json.loads(init_frame)
-        except (json.JSONDecodeError, ValueError):
-            await websocket.send_json(
-                {"type": "error", "message": "Invalid init frame"}
-            )
-            await websocket.close(code=1002, reason="Invalid init frame")
-            return
-
-        if msg.get("type") != "init":
-            await websocket.send_json(
-                {"type": "error", "message": "First frame must be type=init"}
-            )
-            await websocket.close(code=1002, reason="Expected init frame")
-            return
-
-        rows = int(msg.get("rows") or 24)
-        cols = int(msg.get("cols") or 80)
-        rows = max(2, min(rows, 200))
-        cols = max(2, min(cols, 256))
-
-        requested_cwd = msg.get("cwd")
-        cwd = safe_cwd(requested_cwd)
-
-        log.info("host-terminal: init rows=%d cols=%d cwd=%s", rows, cols, cwd)
-
-        # Spawn PTY
-        try:
-            import ptyprocess
-        except ImportError:
-            await websocket.send_json(
-                {"type": "error", "message": "ptyprocess not available"}
-            )
-            await websocket.close(code=1011, reason="PTY support unavailable")
-            return
-
-        argv, shell_name = shell_spec()
-        env = build_env()
-
-        try:
-            proc = ptyprocess.PtyProcess.spawn(
-                argv, cwd=cwd, env=env, dimensions=(rows, cols)
-            )
-        except (OSError, RuntimeError) as exc:
-            log.exception("Failed to spawn PTY")
-            await websocket.send_json(
-                {"type": "error", "message": f"Failed to spawn shell: {exc}"}
-            )
-            await websocket.close(code=1011, reason="PTY spawn failed")
-            return
-
-        await websocket.send_json(
-            {
-                "type": "ready",
-                "shell": shell_name,
-                "rows": rows,
-                "cols": cols,
-                "cwd": cwd,
-            }
-        )
-
-        # Manage I/O
-        read_task = asyncio.create_task(_read_pty(proc, websocket))
-        write_task = asyncio.create_task(_write_pty(proc, websocket))
-
-        try:
-            await asyncio.gather(read_task, write_task)
-        finally:
-            try:
-                proc.terminate()
-            except OSError:
-                pass
-            try:
-                await asyncio.wait_for(asyncio.gather(read_task, write_task), timeout=1.0)
-            except asyncio.TimeoutError:
-                read_task.cancel()
-                write_task.cancel()
-
-    except asyncio.TimeoutError:
-        log.warning("host-terminal: timeout waiting for init")
-        await websocket.close(code=1000, reason="Timeout")
-    except Exception as exc:
-        log.exception("host-terminal: error")
-        try:
-            await websocket.send_json({"type": "error", "message": str(exc)})
-        except Exception:
-            pass
-        try:
-            await websocket.close(code=1011, reason="Server error")
-        except Exception:
-            pass
-
-
-async def _read_pty(proc: Any, websocket: Any) -> None:
-    """Read from PTY and send to WebSocket."""
-    import base64
-
-    loop = asyncio.get_event_loop()
-    try:
+        await websocket.send_text(session.metadata(reconnected=reconnected))
+        if reconnected and session.buffer:
+            await websocket.send_text(session.buffer.decode("utf-8", "replace"))
         while True:
-            # Read from PTY in a thread to avoid blocking
-            data = await loop.run_in_executor(None, proc.read, 4096)
-            if not data:
-                break
-            await websocket.send_json(
-                {"type": "output", "data": base64.b64encode(data).decode("ascii")}
-            )
-    except Exception as exc:
-        log.debug("_read_pty: %s", exc)
-    finally:
-        try:
-            exit_code = proc.wait()
-        except Exception:
-            exit_code = None
-        try:
-            await websocket.send_json({"type": "close", "exit_code": exit_code})
-        except Exception:
-            pass
-
-
-async def _write_pty(proc: Any, websocket: Any) -> None:
-    """Read from WebSocket and write to PTY."""
-    import base64
-
-    loop = asyncio.get_event_loop()
-    try:
-        while True:
-            msg = await websocket.receive_text()
-            try:
-                frame = json.loads(msg)
-            except (json.JSONDecodeError, ValueError):
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+            raw = message.get("bytes")
+            if raw is None and message.get("text") is not None:
+                raw = message["text"].encode("utf-8")
+            if raw is None:
                 continue
-
-            msg_type = frame.get("type")
-            if msg_type == "input":
+            if (match := RESIZE_RE.fullmatch(raw)) is not None:
                 try:
-                    data = base64.b64decode(frame.get("data", ""))
-                    await loop.run_in_executor(None, proc.write, data)
-                except Exception as exc:
-                    log.debug("_write_pty input: %s", exc)
-            elif msg_type == "resize":
-                rows = int(frame.get("rows") or 24)
-                cols = int(frame.get("cols") or 80)
-                rows = max(2, min(rows, 200))
-                cols = max(2, min(cols, 256))
-                try:
-                    proc.setwinsize(rows, cols)
-                except Exception as exc:
-                    log.debug("_write_pty resize: %s", exc)
-            elif msg_type == "close":
-                break
-    except Exception as exc:
-        log.debug("_write_pty: %s", exc)
+                    session.proc.setwinsize(int(match[2]), int(match[1]))
+                except Exception:
+                    pass
+                continue
+            if not session.proc.isalive():
+                return
+            session.proc.write(raw)
+    except Exception:
+        pass
+    finally:
+        if session.websocket is websocket:
+            session.websocket = None
+            session.last_detached_at = time.monotonic()

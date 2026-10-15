@@ -1,9 +1,20 @@
-"""Git operations via subprocess (workspace-scoped, argument-guarded)."""
+"""Fork-added git routes: session-worktree affordances (fork web_routers/git.py:218-235).
+
+Stock Hermes already serves ``/api/git/*`` (status, branches, worktrees,
+review/*, file-diff) and those proxy to it unchanged. Only these two additions
+are implemented here, with the fork's exact bodies and result shapes, over an
+audited subprocess git in the workspace:
+
+  * ``POST /api/git/worktree/ensure``  -> worktree_ensure (fork web_git.py:911-933)
+  * ``POST /api/git/worktree/merge``   -> worktree_merge  (fork web_git.py:936-950)
+"""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -14,178 +25,145 @@ from starlette.routing import Route
 
 log = logging.getLogger(__name__)
 
-# Whitelist of git operations the UI can call
-_ALLOWED_GIT_OPERATIONS = frozenset({
-    "status",
-    "log",
-    "diff",
-    "branch",
-    "worktree",
-    "remote",
-})
-
-# Argument whitelisting: each operation defines allowed flags
-_GIT_ARG_PATTERNS = {
-    "status": [r"^--porcelain$", r"^--short$", r"^--long$"],
-    "log": [r"^--oneline$", r"^--all$", r"^-n$", r"^\d+$", r"^--.*$"],
-    "diff": [r"^--stat$", r"^--.*$"],
-    "branch": [r"^-a$", r"^-v$", r"^--list$", r"^.*$"],
-    "worktree": [r"^list$", r"^add$", r"^remove$", r"^--.*$"],
-    "remote": [r"^-v$", r"^add$", r"^remove$", r"^.*$"],
-}
+_GIT_TIMEOUT = 20
+_BRANCH_SAFE = re.compile(r"[\x00-\x20\\^:?*\[\]~]+")
 
 
-def _validate_git_path(workspace: str | None) -> Path:
-    """Validate and resolve git workspace path."""
-    if not workspace:
-        raise ValueError("workspace required")
-    
+class _GitError(RuntimeError):
+    """A failed git mutation; mapped to 400 with its text (fork _git_op)."""
+
+
+def git_path(raw: str) -> str:
+    """Resolve a client path the way the fork's _git_path does: file: URIs and
+    ~ paths expand, NUL and empties are rejected."""
+    from urllib.parse import urlparse, unquote
+
+    path = str(raw or "").strip()
+    if not path:
+        raise _GitError("Path is required")
+    if "\0" in path:
+        raise _GitError("Invalid path")
+    if path.lower().startswith("file:"):
+        parsed = urlparse(path)
+        if parsed.netloc and parsed.netloc.lower() != "localhost":
+            raise _GitError("Invalid path")
+        path = unquote(parsed.path)
     try:
-        path = Path(workspace).expanduser().resolve()
-        if not path.is_dir():
-            raise ValueError("workspace is not a directory")
-        git_dir = path / ".git"
-        if not (git_dir.is_dir() or git_dir.is_file()):
-            raise ValueError("not a git repository")
-        return path
+        return str(Path(path).expanduser().resolve())
     except (OSError, RuntimeError, ValueError) as exc:
-        raise ValueError(f"Invalid workspace: {exc}")
+        raise _GitError("Invalid path") from exc
 
 
-def _validate_args(operation: str, args: list[str]) -> None:
-    """Validate git command arguments for safety."""
-    if operation not in _ALLOWED_GIT_OPERATIONS:
-        raise ValueError(f"Operation not allowed: {operation}")
+def _run_git(cwd: str, args: list[str]) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=_GIT_TIMEOUT,
+        )
+    except FileNotFoundError as exc:
+        raise _GitError("git is not installed") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise _GitError("git operation timed out") from exc
 
-    patterns = _GIT_ARG_PATTERNS.get(operation, [])
-    for arg in args:
-        if not any(__import__("re").match(p, arg) for p in patterns):
-            raise ValueError(f"Argument not allowed: {arg}")
+
+def _git_out(cwd: str, args: list[str]) -> str:
+    result = _run_git(cwd, args)
+    if result.returncode != 0:
+        raise _GitError(result.stderr.strip() or "git operation failed")
+    return result.stdout.strip()
 
 
-async def git_status(request: Request) -> Any:
-    """Get git status of a workspace."""
+def _main_root(cwd: str) -> str:
+    """The main checkout a cwd belongs to (a worktree's git dir names its root)."""
+    common = _git_out(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    root = Path(common).resolve().parent
+    if not (root / ".git").exists():
+        raise _GitError("not a git repository")
+    return str(root)
+
+
+def _sanitize_branch(branch: str) -> str:
+    candidate = _BRANCH_SAFE.sub("-", branch.strip()).strip("-.")
+    return candidate if candidate and candidate not in ("HEAD",) else ""
+
+
+def _slugify(name: str) -> str:
+    return _BRANCH_SAFE.sub("-", name.strip()).strip("-.")[:80]
+
+
+def worktree_ensure(cwd: str, worktree_path: str, branch: str) -> dict[str, Any]:
+    """Recreate a session worktree whose directory is gone; idempotent."""
+    root = _main_root(cwd)
+    if Path(worktree_path).is_dir():
+        return {"path": worktree_path, "branch": branch, "repoRoot": root, "restored": False}
+    _run_git(root, ["worktree", "prune"])
+    name = _sanitize_branch(branch) or _slugify(Path(worktree_path).name)
+    if not name:
+        raise _GitError("worktree path has no usable branch name")
+    if _run_git(root, ["worktree", "add", worktree_path, name]).returncode != 0:
+        # The branch ref is gone (deleted after the worktree was) — recreate it
+        # from the repo's HEAD so the directory (and the session's cwd) is
+        # restored rather than erroring the open.
+        result = _run_git(root, ["worktree", "add", "-b", name, worktree_path])
+        if result.returncode != 0:
+            raise _GitError(result.stderr.strip() or "git worktree add failed")
+    return {"path": worktree_path, "branch": name, "repoRoot": root, "restored": True}
+
+
+def worktree_merge(cwd: str, worktree_path: str) -> dict[str, Any]:
+    """Merge a session worktree's live branch back into the main checkout."""
+    root = _main_root(cwd)
+    branch = _git_out(worktree_path, ["rev-parse", "--abbrev-ref", "HEAD"])
+    if not branch or branch == "HEAD":
+        raise _GitError(f"no branch checked out in {worktree_path}")
+    into = _git_out(root, ["rev-parse", "--abbrev-ref", "HEAD"])
+    result = _run_git(root, ["merge", "--no-edit", branch])
+    if result.returncode != 0:
+        raise _GitError(result.stderr.strip() or result.stdout.strip() or "git merge failed")
+    return {"merged": True, "branch": branch, "into": into, "repoRoot": root}
+
+
+async def _git_op(fn: Any, *args: Any) -> JSONResponse:
+    loop = asyncio.get_running_loop()
+    try:
+        return JSONResponse(await loop.run_in_executor(None, fn, *args))
+    except _GitError as exc:
+        return JSONResponse({"detail": str(exc) or "git operation failed"}, status_code=400)
+
+
+async def _body(request: Request) -> dict[str, Any]:
     try:
         body = await request.json()
-    except json.JSONDecodeError:
-        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+    return body if isinstance(body, dict) else {}
 
-    workspace = body.get("workspace", "").strip()
-    porcelain = body.get("porcelain", False)
 
+async def git_worktree_ensure(request: Request) -> JSONResponse:
+    body = await _body(request)
     try:
-        workspace_path = _validate_git_path(workspace)
-        args = ["--porcelain"] if porcelain else []
-        _validate_args("status", args)
-    except ValueError as exc:
+        return await _git_op(
+            worktree_ensure,
+            git_path(str(body.get("path") or "")),
+            git_path(str(body.get("worktreePath") or "")),
+            str(body.get("branch") or ""),
+        )
+    except _GitError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
 
+
+async def git_worktree_merge(request: Request) -> JSONResponse:
+    body = await _body(request)
     try:
-        result = subprocess.run(
-            ["git", "-C", str(workspace_path), "status"] + args,
-            capture_output=True,
-            text=True,
-            timeout=10,
+        return await _git_op(
+            worktree_merge,
+            git_path(str(body.get("path") or "")),
+            git_path(str(body.get("worktreePath") or "")),
         )
-        if result.returncode != 0:
-            return JSONResponse(
-                {"detail": result.stderr or "git status failed"},
-                status_code=400,
-            )
-        return JSONResponse({
-            "status": result.stdout,
-            "porcelain": porcelain,
-        })
-    except subprocess.TimeoutExpired:
-        return JSONResponse({"detail": "git command timed out"}, status_code=504)
-    except Exception as exc:
-        log.exception("git_status error")
-        return JSONResponse({"detail": str(exc)}, status_code=500)
-
-
-async def git_log(request: Request) -> Any:
-    """Get git commit log."""
-    try:
-        body = await request.json()
-    except json.JSONDecodeError:
-        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
-
-    workspace = body.get("workspace", "").strip()
-    oneline = body.get("oneline", False)
-    count = body.get("count", 20)
-
-    try:
-        workspace_path = _validate_git_path(workspace)
-        args = []
-        if oneline:
-            args.append("--oneline")
-        if count > 0:
-            args.extend(["-n", str(min(count, 100))])
-        _validate_args("log", args)
-    except ValueError as exc:
+    except _GitError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
-
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(workspace_path), "log"] + args,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return JSONResponse(
-                {"detail": result.stderr or "git log failed"},
-                status_code=400,
-            )
-        return JSONResponse({"log": result.stdout})
-    except subprocess.TimeoutExpired:
-        return JSONResponse({"detail": "git command timed out"}, status_code=504)
-    except Exception as exc:
-        log.exception("git_log error")
-        return JSONResponse({"detail": str(exc)}, status_code=500)
-
-
-async def git_branch_list(request: Request) -> Any:
-    """List git branches."""
-    try:
-        body = await request.json()
-    except json.JSONDecodeError:
-        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
-
-    workspace = body.get("workspace", "").strip()
-    all_branches = body.get("all", False)
-
-    try:
-        workspace_path = _validate_git_path(workspace)
-        args = ["-v"]
-        if all_branches:
-            args.append("-a")
-        _validate_args("branch", args)
-    except ValueError as exc:
-        return JSONResponse({"detail": str(exc)}, status_code=400)
-
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(workspace_path), "branch"] + args,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return JSONResponse(
-                {"detail": result.stderr or "git branch failed"},
-                status_code=400,
-            )
-        return JSONResponse({"branches": result.stdout})
-    except subprocess.TimeoutExpired:
-        return JSONResponse({"detail": "git command timed out"}, status_code=504)
-    except Exception as exc:
-        log.exception("git_branch_list error")
-        return JSONResponse({"detail": str(exc)}, status_code=500)
 
 
 routes = [
-    Route("/api/git/status", git_status, methods=["POST"]),
-    Route("/api/git/log", git_log, methods=["POST"]),
-    Route("/api/git/branch-list", git_branch_list, methods=["POST"]),
+    Route("/api/git/worktree/ensure", git_worktree_ensure, methods=["POST"]),
+    Route("/api/git/worktree/merge", git_worktree_merge, methods=["POST"]),
 ]

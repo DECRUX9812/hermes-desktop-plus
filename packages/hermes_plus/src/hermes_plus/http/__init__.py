@@ -1,13 +1,13 @@
-"""HTTP routers contributed by hermes-plus features."""
+"""HTTP routers contributed by hermes-plus features (registered before the /api proxy)."""
 
 from starlette.routing import Route
 
-# Import routes from each module
-from hermes_plus.http import desktop_plugins, git, mobile, share, uploads, webapp
+from hermes_plus.http import desktop_plugins, files, git, mobile, share, uploads, webapp
 
-# Collect all routes in order
+# Our routes must precede the catch-all /api proxy in the route table.
 ROUTERS: list[Route] = []
 ROUTERS.extend(uploads.routes)
+ROUTERS.extend(files.routes)
 ROUTERS.extend(share.routes)
 ROUTERS.extend(mobile.routes)
 ROUTERS.extend(desktop_plugins.routes)

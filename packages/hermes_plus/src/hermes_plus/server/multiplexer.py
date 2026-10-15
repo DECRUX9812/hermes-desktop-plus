@@ -77,6 +77,27 @@ def _profile(value: Any, fallback: str | None) -> str | None:
     return fallback if normalized.casefold() in {"default", "current"} else normalized
 
 
+def _translate_for_upstream(frame: dict[str, Any]) -> dict[str, Any]:
+    """Rewrite fork-only RPC params into what STOCK accepts.
+
+    The UI stages a browser upload at our ``/api/chat/file-upload`` and passes
+    the returned ``staged_upload`` identity to ``file.attach`` (fork
+    contracts/prompt_voice.py StagedFileUpload). STOCK's ``file.attach``
+    accepts a plain ``path`` (upstream tui_gateway/methods_prompt.py:1031) and
+    copies workspace-external files itself, so the sidecar rewrites the fork
+    shape into that path. This is the only method whose params differ.
+    """
+    if frame.get("method") != "file.attach":
+        return frame
+    params = frame.get("params")
+    staged = params.get("staged_upload") if isinstance(params, dict) else None
+    if not isinstance(staged, dict) or not isinstance(staged.get("path"), str) or not staged["path"]:
+        return frame
+    translated = {key: value for key, value in params.items() if key != "staged_upload"}
+    translated["path"] = staged["path"]
+    return {**frame, "params": translated}
+
+
 async def _send_json(websocket: WebSocket, lock: asyncio.Lock, frame: dict[str, Any]) -> None:
     async with lock:
         await websocket.send_text(json.dumps(frame, ensure_ascii=False, separators=(",", ":")))
@@ -163,6 +184,7 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
                 except (TypeError, ValueError):
                     frame = None
                 if isinstance(frame, dict):
+                    frame = _translate_for_upstream(frame)
                     taps.offer(frame)
                     method_name = frame.get("method")
                     if isinstance(method_name, str) and owns(method_name):
@@ -199,6 +221,8 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
                             task.add_done_callback(local_tasks.discard)
                         if not forwarded:
                             continue
+                        forwarded = [_translate_for_upstream(item) if isinstance(item, dict) else item
+                                     for item in forwarded]
                         raw = json.dumps(forwarded, ensure_ascii=False, separators=(",", ":"))
                 await upstream.send(raw)
             else:

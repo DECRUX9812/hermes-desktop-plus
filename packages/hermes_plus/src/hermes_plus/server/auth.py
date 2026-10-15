@@ -17,7 +17,24 @@ from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 COOKIE_NAME = "hermes_plus_session"
 SESSION_HEADER = "x-hermes-session-token"
-PUBLIC_PATHS: set[str] = set()
+# Feature surfaces that self-secure or ride purpose tickets (the fork's
+# PUBLIC_API_PATHS + public prefixes: share links, mobile pairing, webapp
+# handoffs). /api/share/view is capability-token-secured, /api/mobile/pair is
+# code-secured, /webapp/window-session is ticket + same-origin secured.
+PUBLIC_PATHS: set[str] = {
+    "/share/view",
+    "/api/share/view",
+    "/mobile",
+    "/api/mobile/pair",
+    "/webapp/window-session",
+    "/webapp/launch",
+    "/webapp/window",
+}
+# Set by the app assembly: redeem_scope(scope) admits a ticketed file URL.
+def file_ticket_redeem(scope: dict[str, Any]) -> bool:
+    return False
+
+
 _PUBLIC_ALWAYS = frozenset({"/healthz", "/login"})
 _ATTEMPTS_PER_MINUTE = 5
 
@@ -150,7 +167,9 @@ class FrontDoorAuth:
             await response(scope, receive, send)
             return
 
-        if self._is_public(path) or self.authenticated(scope):
+        # A path-bound file ticket authenticates its exact URL (single-use for
+        # downloads); everything else goes through the normal gate.
+        if file_ticket_redeem(scope) or self._is_public(path) or self.authenticated(scope):
             await app(scope, receive, send)
             return
 
