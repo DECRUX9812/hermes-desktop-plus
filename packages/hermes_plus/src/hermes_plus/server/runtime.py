@@ -50,7 +50,7 @@ class Runtime:
         self.auth = FrontDoorAuth(settings)
         self.install = None
         self.compat = None
-        self.capabilities = Capabilities(None, set(), set(), {})
+        self.capabilities = Capabilities(None, set(), set(), {}, known=False)
         self.dashboard: DashboardProcess | None = None
         self.internal: GatewayClient | None = None
         self.upstream_ws_url = ""
@@ -117,14 +117,20 @@ class Runtime:
             await self.internal.connect()
             try:
                 self.capabilities = await probe_capabilities(self.internal)
-            except (TimeoutError, OSError) as exc:
-                # A slow or busy upstream must not take the sidecar down: every
-                # feature gates on Capabilities, so unknown means disabled, not dead.
+            except (TimeoutError, OSError, RuntimeError) as exc:
+                # A slow, wedged, or never-answering upstream must not take the
+                # sidecar down. known=False makes owns() forward every
+                # shared-namespace method upstream (a local handler there would
+                # shadow a stock method we never saw) while plus-only
+                # namespaces keep working. There is no re-probe on reconnect:
+                # restart the sidecar to re-probe.
                 log.warning(
                     "upstream capability probe failed (%s); serving with capabilities "
-                    "unknown — features stay gated until a reconnect re-probes", exc)
+                    "unknown — shared-namespace calls forward to Hermes; restart the "
+                    "sidecar to re-probe", exc)
                 self.capabilities = Capabilities(
                     version=None, methods=set(), events=set(EVENT_NAMES), features={},
+                    known=False,
                 )
             self.http_client = httpx.AsyncClient(timeout=None, follow_redirects=False)
             self._write_sidecar_json()

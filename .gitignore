@@ -18,3 +18,4 @@ packages/ui/dist-webapp/
 .task/
 .hermes/
 .personal-data-patterns
+devloop/
