@@ -467,32 +467,111 @@ try {
   })
 
   {
-    // The Bot Room is a transparent always-on-top native window whose state is
-    // pushed over Electron IPC by the main renderer. The browser host stubs the
-    // bridge member (`lib/browser-bridge-stubs.ts`: `botroom.open` -> `{ok:false}`),
-    // so ask the app's own bridge rather than guessing from the empty overlay.
-    const openResult = await page.evaluate(async () => {
-      try {
-        return await window.hermesDesktop.botroom.open()
-      } catch (error) {
-        return { threw: String(error) }
+    // ── 6b. Bot Room overlay (browser host) ────────────────────────────────
+    // The Bot Room is a separate window in Electron, fed roster/room state by
+    // the main renderer. The browser host stands a same-origin popup tab in
+    // for it (`lib/browser-window-bridges.ts`) and relays that same push/control
+    // traffic over BroadcastChannel, so the button the roster toolbar owns opens
+    // a real overlay and the team's own bot paints a mascot in it.
+    const BOT_PROFILE = 'proof-bot'
+    await check('the Bot Room overlay opens from the roster toolbar and paints the team bot', async () => {
+      // A bot IS a Hermes profile. `no_alias` keeps the create from dropping a
+      // launcher wrapper outside this proof's temp home. Re-runnable: a profile
+      // left by an earlier run in a kept temp home is reused, not re-created.
+      const listed = await rpc(page, 'profiles.list', {})
+      const already = (listed?.profiles ?? []).some(p => p.name === BOT_PROFILE)
+      if (!already) {
+        const created = await rpc(page, 'profiles.create', {
+          clone_from: 'default',
+          description: 'Proof bot for the Bot Room overlay',
+          name: BOT_PROFILE,
+          no_alias: true,
+        })
+        if (created?.ok !== true) {
+          throw new Error(`profiles.create answered ${JSON.stringify(created).slice(0, 200)}`)
+        }
       }
+      // Seat the bot on the team. The seat's own `profile` field is not used
+      // here: the sidecar reads `params.profile` as the profile-store selector
+      // (server/multiplexer.py `_dispatch_local`), so a seat carrying a *named*
+      // profile is answered by that bot's own plus.db, which holds no team
+      // ("no team 'team_…'"). The seat is named by its title instead.
+      const added = await rpc(page, 'bots_team.member.upsert', {
+        role: 'proofer',
+        team_id: teamId,
+        title: BOT_PROFILE,
+      })
+      if (added?.member?.title !== BOT_PROFILE) {
+        throw new Error(`bots_team.member.upsert answered ${JSON.stringify(added).slice(0, 200)}`)
+      }
+
+      // Reach the roster toolbar the way a user does: the icon rail's Bots
+      // panel button shows the sidebar pane whose toolbar owns the Bot Room
+      // button. The rail entry is data-addressed (`data-rail-entry`) so the
+      // proof does not depend on localized tooltip text.
+      const railBots = page.locator('button[data-rail-entry="hermes-bots:pane"]').first()
+      await railBots.waitFor({ state: 'visible', timeout: 60000 })
+      const button = page.getByRole('button', { name: 'Bot Room on desktop' }).first()
+      await railBots.click()
+      try {
+        await button.waitFor({ state: 'visible', timeout: 15000 })
+      } catch {
+        // The panel was already showing and the click folded it away; press again.
+        await railBots.click()
+        await button.waitFor({ state: 'visible', timeout: 60000 })
+      }
+
+      // `page.waitForEvent('popup')` (not the context-level twin) is the
+      // reliable signal for a `window.open` popup: the context event does not
+      // resolve for this same-origin popup even though the page lands in the
+      // context.
+      const [overlay] = await Promise.all([
+        page.waitForEvent('popup', { timeout: 60000 }),
+        button.click(),
+      ])
+      await overlay.waitForLoadState('domcontentloaded')
+      diagnostics.botRoomUrl = overlay.url()
+      if (!overlay.url().includes('win=botroom')) {
+        throw new Error(`the Bot Room button opened ${overlay.url()}, not the ?win=botroom overlay`)
+      }
+
+      // The stage lives in a shadow root; Playwright's locators pierce open
+      // shadow roots, so this is the mascot's own hit node.
+      const mascot = overlay.locator(`.hr-hit[data-bot-id="profile:${BOT_PROFILE}"]`)
+      try {
+        await mascot.waitFor({ state: 'attached', timeout: 90000 })
+      } catch (error) {
+        await shot(overlay, '04-botroom-window')
+        const text = (await bodyText(overlay)).slice(0, 400).replace(/\n/g, ' / ')
+        throw new Error(`no mascot for ${BOT_PROFILE} painted in the overlay: ${text || '(empty document)'}`)
+      }
+
+      const painted = (await mascot.locator('.hr-name').innerText()).trim()
+      const deck = await overlay.locator('.hr-deck-chip').count()
+      const canvases = await overlay.locator('.hr-canvas').count()
+      await shot(overlay, '04-botroom-window')
+      diagnostics.botRoom = { canvases, deck, painted }
+      if (painted !== BOT_PROFILE) {
+        throw new Error(`the overlay mascot is labelled "${painted}", expected ${BOT_PROFILE}`)
+      }
+      if (deck < 1) {throw new Error('the overlay deck listed no bot')}
+      if (canvases !== 1) {throw new Error(`the overlay stage canvas is missing (${canvases} found)`)}
+      return `popup ${overlay.url()} painted mascot "${painted}" with ${deck} deck chip(s) and 1 stage canvas`
     })
-    await page.goto(`${BASE}/?win=botroom`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(6000)
-    await shot(page, '04-botroom-window')
-    const text = (await bodyText(page)).trim()
-    diagnostics.botRoomWindow = text.slice(0, 1000)
-    diagnostics.botRoomOpen = openResult
-    if (/authentication required/i.test(text)) {
-      record('bot room overlay window', 'broken', `the overlay route answered with the auth gate: ${text.slice(0, 120)}`)
-    } else if (openResult && openResult.ok === false) {
-      await blocked('bot room overlay window', `Electron-only: window.hermesDesktop.botroom.open() answers ${JSON.stringify(openResult)} in the browser host, and the ?win=botroom tab paints nothing because its roster/room state arrives over IPC`)
-    } else if (!text) {
-      await blocked('bot room overlay window', 'the ?win=botroom overlay paints nothing in a browser tab: its roster/room state arrives over Electron IPC from the main renderer')
-    } else {
-      record('bot room overlay window', 'pass', `text: ${text.slice(0, 120).replace(/\n/g, ' / ')}`)
-    }
+
+    // The `&demo=1` film/visual path replaces the bridge with a canned roster;
+    // it must keep working now that the browser host has a real one.
+    await check('the Bot Room demo path still paints its canned roster', async () => {
+      const demo = await context.newPage()
+      await demo.goto(`${BASE}/?win=botroom&demo=1`, { waitUntil: 'domcontentloaded' })
+      const muse = demo.locator('.hr-hit[data-bot-id="profile:muse"]')
+      await muse.waitFor({ state: 'attached', timeout: 60000 })
+      const label = (await muse.locator('.hr-name').innerText()).trim()
+      const deck = await demo.locator('.hr-deck-chip').count()
+      await demo.close()
+      if (label !== 'Muse') {throw new Error(`the demo overlay labelled its first mascot "${label}", expected Muse`)}
+      return `demo overlay painted "${label}" with ${deck} deck chip(s)`
+    })
   }
 
   await page.goto(BASE + '/#/team', { waitUntil: 'domcontentloaded' })
