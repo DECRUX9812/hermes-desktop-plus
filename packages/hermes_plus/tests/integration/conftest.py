@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-PLUS_BIN = Path(__file__).resolve().parents[3] / ".venv" / "bin" / "hermes-plus"
+PLUS_BIN = Path(__file__).resolve().parents[4] / ".venv" / "bin" / "hermes-plus"
 
 
 @pytest.fixture(scope="session")

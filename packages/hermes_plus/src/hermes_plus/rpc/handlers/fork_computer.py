@@ -98,7 +98,7 @@ def _status(row: dict[str, Any]) -> str:
 
 
 def _detail(args: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-    diff = _first(result, args, ("diff", "inline_diff", "patch", "unified_diff"))
+    diff = _first((result, args), ("diff", "inline_diff", "patch", "unified_diff"))
     output = result.get("output") if isinstance(result.get("output"), str) else (
         result.get("text") if isinstance(result.get("text"), str) else None)
     detail: dict[str, Any] = {

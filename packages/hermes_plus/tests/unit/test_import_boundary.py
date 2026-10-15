@@ -6,6 +6,9 @@ from pathlib import Path
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src" / "hermes_plus"
 _ALLOWED_DIRS = {"adapter", "bridge"}
+# extras/ holds the fork's directory plugins, copied verbatim into $HERMES_HOME/plugins/ by
+# `hermes-plus install`; they run inside Hermes' own venv and import its internals by design.
+_EXEMPT_DIRS = {"extras"}
 _FORBIDDEN_ROOTS = {
     "hermes_cli",
     "tui_gateway",
@@ -26,7 +29,8 @@ def _forbidden(module: str) -> bool:
 def test_hermes_internals_are_imported_only_by_adapter_or_bridge() -> None:
     violations: list[str] = []
     for source in _SOURCE_ROOT.rglob("*.py"):
-        if source.relative_to(_SOURCE_ROOT).parts[0] in _ALLOWED_DIRS:
+        relative = source.relative_to(_SOURCE_ROOT)
+        if relative.parts[0] in _ALLOWED_DIRS or relative.parts[0] in _EXEMPT_DIRS:
             continue
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         for node in ast.walk(tree):
