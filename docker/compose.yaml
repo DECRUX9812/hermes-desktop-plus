@@ -1,0 +1,35 @@
+services:
+  hermes-plus:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: hermes-desktop-plus:latest
+    container_name: hermes-plus
+    ports:
+      - "127.0.0.1:9129:9129"
+    volumes:
+      - hermes-data:/data/hermes
+    environment:
+      - HERMES_PLUS_AUTH=${HERMES_PLUS_AUTH:-password}
+      - HERMES_PLUS_PASSWORD=${HERMES_PLUS_PASSWORD:-}
+      - HERMES_PLUS_TRUST_PROXY_HEADERS=${HERMES_PLUS_TRUST_PROXY_HEADERS:-0}
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: hermes-plus-tunnel
+    profiles:
+      - tunnel
+    restart: unless-stopped
+    # In Cloudflare Zero Trust dashboard, create a tunnel and add a public hostname
+    # with service origin: http://hermes-plus:9129
+    # When routing via Cloudflare Tunnel, set HERMES_PLUS_TRUST_PROXY_HEADERS=1
+    # on the hermes-plus service to trust incoming proxy headers.
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
+    depends_on:
+      - hermes-plus
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN:-}
+
+volumes:
+  hermes-data:
