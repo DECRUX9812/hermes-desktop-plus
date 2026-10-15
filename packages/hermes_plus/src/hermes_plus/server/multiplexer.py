@@ -15,6 +15,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from websockets.exceptions import ConnectionClosed
 
 from hermes_plus.rpc import RpcContext, UpstreamRpcError, dispatch, owns
+from hermes_plus.rpc.context import GatewayUpstream
 from hermes_plus.server.proxy import authenticated_url
 from hermes_plus.server.taps import TapDispatcher
 
@@ -101,7 +102,7 @@ async def _dispatch_local(
         upstream=link,
         profile=profile,
         capabilities=runtime.capabilities,
-        internal=runtime.internal,
+        internal=GatewayUpstream(runtime.internal) if runtime.internal is not None else None,
     )
 
     async def emit(event_name: str, payload: dict[str, Any], session_id: str | None = None) -> None:
