@@ -1,0 +1,14 @@
+# Keep the Docker build context to what the two stages actually copy.
+.git
+.gitignore
+.task
+.oc
+.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+# Build output: the ui stage rebuilds it, and a stale copy must never be baked
+# into the runtime stage.
+**/dist-webapp
+**/ui_dist
