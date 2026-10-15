@@ -71,6 +71,12 @@ class ToolCalls:
                 "LIMIT ?", (session_id, limit)).fetchall()
         return [dict(row) for row in reversed(rows)]
 
+    def record_detail(self, tool_call_id: str, detail: dict[str, Any]) -> None:
+        """Attach the bridge's normalized step detail to an already-recorded tool call."""
+        with self._store.write() as conn:
+            conn.execute("UPDATE tool_calls SET detail_json = ? WHERE tool_call_id = ?",
+                         (_json(detail), tool_call_id))
+
 
 def _json(value: Any) -> str | None:
     if value is None:

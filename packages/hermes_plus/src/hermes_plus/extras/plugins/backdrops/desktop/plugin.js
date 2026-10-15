@@ -12,10 +12,11 @@ import { useRef } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 // The manifest the gallery refreshes from — newest drops land here without a
-// plugin update. Relative entry paths resolve against this URL. For a local
-// checkout or a fork, point `manifestUrl` (ctx.storage) at any backdrops.json.
+// plugin update. Relative entry paths resolve against this URL. No hosted
+// catalog is published yet, so this reach fails open to the bundled list below;
+// set `manifestUrl` (ctx.storage) to any backdrops.json to point it elsewhere.
 const MANIFEST_URL =
-  'https://raw.githubusercontent.com/hermes-desktop-plus/backdrops-catalog/main/backdrops.json'
+  'https://example.com/hermes-plus/backdrops.json'
 
 // Same list as backdrops.json at release time: the offline floor and the
 // first-paint gallery. Keep in sync when shipping a drop.

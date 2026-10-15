@@ -571,6 +571,30 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 "hint": "Run 'hermes-plus install' or enable with hermes CLI.",
             })
 
+        # The bridge's own handshake: what it registered, and against which version.
+        bridge_json = p_home / "bridge.json"
+        if bridge_json.exists():
+            try:
+                handshake = json.loads(bridge_json.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                handshake = {}
+            bridge_version = str(handshake.get("version") or "")
+            if bridge_version and bridge_version != __version__:
+                checks.append({
+                    "name": "bridge_version",
+                    "status": "warn",
+                    "message": f"Bridge {bridge_version} does not match hermes-plus {__version__}",
+                    "hint": "Run 'hermes-plus install' to refresh the bridge plugin.",
+                })
+            else:
+                checks.append({
+                    "name": "bridge_version",
+                    "status": "ok",
+                    "message": f"Bridge {bridge_version or __version__} registered "
+                               f"{len(handshake.get('features') or [])} features",
+                    "hint": "",
+                })
+
     # Check 6: plus.db schema version vs the code's
     db_path = p_home / "plus.db"
     if not db_path.exists():

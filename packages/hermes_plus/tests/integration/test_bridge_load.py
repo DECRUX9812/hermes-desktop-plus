@@ -13,10 +13,15 @@ pytestmark = pytest.mark.integration
 
 LOADER_SCRIPT = """
 import json
-from hermes_cli.plugins import get_plugin_manager
+from hermes_cli.plugins import get_plugin_manager, render_system_prompt_sections
 get_plugin_manager().discover_and_load()
 from tools.registry import registry
+from toolsets import resolve_toolset
 print("TOOLSETS:" + json.dumps(sorted(registry.get_tool_names_for_toolset("bot_room"))))
+sections = {section.id: section.content for section in render_system_prompt_sections({"session_id": "sess-test"})}
+print("SECTIONS:" + json.dumps(sections))
+print("RESOLVED:" + json.dumps({name: sorted(resolve_toolset(name))
+                                for name in ("bot_room", "visualization", "git")}))
 """
 
 
@@ -41,13 +46,30 @@ def test_register_ran_through_upstreams_loader(installed_home: Path) -> None:
     bridge_json = json.loads((installed_home / "hermes-plus" / "bridge.json").read_text())
     assert bridge_json["plugin"] == "hermes-plus"
     assert bridge_json["version"]
-    assert "hook.post_tool_call" in bridge_json["features"]
-    assert "prompt.hermes-plus.policies" in bridge_json["features"]
+    for expected in ("hook.post_tool_call", "hook.pre_tool_call", "prompt.hermes-plus.policies",
+                     "prompt.hermes-plus.team"):
+        assert expected in bridge_json["features"], bridge_json["features"]
 
-    toolset = result.stdout.strip().rsplit("TOOLSETS:", 1)[1].strip()
+    toolset = result.stdout.strip().rsplit("TOOLSETS:", 1)[1].splitlines()[0].strip()
     registered = json.loads(toolset)
     for expected in ("bot_team", "bot_mailbox", "update_task"):
         assert expected in registered, f"{expected} was not registered by the bridge"
+
+    # The registered prompt sections render through upstream's own renderer. The team section is
+    # empty (and so omitted) while no team holds this profile; the skill-gated ones are installed.
+    sections = json.loads(result.stdout.strip().rsplit("SECTIONS:", 1)[1].splitlines()[0].strip())
+    assert "hermes-plus.policies" in sections
+    assert "first-task" in sections["hermes-plus.first-task"]
+    assert "initiate-setup" in sections["hermes-plus.initiate-setup"]
+    # No team holds this profile in this fresh home, so the team section is empty and omitted.
+    assert "hermes-plus.team" not in sections
+
+    # The toolsets the bridge's tools declare resolve through stock Hermes' own toolset registry,
+    # so a session that enables them (config `toolsets:`) really gets the tools.
+    resolved = json.loads(result.stdout.strip().rsplit("RESOLVED:", 1)[1].strip())
+    assert {"bot_team", "bot_mailbox", "update_task"} <= set(resolved["bot_room"])
+    assert "create_visualization" in resolved["visualization"]
+    assert {"git_ship", "open_pr"} <= set(resolved["git"])
 
 
 def _stock_python() -> str:

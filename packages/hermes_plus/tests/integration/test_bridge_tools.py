@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import stat
 import subprocess
 import time
 from pathlib import Path
@@ -29,6 +30,14 @@ result = entry.handler(
     {"action": "create", "params": {"name": "demo-team", "mission": "prove the bridge"}},
     task_id="test-task")
 print("TOOL_RESULT:" + json.dumps(result))
+"""
+
+RENDER_SECTIONS = """
+import json
+from hermes_cli.plugins import get_plugin_manager, render_system_prompt_sections
+get_plugin_manager().discover_and_load()
+sections = {section.id: section.content for section in render_system_prompt_sections({"session_id": "sess-test"})}
+print("SECTIONS:" + json.dumps(sections))
 """
 
 
@@ -62,7 +71,13 @@ def sidecar(installed_home: Path, plus_bin: str, stock_hermes: str):
             time.sleep(1)
         else:
             pytest.fail("sidecar never wrote sidecar.json")
-        yield json.loads(sidecar_json.read_text())
+        # The Runtime's contact card: loopback URL, the bridge token, this pid, mode 0600.
+        assert stat.S_IMODE(sidecar_json.stat().st_mode) == 0o600
+        contact = json.loads(sidecar_json.read_text())
+        assert contact["url"] == f"http://127.0.0.1:{port}"
+        assert contact["pid"] == process.pid
+        assert contact["token"]
+        yield contact
     finally:
         process.terminate()
         try:
@@ -70,6 +85,7 @@ def sidecar(installed_home: Path, plus_bin: str, stock_hermes: str):
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=10)
+        assert not sidecar_json.exists(), "the Runtime must remove sidecar.json on stop"
 
 
 async def test_bot_team_tool_round_trips_through_the_sidecar(installed_home: Path,
@@ -89,7 +105,7 @@ async def test_bot_team_tool_round_trips_through_the_sidecar(installed_home: Pat
     team = payload.get("team", payload)
     assert team.get("name") == "demo-team"
 
-    client = GatewayClient(f"{sidecar['url'].rstrip('/')}/api/ws", sidecar["token"])
+    client = GatewayClient(_ws_url(sidecar), sidecar["token"])
     try:
         await client.connect()
         reply = await client.call("bots_team.list", {}, timeout=30)
@@ -97,6 +113,38 @@ async def test_bot_team_tool_round_trips_through_the_sidecar(installed_home: Pat
         await client.close()
     names = [t.get("name") for t in reply.get("teams", [])]
     assert "demo-team" in names
+
+
+def _ws_url(sidecar: dict) -> str:
+    """The sidecar's contact card carries an http URL; the gateway client wants ws://."""
+    return sidecar["url"].rstrip("/").replace("http://", "ws://", 1).replace(
+        "https://", "wss://", 1) + "/api/ws"
+
+
+async def test_the_team_prompt_section_renders_this_profile_seat(installed_home: Path,
+                                                                 sidecar: dict) -> None:
+    """The fork's tools/bot_team.py::prompt_section: a profile with a seat gets its team brief."""
+    client = GatewayClient(_ws_url(sidecar), sidecar["token"])
+    try:
+        await client.connect()
+        created = await client.call("bots_team.create", {
+            "name": "demo-team", "mission": "ship the bridge"}, timeout=30)
+        team_id = created["team"]["id"]
+        await client.call("bots_team.member.upsert", {
+            "team_id": team_id, "profile": "default", "role": "engineer", "title": "Bridge engineer",
+            "lead": True}, timeout=30)
+    finally:
+        await client.close()
+
+    rendered = subprocess.run(
+        [_stock_python(), "-c", RENDER_SECTIONS],
+        env={**os.environ, "HERMES_HOME": str(installed_home)},
+        capture_output=True, text=True, timeout=300)
+    assert rendered.returncode == 0, rendered.stderr[-2000:]
+    sections = json.loads(rendered.stdout.strip().rsplit("SECTIONS:", 1)[1].strip())
+    team = sections["hermes-plus.team"]
+    assert team.startswith("## Team")
+    assert "ship the bridge" in team and "Bridge engineer" in team
 
 
 def _stock_python() -> str:

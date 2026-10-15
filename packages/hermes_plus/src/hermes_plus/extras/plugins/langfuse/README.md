@@ -31,7 +31,7 @@ open.
 ## Verify
 
 ```bash
-hermes plugins list                 # observability/langfuse should show "enabled"
+hermes plugins list                 # langfuse should show "enabled"
 hermes chat -q "hello"              # then check Langfuse for a "Hermes turn" trace
 ```
 
@@ -90,5 +90,5 @@ For personal sessions or shared Langfuse projects, prefer `metadata`.
 ## Disable
 
 ```bash
-hermes plugins disable observability/langfuse
+hermes plugins disable langfuse
 ```

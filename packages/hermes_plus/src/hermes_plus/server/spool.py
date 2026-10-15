@@ -43,7 +43,7 @@ class SpoolIngester:
 
     def ingest_once(self) -> dict[str, int]:
         """Consume every complete new line; returns per-kind counters for tests and logging."""
-        stats = {"tool_call": 0, "delegation": 0, "browser_thumbnail": 0,
+        stats = {"tool_call": 0, "delegation": 0, "browser_thumbnail": 0, "computer_step": 0,
                  "approval_request": 0, "approval_decision": 0, "skipped": 0}
         directory = self.plus_home / "spool"
         try:
@@ -146,12 +146,21 @@ class SpoolIngester:
             snapshot=payload.get("snapshot"))
         stats["browser_thumbnail"] += 1
 
+    def _apply_computer_step(self, payload: dict[str, Any], session_id: str, ts: float,
+                             stats: dict[str, int]) -> None:
+        """Attach the bridge's normalized step detail to the tool-call row the timeline reads."""
+        tool_call_id = str(payload.get("tool_call_id") or "")
+        detail = payload.get("detail")
+        if tool_call_id and isinstance(detail, dict):
+            self.tool_calls.record_detail(tool_call_id, detail)
+        stats["computer_step"] += 1
+
     def _apply_approval_request(self, payload: dict[str, Any], session_id: str, ts: float,
                                 stats: dict[str, int]) -> None:
         self.approvals.record_request(
             request_id=_approval_id(payload, session_id),
             session_id=session_id,
-            tool_call_id="",
+            tool_call_id=str(payload.get("tool_call_id") or ""),
             tool_name=str(payload.get("tool_name") or ""),
             command=str(payload.get("command") or ""),
             description=str(payload.get("description") or ""))
@@ -159,7 +168,7 @@ class SpoolIngester:
 
     def _apply_approval_decision(self, payload: dict[str, Any], session_id: str, ts: float,
                                  stats: dict[str, int]) -> None:
-        choice = str(payload.get("choice") or "")
+        choice = _DECISION_ALIASES.get(str(payload.get("choice") or ""), str(payload.get("choice") or ""))
         if choice:
             self.approvals.decide(_approval_id(payload, session_id), choice)
         stats["approval_decision"] += 1
@@ -206,11 +215,22 @@ class SpoolIngester:
 
 
 def _approval_id(payload: dict[str, Any], session_id: str) -> str:
+    """Stable id for one approval prompt: the hook payload carries no queue request id.
+
+    The key is the prompt's identity (session, key, command, description) so the request and the
+    decision halves land on the same row. Two identical prompts in one session collapse into one
+    row — the same dedupe the fork's pattern-key/session coalescing gives.
+    """
     digest = hashlib.sha256("|".join([
         session_id, str(payload.get("session_key") or ""), str(payload.get("command") or ""),
         str(payload.get("description") or ""),
     ]).encode("utf-8")).hexdigest()
     return f"bridge-{digest[:16]}"
+
+
+# The approval hook's vocabulary mapped onto the journal's: a smart verdict is a grant or a denial,
+# and every other ending (cancelled/timeout) is not a grant.
+_DECISION_ALIASES = {"smart_approve": "once", "smart_deny": "deny"}
 
 
 def _as_int(value: Any) -> int | None:
@@ -225,6 +245,7 @@ _HANDLERS = {
     "tool_call": SpoolIngester._apply_tool_call,
     "delegation": SpoolIngester._apply_delegation,
     "browser_thumbnail": SpoolIngester._apply_browser_thumbnail,
+    "computer_step": SpoolIngester._apply_computer_step,
     "approval_request": SpoolIngester._apply_approval_request,
     "approval_decision": SpoolIngester._apply_approval_decision,
 }

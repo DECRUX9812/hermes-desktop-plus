@@ -189,3 +189,37 @@ async def test_fork_computer_timeline_derives_steps_from_tool_calls(tmp_path: Pa
     assert step["kind"] == "other"
     assert step["status"] == "done"
     assert step["detail"]["command"] == "xdotool click"
+
+
+async def test_computer_step_detail_rides_the_tool_call_into_the_timeline(tmp_path: Path) -> None:
+    """The bridge's normalized step detail (a computer_step record) is merged into the timeline."""
+    from hermes_plus.rpc import RpcContext, handle_text
+
+    plus_home = tmp_path / "plus-home"
+    store = open_store(plus_home)
+    spool = Spool(plus_home)
+    assert spool.append("tool_call", "sess-1", {
+        "tool_name": "terminal", "tool_call_id": "step-2", "args": {"command": "git status"},
+        "result": "On branch ship/s7\nnothing to commit", "status": "ok",
+        "duration_ms": 900, "error_type": None, "error_message": None,
+    })
+    assert spool.append("computer_step", "sess-1", {
+        "tool_call_id": "step-2", "tool_name": "terminal", "status": "ok", "error_message": None,
+        "detail": {"command": "git status", "path": "/tmp/demo/repo"},
+    })
+    stats = SpoolIngester(store, plus_home).ingest_once()
+    assert stats["tool_call"] == 1 and stats["computer_step"] == 1 and stats["skipped"] == 0
+
+    stored = ToolCalls(store).list_for_session("sess-1")[0]
+    assert json.loads(stored["detail_json"]) == {"command": "git status", "path": "/tmp/demo/repo"}
+
+    reply = json.loads(await handle_text(RpcContext(store), json.dumps({
+        "jsonrpc": "2.0", "id": 1, "method": "fork.computer.timeline",
+        "params": {"profile": "default", "session_id": "sess-1"}})))
+    step = reply["result"]["steps"][0]
+    assert step["kind"] == "terminal"
+    assert step["title"] == "Ran git status"
+    assert step["detail"]["command"] == "git status"
+    assert step["detail"]["path"] == "/tmp/demo/repo"
+    # The derived detail still fills what the bridge did not send.
+    assert step["detail"]["output_tail"] == "On branch ship/s7\nnothing to commit"
