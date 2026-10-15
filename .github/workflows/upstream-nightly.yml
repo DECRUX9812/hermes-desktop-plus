@@ -1,0 +1,263 @@
+name: Upstream nightly
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  refs:
+    name: resolve upstream refs
+    runs-on: ubuntu-latest
+    outputs:
+      refs: ${{ steps.tags.outputs.refs }}
+      latest_tag: ${{ steps.tags.outputs.latest_tag }}
+    steps:
+      - name: Pick main plus the two newest release tags
+        id: tags
+        run: |
+          set -euo pipefail
+          # Only release tags (vX.Y.Z); canary tags carry a + suffix and are skipped.
+          mapfile -t tags < <(
+            git ls-remote --tags --refs https://github.com/NousResearch/hermes-agent \
+              | awk '{print $2}' \
+              | sed 's#^refs/tags/##' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V \
+              | tail -2
+          )
+          if [ "${#tags[@]}" -lt 2 ]; then
+            echo "could not resolve two release tags from upstream" >&2
+            exit 1
+          fi
+          latest="${tags[-1]}"
+          previous="${tags[-2]}"
+          printf 'latest_tag=%s\n' "$latest" >> "$GITHUB_OUTPUT"
+          printf 'refs=["main","%s","%s"]\n' "$latest" "$previous" >> "$GITHUB_OUTPUT"
+          printf 'tracking main, %s and %s\n' "$latest" "$previous"
+
+  compat:
+    name: compat vs ${{ matrix.hermes_ref }}
+    needs: refs
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        hermes_ref: ${{ fromJSON(needs.refs.outputs.refs) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          python-version: "3.11"
+      - name: Create the venv and install the package
+        run: |
+          set -euo pipefail
+          uv venv .venv --python 3.11
+          uv pip install --python .venv/bin/python -e 'packages/hermes_plus[test]'
+      - name: Provision stock Hermes at ${{ matrix.hermes_ref }}
+        # The real install layout: <root>/hermes-agent with HERMES_HOME=<root>.
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/hroot"
+          mkdir -p "$root"
+          git clone --branch "${{ matrix.hermes_ref }}" --depth 1 \
+            https://github.com/NousResearch/hermes-agent "$root/hermes-agent"
+          cd "$root/hermes-agent"
+          HERMES_HOME="$root" HERMES_RUNTIME_DIR="$root/runtime" ./setup-hermes.sh --runtime-only
+          test -x "$HOME/.local/bin/hermes"
+      - name: Contract and integration tests
+        run: |
+          set -euo pipefail
+          export HERMES_PLUS_TEST_HERMES="$HOME/.local/bin/hermes"
+          export HERMES_HOME="$RUNNER_TEMP/hroot"
+          .venv/bin/pytest packages/hermes_plus/tests -q -m "not model"
+      - name: Clean-install smoke
+        run: |
+          set -euo pipefail
+          export HERMES_PLUS_SOURCE="$PWD"
+          export HERMES_PLUS_HERMES_BIN="$HOME/.local/bin/hermes"
+          export HERMES_HOME="$RUNNER_TEMP/hroot"
+          export PATH="$HOME/.local/bin:$PATH"
+          sh install.sh
+          hermes-plus version --json
+          hermes-plus doctor --json > "$RUNNER_TEMP/doctor.json" || true
+          hermes-plus serve --host 127.0.0.1 --port 9230 --auth token \
+            > "$RUNNER_TEMP/serve.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9230/healthz; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:9230/healthz
+          kill "$server_pid"
+          wait "$server_pid" 2>/dev/null || true
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nightly-logs-${{ strategy.job-index }}
+          path: |
+            ${{ runner.temp }}/serve.log
+            ${{ runner.temp }}/doctor.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Mark a new passing tag for the matrix bump
+        # A release tag that passes but is not in known_good is the trigger for
+        # the `bump` job's pull request.
+        if: success() && startsWith(matrix.hermes_ref, 'v')
+        run: |
+          set -euo pipefail
+          ref="${{ matrix.hermes_ref }}"
+          if python3 -c "
+          import json, sys
+          matrix = json.load(open('packages/hermes_plus/src/hermes_plus/compat/matrix.json'))
+          sys.exit(0 if sys.argv[1] not in matrix['known_good'] else 1)
+          " "$ref"; then
+            echo "$ref" > "$RUNNER_TEMP/new-tag.txt"
+            echo "$ref passed and is not yet in known_good"
+          else
+            echo "$ref is already in known_good"
+          fi
+      - name: Upload the new-tag marker
+        if: success() && startsWith(matrix.hermes_ref, 'v')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: new-tag-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/new-tag.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  report-failure:
+    name: report upstream breakage
+    needs: [refs, compat]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          REQUESTED_REFS: ${{ needs.refs.outputs.refs }}
+        with:
+          script: |
+            const refs = JSON.parse(process.env.REQUESTED_REFS || "[]");
+            const label = "upstream-compat";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            try {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+                color: "d73a4a",
+                description: "Upstream compatibility breakage reported by the nightly run",
+              });
+            } catch (error) {
+              if (error.status !== 422) throw error; // 422 = the label already exists
+            }
+
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+
+            for (const ref of refs) {
+              const title = `Upstream compat broken: ${ref}`;
+              const body = [
+                `The nightly compatibility run against upstream \`${ref}\` failed.`,
+                "",
+                `Run: ${runUrl}`,
+                "",
+                "The contract suite names the exact upstream surface that broke. Fixes belong in",
+                "`packages/hermes_plus/src/hermes_plus/adapter/` only.",
+              ].join("\n");
+              const existing = open.data.find((issue) => issue.title === title);
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  body,
+                });
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title,
+                  body,
+                  labels: [label],
+                });
+              }
+            }
+
+  bump:
+    name: propose a known_good bump
+    needs: [refs, compat]
+    if: needs.compat.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true # a leg with no new tag uploads no artifact
+        with:
+          pattern: new-tag-*
+          path: ${{ runner.temp }}/new-tags
+      - name: Add the new tags to known_good
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/new-tags" <<'PY'
+          import json, pathlib, sys
+
+          marker_root = pathlib.Path(sys.argv[1])
+          matrix_path = pathlib.Path("packages/hermes_plus/src/hermes_plus/compat/matrix.json")
+          matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+
+          added = []
+          for marker in marker_root.rglob("new-tag.txt"):
+              tag = marker.read_text(encoding="utf-8").strip()
+              version = tag.lstrip("v")
+              if version and version not in matrix["known_good"]:
+                  matrix["known_good"].append(version)
+                  added.append(version)
+
+          if not added:
+              print("no new tags to add")
+              raise SystemExit(0)
+
+          matrix["known_good"] = sorted(
+              matrix["known_good"], key=lambda value: [int(part) for part in value.split(".")]
+          )
+          matrix_path.write_text(json.dumps(matrix, indent=2) + "\n", encoding="utf-8")
+          print(f"added: {', '.join(added)}")
+          PY
+      - name: Open or update the bump pull request
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          commit-message: "compat: add newly passing upstream tags to known_good"
+          title: "compat: bump known_good for the latest passing upstream tag"
+          body: |
+            The upstream nightly run passed on a release tag that is not yet listed in
+            `known_good`. This pull request adds it.
+
+            Review the contract-suite output in the run before merging, and bump
+            `HERMES_KNOWN_GOOD_TAG` (install.sh) / `HERMES_TAG` (docker) if this tag
+            should become the new default.
+          branch: compat/known-good-bump
+          delete-branch: true
+          labels: upstream-compat

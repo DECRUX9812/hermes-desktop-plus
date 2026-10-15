@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # The pinned known-good Hermes release. Keep in step with
+  # HERMES_KNOWN_GOOD_TAG in install.sh and HERMES_TAG in docker/Dockerfile.
+  HERMES_KNOWN_GOOD_TAG: v0.22.1
+
+jobs:
+  python:
+    name: python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Create the venv and install the package
+        run: |
+          set -euo pipefail
+          uv venv .venv --python ${{ matrix.python-version }}
+          uv pip install --python .venv/bin/python -e 'packages/hermes_plus[test]'
+      - name: Unit and integration tests
+        # Contract tests need a stock Hermes (the `contract` job); model tests
+        # need a real provider config. Neither is available here.
+        run: .venv/bin/pytest packages/hermes_plus/tests -q -m "not contract and not model"
+
+  ui:
+    name: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install workspace dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm --prefix packages/ui run typecheck
+      - name: Unit tests
+        run: npm --prefix packages/ui run test
+      - name: Build the web bundle
+        run: npm --prefix packages/ui run build:webapp
+      - name: Upload the web bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-webapp
+          path: packages/ui/dist-webapp
+          if-no-files-found: error
+          retention-days: 7
+
+  contract:
+    name: contract vs the pinned known-good tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          python-version: "3.11"
+      - name: Create the venv and install the package
+        run: |
+          set -euo pipefail
+          uv venv .venv --python 3.11
+          uv pip install --python .venv/bin/python -e 'packages/hermes_plus[test]'
+      - name: Provision stock Hermes at the pinned tag
+        # The real install layout: <root>/hermes-agent with HERMES_HOME=<root>.
+        # setup-hermes.sh publishes the `hermes` launcher into $HOME/.local/bin.
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/hroot"
+          mkdir -p "$root"
+          git clone --branch "$HERMES_KNOWN_GOOD_TAG" --depth 1 \
+            https://github.com/NousResearch/hermes-agent "$root/hermes-agent"
+          cd "$root/hermes-agent"
+          HERMES_HOME="$root" HERMES_RUNTIME_DIR="$root/runtime" ./setup-hermes.sh --runtime-only
+          test -x "$HOME/.local/bin/hermes"
+      - name: Contract tests
+        run: |
+          set -euo pipefail
+          export HERMES_PLUS_TEST_HERMES="$HOME/.local/bin/hermes"
+          export HERMES_HOME="$RUNNER_TEMP/hroot"
+          .venv/bin/pytest packages/hermes_plus/tests -q -m contract
+
+  wheel:
+    name: wheel
+    needs: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - name: Place the built UI into the package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-webapp
+          path: packages/hermes_plus/src/hermes_plus/ui_dist
+      - name: Build the wheel
+        run: |
+          set -euo pipefail
+          test -f packages/hermes_plus/src/hermes_plus/ui_dist/index.html
+          uv build --wheel packages/hermes_plus --out-dir dist
+      - name: Check the wheel payload
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, sys, zipfile
+
+          wheels = glob.glob("dist/*.whl")
+          if len(wheels) != 1:
+              sys.exit(f"expected exactly one wheel, found {wheels}")
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+
+          required = ["hermes_plus/ui_dist/index.html", "hermes_plus/compat/matrix.json"]
+          missing = [name for name in required if name not in names]
+          if not any(name.startswith("hermes_plus/bridge/") for name in names):
+              missing.append("hermes_plus/bridge/*")
+          if missing:
+              sys.exit(f"the wheel is missing: {missing}")
+          print(f"{wheels[0]}: {len(names)} entries, ui_dist/index.html + bridge/ + compat/matrix.json present")
+          PY
+
+  personal-data:
+    name: personal-data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check for personal data in fixtures and sources
+        run: scripts/check-no-personal-data.sh
