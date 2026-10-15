@@ -257,12 +257,14 @@ async def handle_host_terminal_ws(websocket: Any) -> None:
     """Route handler; auth was enforced by the middleware, policy is checked here."""
     runtime = websocket.app.state.runtime
     if not request_allowed(runtime.settings):
+        await websocket.accept()
         await websocket.close(code=4403, reason="host terminal requires authenticated Webapp")
         return
 
     params = websocket.query_params
     token = params.get("attach")
     action = params.get("action")
+    await websocket.accept()
     if action not in (None, "close"):
         await websocket.close(code=4403, reason="Terminal belongs to another identity or profile")
         return
@@ -276,7 +278,6 @@ async def handle_host_terminal_ws(websocket: Any) -> None:
         else:
             await websocket.close(code=4403)
             return
-        await websocket.accept()
         await _send_closed(websocket, token)
         return
 
@@ -290,17 +291,14 @@ async def handle_host_terminal_ws(websocket: Any) -> None:
             await websocket.close(code=1013, reason="Terminal capacity reached; close a terminal and retry")
             return
         except _PtyUnavailable as exc:
-            await websocket.accept()
             await websocket.send_text(META_PREFIX + json.dumps({"error": str(exc)}))
             await websocket.close(code=1011, reason="Pseudo-terminal support is not available")
             return
-        await websocket.accept()
     else:
         session = await registry.resolve(token)
         if session is None:
             await websocket.close(code=4410, reason="Terminal or profile expired; open a new terminal")
             return
-        await websocket.accept()
 
     session.last_detached_at = None
     session.websocket = websocket

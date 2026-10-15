@@ -21,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 
-from hermes_plus import store as grants
+from hermes_plus.store import share as grants
 from hermes_plus.store import Store
 
 log = logging.getLogger(__name__)

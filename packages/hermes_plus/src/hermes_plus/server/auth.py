@@ -103,6 +103,13 @@ class FrontDoorAuth:
         header_token = headers.get(SESSION_HEADER.encode(), b"").decode("latin-1")
         if self.has_valid_token(header_token) or self.has_valid_token(_cookie_token(headers)):
             return True
+        if not websocket and self.settings.auth == "token":
+            # The fork's paired phone and its web client authenticate with a
+            # bearer token (web_routers/mobile.py hands out `token` and the
+            # page sends `Authorization: Bearer`); admit it in token mode.
+            bearer = _first_header(headers, "authorization")
+            if bearer[:7].lower() == "bearer " and self.has_valid_token(bearer[7:].strip()):
+                return True
         if websocket:
             query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
             return self.has_valid_token((query.get("token") or [""])[0])

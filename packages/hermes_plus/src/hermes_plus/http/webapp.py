@@ -46,12 +46,12 @@ def _mint_handoff_ticket(token: str, ttl: float, *, launch: bool) -> str:
     with _ticket_lock:
         tickets = {key: value for key, value in _window_tickets.items()
                    if value[0] > now and value[1] == token}
-        _window_tickets.clear()
-        _window_tickets.update(tickets)
         if len(tickets) >= _MAX_WINDOW_TICKETS:
             raise _TooManyTickets()
         ticket = secrets.token_urlsafe(32)
         tickets[ticket] = (now + ttl, token, launch)
+        _window_tickets.clear()
+        _window_tickets.update(tickets)
     return ticket
 
 

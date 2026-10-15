@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qsl, urlencode
 
+from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -151,11 +152,13 @@ async def _proxy_files(request: Request, route_path: str) -> Response:
     )
     upstream = await client.send(upstream_request, stream=True)
     try:
-        upstream_headers = [
-            (key.encode("latin-1"), value.encode("latin-1"))
-            for key, value in upstream.headers.items()
-            if key.lower() not in proxy._HOP_HEADERS
-        ]
+        upstream_headers = Headers(
+            raw=[
+                (key.encode("latin-1"), value.encode("latin-1"))
+                for key, value in upstream.headers.items()
+                if key.lower() not in proxy._HOP_HEADERS
+            ]
+        )
         status = upstream.status_code
     finally:
         await upstream.aclose()

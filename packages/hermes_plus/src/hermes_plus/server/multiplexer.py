@@ -184,19 +184,22 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
                 except (TypeError, ValueError):
                     frame = None
                 if isinstance(frame, dict):
-                    frame = _translate_for_upstream(frame)
-                    taps.offer(frame)
-                    method_name = frame.get("method")
+                    translated = _translate_for_upstream(frame)
+                    taps.offer(translated)
+                    method_name = translated.get("method")
                     if isinstance(method_name, str) and owns(method_name):
                         task = asyncio.create_task(
                             _dispatch_local(
-                                websocket, send_lock, runtime, link, connection_profile, frame
+                                websocket, send_lock, runtime, link, connection_profile, translated
                             ),
                             name="hermes-plus-local-rpc",
                         )
                         local_tasks.add(task)
                         task.add_done_callback(local_tasks.discard)
                         continue
+                    if translated is not frame:
+                        # The translation changed params: forward the rewritten frame.
+                        raw = json.dumps(translated, ensure_ascii=False, separators=(",", ":"))
                 elif isinstance(frame, list):
                     local_items = []
                     forwarded = []

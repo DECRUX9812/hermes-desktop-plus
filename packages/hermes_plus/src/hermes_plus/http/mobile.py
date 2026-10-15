@@ -21,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 
-from hermes_plus import store as pairings
+from hermes_plus.store import mobile as pairings
 from hermes_plus.store import Store
 
 log = logging.getLogger(__name__)
@@ -223,31 +223,6 @@ async def mobile_reply(request: Request) -> JSONResponse:
         request.app.state.runtime, "prompt.submit", {"session_id": sid, "text": text}))
 
 
-async def mobile_page() -> HTMLResponse:
-    """The paired web client. Static shell only — every data call goes through
-    the authed ``/api/mobile/*`` surface, so the page itself carries no secrets."""
-    return HTMLResponse(_MOBILE_PAGE)
-
-
-routes = [
-    Route("/api/mobile/pairing", mint_pairing_code, methods=["POST"]),
-    Route("/api/mobile/pair", pair_mobile, methods=["POST"]),
-    Route("/api/mobile/overview", mobile_overview, methods=["GET"]),
-    Route("/api/mobile/respond", mobile_respond, methods=["POST"]),
-    Route("/api/mobile/reply", mobile_reply, methods=["POST"]),
-    Route("/mobile", mobile_page, methods=["GET"]),
-]
-
-
-
-
-# Verbatim fork page (web_routers/mobile.py:262-460): the paired web client.
-async def mobile_page():
-    """The paired web client. Static shell only — every data call goes through
-    the authed ``/api/mobile/*`` surface, so the page itself carries no secrets."""
-    return HTMLResponse(_MOBILE_PAGE)
-
-
 _MOBILE_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -439,5 +414,22 @@ setInterval(refresh, 4000);
 </body>
 </html>
 """
+
+
+# Verbatim fork page (web_routers/mobile.py:262-460): the paired web client.
+async def mobile_page(request: Request) -> HTMLResponse:
+    """The paired web client. Static shell only — every data call goes through
+    the authed ``/api/mobile/*`` surface, so the page itself carries no secrets."""
+    return HTMLResponse(_MOBILE_PAGE)
+
+
+routes = [
+    Route("/api/mobile/pairing", mint_pairing_code, methods=["POST"]),
+    Route("/api/mobile/pair", pair_mobile, methods=["POST"]),
+    Route("/api/mobile/overview", mobile_overview, methods=["GET"]),
+    Route("/api/mobile/respond", mobile_respond, methods=["POST"]),
+    Route("/api/mobile/reply", mobile_reply, methods=["POST"]),
+    Route("/mobile", mobile_page, methods=["GET"]),
+]
 
 
