@@ -15,6 +15,7 @@ import httpx
 from hermes_plus import adapter
 from hermes_plus.adapter import Capabilities, DashboardProcess, GatewayClient, probe_capabilities
 from hermes_plus.adapter.mcp import McpClientManager
+from hermes_plus.adapter.protocol import EVENT_NAMES
 from hermes_plus.server.auth import FrontDoorAuth
 from hermes_plus.server.spool import SpoolIngester
 from hermes_plus.settings import ServeSettings
@@ -114,7 +115,17 @@ class Runtime:
             self.upstream_http_origin = _http_origin(self.upstream_ws_url)
             self.internal = GatewayClient(self.upstream_ws_url, self.upstream_token)
             await self.internal.connect()
-            self.capabilities = await probe_capabilities(self.internal)
+            try:
+                self.capabilities = await probe_capabilities(self.internal)
+            except (TimeoutError, OSError) as exc:
+                # A slow or busy upstream must not take the sidecar down: every
+                # feature gates on Capabilities, so unknown means disabled, not dead.
+                log.warning(
+                    "upstream capability probe failed (%s); serving with capabilities "
+                    "unknown — features stay gated until a reconnect re-probes", exc)
+                self.capabilities = Capabilities(
+                    version=None, methods=set(), events=set(EVENT_NAMES), features={},
+                )
             self.http_client = httpx.AsyncClient(timeout=None, follow_redirects=False)
             self._write_sidecar_json()
             self._start_spool_ingester()

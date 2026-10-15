@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -21,6 +22,8 @@ from hermes_plus.adapter.version import HermesInstall
 log = logging.getLogger(__name__)
 
 STUB_INDEX_HTML = "<!doctype html><html><body>hermes-plus stub</body></html>"
+
+_READY_PORT_RE = re.compile(r"HERMES_DASHBOARD_READY port=(\d+)")
 
 
 class DashboardProcess:
@@ -49,6 +52,7 @@ class DashboardProcess:
         self.extra_env = dict(extra_env or {})
         self.process: subprocess.Popen | None = None
         self.log_path: Path | None = None
+        self._log_offset = 0
         self.url = ""
         self.ws_url = ""
         self._stub_dist_dir: Path | None = None
@@ -149,6 +153,12 @@ class DashboardProcess:
             else:
                 options["start_new_session"] = True
             self.process = subprocess.Popen(command, **options)
+        # Only READY lines from THIS child count: the log is appended to across
+        # runs, and a previous session's fallback port must never be adopted.
+        try:
+            self._log_offset = self.log_path.stat().st_size
+        except OSError:
+            self._log_offset = 0
         self.url = f"http://127.0.0.1:{self.port}"
         self.ws_url = f"ws://127.0.0.1:{self.port}/api/ws"
         if "HERMES_WEB_DIST" in options["env"]:
@@ -160,6 +170,7 @@ class DashboardProcess:
                 raise RuntimeError(
                     f"Hermes dashboard exited with code {self.process.returncode}; log: {self.log_path}"
                 )
+            self._adopt_fallback_port()
             try:
                 with urllib.request.urlopen(f"{self.url}/api/health", timeout=2) as response:
                     if response.status == 200:
@@ -169,6 +180,31 @@ class DashboardProcess:
             time.sleep(0.2)
         self.stop()
         raise TimeoutError(f"Hermes dashboard did not become ready; log: {self.log_path}")
+
+    def _adopt_fallback_port(self) -> None:
+        """Follow the child's own READY line when it could not take our port.
+
+        When the requested port was grabbed between our probe and the child's
+        bind, stock falls back to a free port and logs
+        ``HERMES_DASHBOARD_READY port=<n>``; connecting to the requested port
+        then reaches whatever else lives there, or nothing at all.
+        """
+        try:
+            with self.log_path.open("rb") as log_file:
+                log_file.seek(self._log_offset)
+                text = log_file.read().decode("utf-8", errors="replace")
+        except OSError:
+            return
+        match = _READY_PORT_RE.search(text)
+        if not match:
+            return
+        reported = int(match.group(1))
+        if reported == self.port:
+            return
+        log.info("dashboard took fallback port %d (requested %d)", reported, self.port)
+        self.port = reported
+        self.url = f"http://127.0.0.1:{self.port}"
+        self.ws_url = f"ws://127.0.0.1:{self.port}/api/ws"
 
     def stop(self) -> None:
         """Terminate the dashboard process group, escalating if it does not exit."""
