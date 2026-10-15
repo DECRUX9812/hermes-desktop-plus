@@ -16,6 +16,7 @@ import {
 } from '@/lib/browser-transport'
 import { createBrowserUploadsBridge } from '@/lib/browser-uploads'
 import { createBrowserWindowOpener, sessionWindowTarget } from '@/lib/browser-window'
+import { createBrowserBotRoomBridge, createBrowserPane3dBridge } from '@/lib/browser-window-bridges'
 import { createBrowserZoom } from '@/lib/browser-zoom'
 import { $connection } from '@/store/session'
 import type { BackendUpdateCheckResponse } from '@/types/hermes'
@@ -91,6 +92,11 @@ export function installBrowserDesktopBridge(): boolean {
     }),
     ...uploads,
     api,
+    // The Bot Room overlay and the 3D Pane are separate windows in Electron. A
+    // browser host stands a same-origin popup tab in for each and relays their
+    // push/control traffic over BroadcastChannel, so both surfaces work here.
+    botroom: createBrowserBotRoomBridge(),
+    pane3d: createBrowserPane3dBridge(),
     findInPage: async (query: string) => {
       const find = (window as Window & { find?: (value: string) => boolean }).find
 
