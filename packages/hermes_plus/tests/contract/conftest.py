@@ -19,6 +19,14 @@ from hermes_plus.rpc.context import GatewayUpstream
 # Track all temp HERMES_HOME directories created during the session for cleanup
 _temp_homes: list[Path] = []
 
+# Helper subprocesses must use the stock binary the suite was pointed at: on a
+# developer machine PATH's `hermes` can be a personal install, and running it
+# leaves its own pm worker behind in the temp home (the cleanup assertion then
+# fails and the log mentions a foreign checkout).
+HERMES_BIN = Path(
+    os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
+).expanduser()
+
 
 @contextmanager
 def _environment(**values: str):
@@ -133,7 +141,7 @@ def _stop_gateway_daemons(home: Path) -> None:
         env = os.environ.copy()
         env["HERMES_HOME"] = str(home)
         subprocess.run(
-            ["hermes", "gateway", "stop"],
+            [str(HERMES_BIN), "gateway", "stop"],
             env=env,
             capture_output=True,
             text=True,
