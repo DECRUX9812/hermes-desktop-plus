@@ -23,7 +23,18 @@ def create(name: str, *, description: str) -> Path:
 
 
 def delete(name: str) -> None:
-    _check(run_hermes(["profile", "delete", name, "--yes"]))
+    """Delete a profile, tolerating upstream's "settlement pending" exit.
+
+    Stock Hermes tombstones the profile directory, then settles its durable identity. When the
+    profile has its own ``state.db`` the settlement is refused (the tombstone makes its home
+    unopenable) and the CLI exits non-zero with a retry hint, even though the directory is
+    already gone. Measured identical on 379cf122 and v0.22.2. The directory is the contract:
+    when it is no longer listed, the delete happened.
+    """
+    result = run_hermes(["profile", "delete", name, "--yes"])
+    if result.returncode == 0 or not exists(name):
+        return
+    _check(result)
 
 
 def config_set(name: str, key: str, value: str) -> None:

@@ -11,7 +11,16 @@ from typing import Any
 
 import pytest
 
-from hermes_plus.adapter import DashboardProcess, GatewayClient, cron, list_profiles, load_config, profiles, run_hermes
+from hermes_plus.adapter import (
+    DashboardProcess,
+    GatewayClient,
+    cron,
+    hermes_home,
+    list_profiles,
+    load_config,
+    profiles,
+    run_hermes,
+)
 from hermes_plus.rpc import RpcContext, handle_text
 from hermes_plus.rpc.context import GatewayUpstream
 from hermes_plus.store import Store
@@ -138,6 +147,33 @@ async def test_setup_session_is_created_once_and_reused(hermes_env, dashboard, s
             assert second == first
         finally:
             ok(await rpc(ctx, "fork.onboarding.reset_setup_profile"))
+
+
+async def test_profile_delete_accepts_a_pending_upstream_identity_settlement(hermes_env, dashboard, tmp_path,
+                                                                            monkeypatch):
+    """A delete whose upstream identity settlement is pending still deletes the profile.
+
+    Stock Hermes tombstones a profile home before settling its durable identity, and the
+    settlement cannot open a state.db under that tombstone: `hermes profile delete <name> --yes`
+    then exits non-zero with a retry hint, though the directory is already removed. A profile
+    with its own state.db takes that path on 379cf122 and v0.22.2 alike, so the adapter's
+    contract is the directory, not the exit code. HOME is sandboxed so the CLI cannot reach a
+    real launcher in ~/.local/bin.
+    """
+    _, _ = dashboard
+    monkeypatch.setenv("HOME", str(tmp_path))
+    name = "delete-contract"
+    profiles.create(name, description="delete contract profile")
+    profile_home = hermes_home(name)
+    # Upstream's own storage: an existing state.db is what makes the settlement pending.
+    (profile_home / "state.db").touch()
+    assert profiles.exists(name)
+
+    profiles.delete(name)
+
+    assert not profiles.exists(name)
+    assert not profile_home.exists()
+    assert name not in run_hermes(["profile", "list"]).stdout
 
 
 async def test_session_ask_reports_stock_failures_structurally(hermes_env, dashboard, store, stock_hermes):
