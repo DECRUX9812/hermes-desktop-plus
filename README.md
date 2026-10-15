@@ -11,10 +11,12 @@ the web UI, multiplexes the gateway connection, and fronts a loopback-only stock
 ## Install in one command
 
 ```sh
-curl -fsSL https://<INSTALL_URL>/install.sh | sh
+bash /home/user/Code/ship-test/wt/url/install.sh
 ```
 
-`<INSTALL_URL>` is a placeholder until this project publishes a download host.
+This runs the installer from your local checkout of this repository. A public
+HTTPS install URL is **TBD pending publish approval** — see
+`.oc/reports/PUBLISH-PLAN.md` — so until that host exists, install locally.
 The script finds stock Hermes on `PATH`, installs the sidecar into its own tool
 environment, copies the bridge plugin into your Hermes home, runs migrations,
 and finishes with `hermes-plus doctor`.
