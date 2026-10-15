@@ -1,58 +1,73 @@
-# Multi-stage Dockerfile for Hermes Desktop Plus
-# Stage 1: Build the Web UI bundle from packages/ui
+# Hermes Desktop Plus image: our sidecar on top of the official Hermes Agent image.
+#
+# Build from the repository root:
+#   docker build -f docker/Dockerfile --build-arg HERMES_TAG=v0.22.1 -t hermes-desktop-plus .
+
+# Stock Hermes Agent release the runtime is based on. This is upstream's own
+# release tag; its Docker image is published under the same name and the
+# version our compatibility matrix is measured against. Bump it here (and in
+# install.sh, HERMES_KNOWN_GOOD_TAG) when a newer tag is verified.
+ARG HERMES_TAG=v0.22.1
+
+# ---------- Stage 1: build the web UI (npm workspace root) ----------
 FROM node:22-slim AS ui
 
 WORKDIR /app
+# `npm ci` needs the workspace manifests: the root package.json + lock, and
+# both workspace packages. packages/ui's vite config aliases @hermes/shared to
+# ../shared/src, so this tree is self-contained.
+COPY package.json package-lock.json ./
 COPY packages/ui ./packages/ui
-WORKDIR /app/packages/ui
-RUN npm ci && npm run build:webapp
+COPY packages/shared ./packages/shared
+RUN npm ci --no-audit --no-fund
+RUN npm --prefix packages/ui run build:webapp
 
-# Stage 2: Runtime image with stock Hermes and hermes-plus sidecar
-FROM python:3.11-slim AS runtime
+# ---------- Stage 2: runtime + sidecar ----------
+FROM nousresearch/hermes-agent:${HERMES_TAG}
 
-ARG HERMES_REF=v0.22.1
+# The official image is root with s6-overlay as PID 1: its entrypoint runs the
+# volume bootstrap and then execs the container command as the unprivileged
+# `hermes` user (UID 10000) with HERMES_HOME=/opt/data. Build steps need root;
+# the entrypoint drops the privilege, so we never declare USER here.
+USER root
 
-# Install runtime dependencies: git for repository interaction, curl for healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# The sidecar lives in its own venv. Hermes's sealed /opt/hermes/.venv is never
+# written to, so an image upgrade or `hermes update` cannot break us.
+#
+# /usr/bin/python3 is the image's Debian interpreter (>= 3.11). The pm-managed
+# interpreter on PATH is deliberately not used: our venv must not depend on
+# Hermes's package manager.
+COPY packages/hermes_plus /app/packages/hermes_plus
+RUN set -eu; \
+    /usr/bin/python3 -c 'import sys; sys.exit("base image python3 is older than 3.11") if sys.version_info < (3, 11) else None'; \
+    /usr/bin/python3 -m venv /opt/hermes-plus/venv; \
+    /opt/hermes-plus/venv/bin/python -m pip install --no-cache-dir --upgrade pip; \
+    /opt/hermes-plus/venv/bin/python -m pip install --no-cache-dir /app/packages/hermes_plus
 
-# Install stock Hermes Agent pinned to known-good tag
-RUN pip install --no-cache-dir "hermes-agent @ git+https://github.com/NousResearch/hermes-agent@${HERMES_REF}"
+# Built UI -> hermes_plus/ui_dist, the directory the server serves from. Copied
+# into the installed package because ui_dist/ is build output, not source.
+COPY --from=ui /app/packages/ui/dist-webapp /tmp/ui-dist
+RUN set -eu; \
+    pkg_dir="$(/opt/hermes-plus/venv/bin/python -c 'import pathlib, hermes_plus; print(pathlib.Path(hermes_plus.__file__).parent)')"; \
+    mkdir -p "$pkg_dir/ui_dist"; \
+    cp -a /tmp/ui-dist/. "$pkg_dir/ui_dist/"; \
+    rm -rf /tmp/ui-dist /app; \
+    test -f "$pkg_dir/ui_dist/index.html"
 
-# Setup unprivileged hermes user and persistent data directory
-RUN useradd -m -u 1000 -s /bin/bash hermes && \
-    mkdir -p /data/hermes && \
-    chown -R hermes:hermes /data/hermes
+COPY docker/entrypoint.sh /opt/hermes-plus/entrypoint.sh
+RUN chmod 0755 /opt/hermes-plus/entrypoint.sh
 
-WORKDIR /app
-
-# Copy hermes-plus Python package
-COPY --chown=hermes:hermes packages/hermes_plus ./packages/hermes_plus
-
-# Copy built web UI assets into package ui_dist
-COPY --from=ui --chown=hermes:hermes /app/packages/ui/dist ./packages/hermes_plus/src/hermes_plus/ui_dist
-
-# Install hermes-plus into Python environment
-RUN pip install --no-cache-dir ./packages/hermes_plus
-
-# Copy entrypoint script
-COPY --chown=hermes:hermes docker/entrypoint.sh /app/docker/entrypoint.sh
-RUN chmod +x /app/docker/entrypoint.sh
-
-USER hermes
-
-ENV HERMES_HOME=/data/hermes \
-    PYTHONUNBUFFERED=1
-
-VOLUME ["/data/hermes"]
+# Ahead of the image's own PATH entries, so the container command resolves
+# `hermes-plus` without an absolute path; `hermes` still resolves to the shim
+# the official image ships at /opt/hermes/bin/hermes.
+ENV PATH="/opt/hermes-plus/venv/bin:${PATH}"
 
 EXPOSE 9129
 
-# Healthcheck targeting /healthz endpoint provided by hermes-plus server (S5)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -f http://127.0.0.1:9129/healthz || exit 1
 
-ENTRYPOINT ["/app/docker/entrypoint.sh"]
+# The image's ENTRYPOINT (/opt/hermes/docker/entrypoint-dispatch.sh) is kept: it
+# owns PID 1, prepares /opt/data and drops to the hermes user, then runs this
+# CMD. HERMES_UID/HERMES_GID remap that user at boot.
+CMD ["/opt/hermes-plus/entrypoint.sh"]
