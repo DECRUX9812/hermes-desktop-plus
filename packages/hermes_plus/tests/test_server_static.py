@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from hermes_plus import __version__
 from hermes_plus.server.runtime import Runtime
@@ -31,6 +37,39 @@ def test_inject_adds_globals_before_head_close(tmp_path: Path):
     assert 'window.__HERMES_UI_SURFACE__="dashboard";' in html
     assert "window.__HERMES_PLUS__={" in html
     assert f"version:{_script_escape(__version__)}" in html
+
+
+def test_injected_bootstrap_script_parses_and_defines_the_globals(tmp_path: Path):
+    """The renderer installs its browser bridge off these globals.
+
+    A syntax error in this script is invisible to a substring assertion but
+    fatal in the browser: `window.hermesDesktop` never appears and the app
+    boots into "Desktop IPC bridge is unavailable". So the script is executed.
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is required to parse the injected bootstrap script")
+    runtime = _runtime(tmp_path)
+    html = _inject("<!doctype html><html><head></head><body></body></html>", runtime.settings, runtime)
+    match = re.search(r"<script>(.*?)</script>", html, re.S)
+    assert match is not None, html
+    probe = (
+        "globalThis.window = globalThis;"
+        + match.group(1)
+        + ";console.log(JSON.stringify({token:window.__HERMES_SESSION_TOKEN__,"
+        "basePath:window.__HERMES_BASE_PATH__,authRequired:window.__HERMES_AUTH_REQUIRED__,"
+        "surface:window.__HERMES_UI_SURFACE__,plus:window.__HERMES_PLUS__}));"
+    )
+    result = subprocess.run([node, "-e", probe], capture_output=True, text=True, timeout=60, check=False)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["token"] == runtime.auth.token
+    assert payload["authRequired"] is True
+    assert payload["surface"] == "dashboard"
+    assert payload["basePath"] == ""
+    assert payload["plus"]["version"] == __version__
+    assert payload["plus"]["basePath"] == "/"
+    assert payload["plus"]["compat"]["status"] == getattr(runtime.compat, "status", "unknown")
 
 
 def test_inject_never_contains_the_upstream_token(tmp_path: Path):

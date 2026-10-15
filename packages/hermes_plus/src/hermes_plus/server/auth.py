@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 import secrets
+import threading
 import time
 from collections import defaultdict, deque
 from http.cookies import SimpleCookie
@@ -37,6 +38,9 @@ def file_ticket_redeem(scope: dict[str, Any]) -> bool:
 
 _PUBLIC_ALWAYS = frozenset({"/healthz", "/login"})
 _ATTEMPTS_PER_MINUTE = 5
+# Long enough for the renderer to fetch a ticket and open the socket, short
+# enough that a leaked one is uninteresting. Matches upstream's TTL.
+WS_TICKET_TTL_SECONDS = 30
 
 
 def _headers(scope: dict[str, Any]) -> dict[bytes, bytes]:
@@ -69,6 +73,32 @@ class FrontDoorAuth:
             password = settings.password_file.read_text(encoding="utf-8").strip()
         self._password_digest = hashlib.sha256(password.encode()).digest() if password else None
         self._attempts: dict[str, deque[float]] = defaultdict(deque)
+        self._ws_tickets: dict[str, float] = {}
+        self._ws_ticket_lock = threading.Lock()
+
+    def mint_ws_ticket(self) -> str:
+        """Mint a single-use credential for a WebSocket upgrade.
+
+        A browser cannot set an Authorization header on an upgrade, and the
+        renderer must not put the session token in a URL, so it POSTs
+        /api/auth/ws-ticket and dials with ``?ticket=`` instead.
+        """
+        ticket = secrets.token_urlsafe(32)
+        now = time.monotonic()
+        with self._ws_ticket_lock:
+            for used, expiry in list(self._ws_tickets.items()):
+                if expiry < now:
+                    del self._ws_tickets[used]
+            self._ws_tickets[ticket] = now + WS_TICKET_TTL_SECONDS
+        return ticket
+
+    def redeem_ws_ticket(self, ticket: str) -> bool:
+        """Consume a ticket. Missing, unknown, expired and reused all fail closed."""
+        if not ticket:
+            return False
+        with self._ws_ticket_lock:
+            expiry = self._ws_tickets.pop(ticket, None)
+        return expiry is not None and expiry >= time.monotonic()
 
     def _trusted_header(self, scope: dict[str, Any], name: str) -> str:
         if not self.settings.trust_proxy_headers:
@@ -112,7 +142,9 @@ class FrontDoorAuth:
                 return True
         if websocket:
             query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
-            return self.has_valid_token((query.get("token") or [""])[0])
+            if self.has_valid_token((query.get("token") or [""])[0]):
+                return True
+            return self.redeem_ws_ticket((query.get("ticket") or [""])[0])
         return False
 
     def consume_password_attempt(self, scope: dict[str, Any]) -> bool:
