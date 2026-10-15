@@ -5,6 +5,15 @@ author: NousResearch
 requires_env:
   - HERMES_LANGFUSE_PUBLIC_KEY
   - HERMES_LANGFUSE_SECRET_KEY
+config_schema:
+  public_key:
+    type: secret
+    env: HERMES_LANGFUSE_PUBLIC_KEY
+    description: "Langfuse public key (pk-lf-...); stored in .env, read through the profile secret scope."
+  secret_key:
+    type: secret
+    env: HERMES_LANGFUSE_SECRET_KEY
+    description: "Langfuse secret key (sk-lf-...); stored in .env, read through the profile secret scope."
 provides_hooks:
   - pre_api_request
   - post_api_request

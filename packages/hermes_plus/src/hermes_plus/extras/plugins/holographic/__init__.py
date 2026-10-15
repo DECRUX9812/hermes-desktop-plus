@@ -14,12 +14,22 @@ from typing import Any, Dict, List
 
 from agent.memory_provider import MemoryProvider
 from tools.registry import tool_error
-from utils import is_truthy_value
 from .store import MemoryStore
 from .retrieval import FactRetriever
 from hermes_cli.config import cfg_get
 
 logger = logging.getLogger(__name__)
+
+_TRUTHY_STRINGS = frozenset({"1", "true", "yes", "on"})
+
+
+def _is_truthy_value(value: Any, default: bool = False) -> bool:
+    """Local copy of the shared truthy coercion (catalog rule 9: no private core imports)."""
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() in _TRUTHY_STRINGS
+    return bool(value)
 
 # Expanded by initialize() against the profile that opens it. A concrete path is copied by a profile clone
 # and outlives a rename, so it keeps naming the old profile's DB.
@@ -188,7 +198,7 @@ class HolographicMemoryProvider(MemoryProvider):
 
     def on_session_end(self, messages: list[dict[str, Any]]) -> None:
         # is_truthy_value: auto_extract is a string enum ("false"/"true"); plain truthiness would treat "false" as on.
-        if is_truthy_value(self._config.get("auto_extract", False)) and self._store and messages:
+        if _is_truthy_value(self._config.get("auto_extract", False)) and self._store and messages:
             self._auto_extract_facts(messages)
 
     def on_memory_write(self, action: str, target: str, content: str) -> None:

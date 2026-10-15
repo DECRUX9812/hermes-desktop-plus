@@ -8,8 +8,24 @@ license: MIT
 tags:
   - hermes-plus
   - desktop
+provides_tools:
+  - bot_team
+  - bot_mailbox
+  - create_visualization
+  - git_ship
+  - open_pr
+  - update_task
 provides_hooks:
   - pre_tool_call
   - post_tool_call
   - pre_approval_request
   - post_approval_response
+config_schema:
+  retry_loop_detector:
+    type: bool
+    default: true
+    description: "Block a stuck retry loop when the model repeats one tool call with identical arguments."
+  retry_loop_max_identical:
+    type: int
+    default: 6
+    description: "How many identical (tool, arguments) calls in one turn trip the retry-loop detector."

@@ -203,6 +203,13 @@ def cmd_install(args: argparse.Namespace) -> int:
         sys.stderr.write(f"Error detecting Hermes installation: {exc}\n")
         return 2
 
+    # Pin the detected binary for every later adapter CLI call: resolve_hermes_bin()
+    # falls back to `hermes` on PATH, which on a developer machine is often a
+    # personal install — it would then enable plugins against the wrong Hermes
+    # and provision its own pm runtime into this home.
+    if getattr(inst, "hermes_bin", None):
+        os.environ["HERMES_PLUS_HERMES_BIN"] = str(inst.hermes_bin)
+
     compat = adapter.check_compat(inst)
     compat_status = getattr(compat, "status", "untested")
     compat_msg = getattr(compat, "message", "")

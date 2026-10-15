@@ -26,6 +26,8 @@ from hermes_plus.rpc.context import GatewayUpstream
 from hermes_plus.store import Store
 from support import fault, ok
 
+pytestmark = pytest.mark.contract
+
 MODEL_CONFIG = os.environ.get("HERMES_PLUS_TEST_MODEL_CONFIG", "")
 PREDICT_GATE = "auxiliary.composer_prediction.enabled"
 

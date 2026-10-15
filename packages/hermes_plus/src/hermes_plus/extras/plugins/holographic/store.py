@@ -1,5 +1,6 @@
 """SQLite-backed fact store with entity resolution and trust scoring (single-user Hermes memory plugin)."""
 
+import logging
 import os
 import re
 import sqlite3
@@ -7,6 +8,39 @@ import threading
 from pathlib import Path
 
 from . import holographic as hrr
+
+logger = logging.getLogger(__name__)
+
+
+def _apply_wal_with_fallback(conn: sqlite3.Connection) -> None:
+    """Local stand-in for the private ``hermes_state_wal`` helper (catalog rule 9):
+    try WAL, keep the current mode when the filesystem or SQLite refuses
+    (NFS/SMB/FUSE), and never downgrade a database that already reports WAL."""
+    try:
+        row = conn.execute("PRAGMA journal_mode").fetchone()
+        current = (row[0] if row else "").lower()
+    except sqlite3.OperationalError:
+        current = ""
+    if current == "wal":
+        return
+    try:
+        conn.execute("PRAGMA journal_mode=WAL").fetchall()
+    except sqlite3.OperationalError as exc:
+        logger.warning("holographic store: WAL unavailable (%s); staying in %s mode",
+                       exc, current or "sqlite default")
+
+
+def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> bool:
+    """Local stand-in for the private ``hermes_cli.sqlite_util`` helper (catalog rule 9):
+    ``ALTER TABLE ... ADD COLUMN`` that survives a concurrent migrator's duplicate column."""
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+        return True
+    except sqlite3.OperationalError as exc:
+        if "duplicate column name" in str(exc).lower():
+            return False
+        raise
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS facts (
@@ -124,13 +158,11 @@ class MemoryStore:
                 entry["ready"] = True
 
     def _init_db(self) -> None:
-        """Create schema, enable WAL via the shared fallback helper (NFS/SMB/FUSE degrade gracefully), add hrr_vector to pre-HRR DBs."""
-        from hermes_state_wal import apply_wal_with_fallback
-        apply_wal_with_fallback(self._conn, db_label="memory_store.db (holographic)")
+        """Create schema, enable WAL with a graceful fallback (NFS/SMB/FUSE), add hrr_vector to pre-HRR DBs."""
+        _apply_wal_with_fallback(self._conn)
         self._conn.executescript(_SCHEMA)
         if "hrr_vector" not in {row[1] for row in self._conn.execute("PRAGMA table_info(facts)").fetchall()}:
-            from hermes_cli.sqlite_util import add_column_if_missing
-            add_column_if_missing(self._conn, "facts", "hrr_vector", "hrr_vector BLOB")
+            _add_column_if_missing(self._conn, "facts", "hrr_vector", "hrr_vector BLOB")
         self._conn.commit()
 
     def _one(self, sql: str, params=()):
