@@ -6,7 +6,9 @@
 #   3. installs the bridge plugin + migrations into HERMES_HOME, then runs doctor.
 #
 # POSIX sh, safe to pipe from `curl ... | sh`. Knobs:
-#   HERMES_PLUS_SOURCE          package source for uv/pipx (default: hermes-plus)
+#   HERMES_PLUS_REPO            GitHub repo (default: DECRUX9812/hermes-desktop-plus)
+#   HERMES_PLUS_VERSION         package version (default: 0.1.0; matches pyproject.toml)
+#   HERMES_PLUS_SOURCE          package source for uv/pipx (default: GitHub release wheel URL)
 #   HERMES_PLUS_HERMES_BIN      explicit stock hermes binary (checked first)
 #   HERMES_PLUS_INSTALL_HERMES  1 = install stock Hermes when it is missing
 #   HERMES_PLUS_FORCE           1 = pass --force to `hermes-plus install`
@@ -20,7 +22,12 @@ set -eu
 HERMES_KNOWN_GOOD_TAG="v0.22.1"
 HERMES_INSTALLER_URL="https://hermes-agent.nousresearch.com/install.sh"
 
-HERMES_PLUS_SOURCE="${HERMES_PLUS_SOURCE:-hermes-plus}"
+# Hermes Desktop Plus release location on GitHub.
+HERMES_PLUS_REPO="${HERMES_PLUS_REPO:-DECRUX9812/hermes-desktop-plus}"
+# Package version: must match version in packages/hermes_plus/pyproject.toml and bridge/plugin.yaml.
+HERMES_PLUS_VERSION="${HERMES_PLUS_VERSION:-0.1.0}"
+# Default source: the wheel from the GitHub release.
+HERMES_PLUS_SOURCE="${HERMES_PLUS_SOURCE:-https://github.com/${HERMES_PLUS_REPO}/releases/download/v${HERMES_PLUS_VERSION}/hermes_plus-${HERMES_PLUS_VERSION}-py3-none-any.whl}"
 HERMES_PLUS_PROFILE="${HERMES_PLUS_PROFILE:-}"
 HERMES_PLUS_EXTRAS="${HERMES_PLUS_EXTRAS:-}"
 HERMES_PLUS_INSTALL_HERMES="${HERMES_PLUS_INSTALL_HERMES:-0}"

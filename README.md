@@ -11,10 +11,9 @@ the web UI, multiplexes the gateway connection, and fronts a loopback-only stock
 ## Install in one command
 
 ```sh
-curl -fsSL https://<INSTALL_URL>/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DECRUX9812/hermes-desktop-plus/v0.1.0/install.sh | sh
 ```
 
-`<INSTALL_URL>` is a placeholder until this project publishes a download host.
 The script finds stock Hermes on `PATH`, installs the sidecar into its own tool
 environment, copies the bridge plugin into your Hermes home, runs migrations,
 and finishes with `hermes-plus doctor`.
@@ -22,8 +21,29 @@ and finishes with `hermes-plus doctor`.
 Without the script:
 
 ```sh
-uv tool install hermes-plus    # or: pipx install hermes-plus
+uv tool install https://github.com/DECRUX9812/hermes-desktop-plus/releases/download/v0.1.0/hermes_plus-0.1.0-py3-none-any.whl
 hermes-plus install
+```
+
+From a clone (development):
+
+```sh
+cd /path/to/hermes-desktop-plus
+
+# Build the UI first (requires Node.js and pnpm)
+cd packages/ui
+pnpm install
+pnpm build
+
+# Stage the built UI into the package
+rm -rf ../hermes_plus/src/hermes_plus/ui_dist
+mkdir -p ../hermes_plus/src/hermes_plus/ui_dist
+cp -a dist-webapp/. ../hermes_plus/src/hermes_plus/ui_dist/
+
+# Build the wheel and install from it
+cd ../..
+uv build --wheel packages/hermes_plus --out-dir /tmp/hermes-plus-build
+HERMES_PLUS_SOURCE=/tmp/hermes-plus-build/hermes_plus-*.whl ./install.sh
 ```
 
 ## Serve over the web
