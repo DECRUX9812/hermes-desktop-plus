@@ -42,8 +42,11 @@ print("SECTIONS:" + json.dumps(sections))
 """
 
 
-def _free_port() -> int:
+def _free_port(exclude: set[int] | None = None) -> int:
+    skip = exclude or set()
     for port in range(9300, 9400):
+        if port in skip:
+            continue
         with socket.socket() as probe:
             try:
                 probe.bind(("127.0.0.1", port))
@@ -55,26 +58,41 @@ def _free_port() -> int:
 
 @pytest.fixture
 def sidecar(installed_home: Path, plus_bin: str, stock_hermes: str):
-    port = _free_port()
-    process = subprocess.Popen(
-        [plus_bin, "serve", "--host", "127.0.0.1", "--port", str(port),
-         "--hermes", stock_hermes],
-        env={**os.environ, "HERMES_HOME": str(installed_home)},
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     sidecar_json = installed_home / "hermes-plus" / "sidecar.json"
-    deadline = time.monotonic() + 240
-    try:
+    taken: set[int] = set()
+    contact = None
+    process = None
+    for attempt in range(8):
+        port = _free_port(exclude=taken)
+        process = subprocess.Popen(
+            [plus_bin, "serve", "--host", "127.0.0.1", "--port", str(port),
+             "--hermes", stock_hermes],
+            env={**os.environ, "HERMES_HOME": str(installed_home)},
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        deadline = time.monotonic() + 240
+        output = ""
         while time.monotonic() < deadline:
             if sidecar_json.is_file():
                 break
             if process.poll() is not None:
-                pytest.fail(f"sidecar exited early: {process.stdout.read() if process.stdout else ''}")
+                output = process.stdout.read() if process.stdout else ""
+                break
             time.sleep(1)
         else:
             pytest.fail("sidecar never wrote sidecar.json")
+        if sidecar_json.is_file():
+            contact = json.loads(sidecar_json.read_text())
+            break
+        # The child exited before it wrote its contact card: another executor
+        # may have taken the probed port in between (shared 9300-9399 range).
+        if "address already in use" in output and attempt + 1 < 8:
+            taken.add(port)
+            continue
+        pytest.fail(f"sidecar exited early: {output}")
+    assert contact is not None, "sidecar never got a free loopback port"
+    try:
         # The Runtime's contact card: loopback URL, the bridge token, this pid, mode 0600.
         assert stat.S_IMODE(sidecar_json.stat().st_mode) == 0o600
-        contact = json.loads(sidecar_json.read_text())
         assert contact["url"] == f"http://127.0.0.1:{port}"
         assert contact["pid"] == process.pid
         assert contact["token"]

@@ -84,9 +84,17 @@ def expected_compat() -> frozenset[str]:
 
 DASHBOARD_PORTS = range(9300, 9400)
 
+# A probed loopback port can be taken before the child binds it (executors share
+# 9300-9399). Our own server says "address already in use"; stock Hermes exits
+# with BACKEND_PORT_IN_USE when its --port is taken.
+PORT_IN_USE_SIGNATURES = ("address already in use", "BACKEND_PORT_IN_USE")
 
-def loopback_port() -> int:
+
+def loopback_port(exclude: set[int] | None = None) -> int:
+    skip = exclude or set()
     for port in DASHBOARD_PORTS:
+        if port in skip:
+            continue
         with socket.socket() as probe:
             try:
                 probe.bind(("127.0.0.1", port))
@@ -137,11 +145,33 @@ def _stop_gateway_daemons(home: Path) -> None:
 
 
 def start_dashboard(stock_install, home: Path) -> DashboardProcess:
-    """Start a real dashboard child with no web dist; the adapter must stub one."""
+    """Start a real dashboard child with no web dist; the adapter must stub one.
+
+    Concurrent executors share the 9300-9399 range, so a port that probed free can
+    be taken before the child binds it; retry that one case and let the rest raise.
+    """
     inst = replace(stock_install, hermes_home=home)
-    process = DashboardProcess(inst, port=loopback_port(), extra_env={"HERMES_HOME": str(home)})
-    process.start(timeout=120)
-    return process
+    taken: set[int] = set()
+    for attempt in range(6):
+        process = DashboardProcess(
+            inst, port=loopback_port(exclude=taken), extra_env={"HERMES_HOME": str(home)}
+        )
+        try:
+            process.start(timeout=120)
+            return process
+        except RuntimeError:
+            log_text = (
+                process.log_path.read_text(errors="replace")[-4000:]
+                if process.log_path is not None and process.log_path.exists()
+                else ""
+            )
+            if (
+                not any(sig in log_text for sig in PORT_IN_USE_SIGNATURES)
+                or attempt + 1 == 6
+            ):
+                raise
+            taken.add(process.port)
+    raise RuntimeError("stock dashboard never got a free loopback port")
 
 
 def stop_dashboard(process: DashboardProcess) -> None:

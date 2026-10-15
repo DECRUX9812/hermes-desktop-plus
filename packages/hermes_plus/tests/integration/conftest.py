@@ -32,8 +32,16 @@ HERMES_BIN = Path(
 ).expanduser()
 
 
-def free_port() -> int:
+# Several executors share the 9300-9399 loopback range, so a port that probes
+# free can be taken before the child binds it. Callers retry on this signature.
+ADDRESS_IN_USE = "address already in use"
+
+
+def free_port(exclude: set[int] | None = None) -> int:
+    skip = exclude or set()
     for port in range(9300, 9400):
+        if port in skip:
+            continue
         with socket.socket() as sock:
             try:
                 sock.bind(("127.0.0.1", port))
@@ -98,7 +106,7 @@ class Sidecar:
     def log_path(self) -> Path:
         return self.home / "sidecar.log"
 
-    def start(self) -> None:
+    def start(self, attempts: int = 8) -> None:
         env = os.environ.copy()
         env.update(
             {
@@ -109,31 +117,46 @@ class Sidecar:
             }
         )
         env.update(self.env_extra)
-        self._log = self.log_path.open("ab")
-        self.proc = subprocess.Popen(
-            [str(HERMES_PLUS_BIN), "serve", "--host", "127.0.0.1", "--port", str(self.port)],
-            env=env,
-            stdout=self._log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        deadline = time.monotonic() + 150
-        while time.monotonic() < deadline:
-            if self.proc.poll() is not None:
-                self._close_log()
-                log_text = self.log_path.read_text(errors="replace")[-4000:]
-                if "ModuleNotFoundError" in log_text or "dashboard" in log_text:
-                    pytest.skip(f"stock Hermes dashboard cannot start here:\n{log_text}")
-                pytest.fail(f"hermes-plus exited with {self.proc.returncode}:\n{log_text}")
-            try:
-                reply = httpx.get(f"{self.url}/healthz", timeout=2)
-                if reply.status_code == 200:
-                    return
-            except httpx.HTTPError:
-                pass
-            time.sleep(0.3)
-        self.stop()
-        pytest.fail(f"hermes-plus did not become ready:\n{self.log_path.read_text(errors='replace')[-4000:]}")
+        taken: set[int] = set()
+        log_text = ""
+        for attempt in range(attempts):
+            self._log = self.log_path.open("ab")
+            self.proc = subprocess.Popen(
+                [str(HERMES_PLUS_BIN), "serve", "--host", "127.0.0.1", "--port", str(self.port)],
+                env=env,
+                stdout=self._log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            deadline = time.monotonic() + 150
+            while time.monotonic() < deadline:
+                if self.proc.poll() is not None:
+                    log_text = self.log_path.read_text(errors="replace")[-4000:]
+                    self._close_log()
+                    break
+                try:
+                    reply = httpx.get(f"{self.url}/healthz", timeout=2)
+                    if reply.status_code == 200:
+                        return
+                except httpx.HTTPError:
+                    pass
+                time.sleep(0.3)
+            else:
+                self.stop()
+                pytest.fail(
+                    f"hermes-plus did not become ready:\n"
+                    f"{self.log_path.read_text(errors='replace')[-4000:]}"
+                )
+            # The child exited before it became ready.
+            if ADDRESS_IN_USE in log_text and attempt + 1 < attempts:
+                taken.add(self.port)
+                self.port = free_port(exclude=taken)
+                self.url = f"http://127.0.0.1:{self.port}"
+                continue
+            if "ModuleNotFoundError" in log_text or "dashboard" in log_text:
+                pytest.skip(f"stock Hermes dashboard cannot start here:\n{log_text}")
+            pytest.fail(f"hermes-plus exited with {self.proc.returncode}:\n{log_text}")
+        pytest.fail(f"hermes-plus never got a free port in {attempts} attempts:\n{log_text}")
 
     def stop(self) -> None:
         proc, self.proc = self.proc, None
