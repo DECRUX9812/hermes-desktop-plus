@@ -1,0 +1,309 @@
+// @vitest-environment jsdom
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { useEffect } from 'react'
+import { MemoryRouter, useNavigate } from 'react-router'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
+import { $narrowOverlayPaneIds } from '@/components/pane-shell/narrow-overlay-state'
+import { $narrowViewport } from '@/components/pane-shell/tree/store'
+import { registry } from '@/contrib/registry'
+import { I18nProvider } from '@/i18n'
+import { $panesFlipped, CHAT_SIDEBAR_PANE_ID } from '@/store/layout'
+import { REVIEW_PANE_ID } from '@/store/review'
+import { setTitlebarAppActionsSide } from '@/store/titlebar-app-actions'
+
+import { ROUTES_AREA } from '../routes'
+
+import { TITLEBAR_CHROME_CHANGED_EVENT } from './titlebar'
+import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
+
+const PLUGIN_TOOL: TitlebarTool = { icon: <span />, id: 'plugin-tool', label: 'plugin tool' }
+
+let navigateTo: (to: string) => void = () => {}
+
+function NavigateProbe() {
+  navigateTo = useNavigate()
+
+  return null
+}
+
+function renderControls(pathname: string, props?: { leftTools?: TitlebarTool[]; tools?: TitlebarTool[] }) {
+  return render(
+    <MemoryRouter initialEntries={[pathname]}>
+      <I18nProvider configClient={null} initialLocale="en">
+        <NavigateProbe />
+        <TitlebarControls leftTools={props?.leftTools} onOpenSettings={() => {}} tools={props?.tools} />
+      </I18nProvider>
+    </MemoryRouter>
+  )
+}
+
+function openMoreTools() {
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'More tools' }), {
+    button: 0,
+    ctrlKey: false,
+    pointerType: 'mouse'
+  })
+}
+
+const windowControls = () => screen.queryByLabelText('Window controls')
+const appControls = () => screen.queryByLabelText('App controls')
+const pluginChrome = () => screen.queryByText('plugin-chrome')
+const pluginTool = () => screen.queryByLabelText('plugin tool')
+
+describe('TitlebarControls fixed clusters', () => {
+  let dispose: () => void
+
+  beforeEach(() => {
+    dispose = registry.registerMany([
+      {
+        area: ROUTES_AREA,
+        data: { path: '/kanban' },
+        id: 'test-kanban-route',
+        render: () => null
+      },
+      {
+        area: ROUTES_AREA,
+        data: { path: '/plain' },
+        id: 'test-plain-route',
+        render: () => null
+      }
+    ])
+  })
+
+  afterEach(() => {
+    dispose()
+    cleanup()
+  })
+
+  it('keeps the app clusters on a contributed page that mounts no titlebar chrome', () => {
+    renderControls('/plain')
+
+    expect(windowControls()).not.toBeNull()
+    expect(appControls()).not.toBeNull()
+  })
+
+  it('hides the app clusters on an overlay', () => {
+    renderControls('/settings')
+
+    expect(windowControls()).toBeNull()
+    expect(appControls()).toBeNull()
+  })
+
+  it('a titleBar.tools item alone does not claim the band', () => {
+    renderControls('/plain', { leftTools: [PLUGIN_TOOL] })
+
+    expect(windowControls()).not.toBeNull()
+    expect(pluginTool()).not.toBeNull()
+  })
+
+  it('keeps a titleBar.center component mounted across a chat -> page -> chat round trip', () => {
+    // Plugins tear down global side effects (style tags, observers) in their
+    // effect cleanup; a remount on navigation ran the OLD cleanup after the
+    // NEW setup and left the plugin dead until reload (#114290).
+    const life = { cleanups: 0, mounts: 0 }
+
+    function PluginCenter() {
+      useEffect(() => {
+        life.mounts += 1
+
+        return () => {
+          life.cleanups += 1
+        }
+      }, [])
+
+      return <span>plugin-center</span>
+    }
+
+    const disposeTitle = registry.register({
+      area: 'titleBar.center',
+      id: 'test-plugin-center',
+      render: () => <PluginCenter />
+    })
+
+    try {
+      renderControls('/')
+      expect(life).toEqual({ cleanups: 0, mounts: 1 })
+
+      act(() => navigateTo('/skills'))
+      expect(screen.getByText('plugin-center')).not.toBeNull()
+      expect(windowControls()).not.toBeNull()
+      expect(appControls()).not.toBeNull()
+
+      act(() => navigateTo('/'))
+      expect(life).toEqual({ cleanups: 0, mounts: 1 })
+    } finally {
+      act(disposeTitle)
+    }
+  })
+
+  describe('when the page projects titlebar chrome', () => {
+    let disposeChrome: () => void
+
+    beforeEach(() => {
+      disposeChrome = registry.register({
+        area: 'titleBar.left',
+        id: 'test-plugin-chrome',
+        render: () => <span>plugin-chrome</span>
+      })
+    })
+
+    afterEach(() => {
+      // The mounted controls subscribe to titleBar.* areas — dispose inside
+      // act so the unmount-time registry update doesn't warn.
+      act(() => disposeChrome())
+    })
+
+    it('keeps plugin titlebar contributions on a contributed full-page route', () => {
+      renderControls('/kanban')
+
+      expect(pluginChrome()).not.toBeNull()
+      expect(windowControls()).toBeNull()
+      expect(appControls()).toBeNull()
+    })
+
+    it('keeps contributed titlebar tools on a chrome-owning page', () => {
+      renderControls('/kanban', { leftTools: [PLUGIN_TOOL] })
+
+      expect(pluginTool()).not.toBeNull()
+    })
+
+    it('hides plugin titlebar contributions on an overlay', () => {
+      renderControls('/settings')
+
+      expect(pluginChrome()).toBeNull()
+    })
+
+    it('keeps measurable titlebar clusters on a chrome-owning contributed page', () => {
+      // usePanelTitlebar positions the sessions tab strip from these hooks;
+      // without them the tabs keep their stale chat-view offset and slide
+      // under the page's switcher (kanban's board switcher).
+      const { container } = renderControls('/kanban')
+
+      expect(container.querySelector('[data-titlebar-cluster="left"]')).not.toBeNull()
+      expect(container.querySelector('[data-titlebar-cluster="right"]')).not.toBeNull()
+    })
+
+    it('announces its chrome so the sessions tab reservation re-measures', () => {
+      const listener = vi.fn()
+      window.addEventListener(TITLEBAR_CHROME_CHANGED_EVENT, listener)
+
+      try {
+        renderControls('/kanban')
+
+        expect(listener).toHaveBeenCalled()
+      } finally {
+        window.removeEventListener(TITLEBAR_CHROME_CHANGED_EVENT, listener)
+      }
+    })
+  })
+})
+
+describe('titlebar app-action cluster', () => {
+  beforeEach(() => {
+    vi.stubGlobal('hermesDesktop', { ...window.hermesDesktop, hud: { open: vi.fn() } })
+  })
+
+  afterEach(() => {
+    $narrowViewport.set(false)
+    $narrowOverlayPaneIds.set(new Set())
+    setTitlebarAppActionsSide('right')
+    $panesFlipped.set(false)
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  it('names the narrow sidebar action from its visible overlay, not docked state', () => {
+    $narrowViewport.set(true)
+    renderControls('/')
+    const left = screen.getByLabelText('Window controls')
+    expect(within(left).getByRole('button', { name: 'Show sidebar' }).getAttribute('aria-expanded')).toBe('false')
+    act(() => $narrowOverlayPaneIds.set(new Set([CHAT_SIDEBAR_PANE_ID])))
+    expect(within(left).getByRole('button', { name: 'Hide sidebar' }).getAttribute('aria-expanded')).toBe('true')
+    act(() => $narrowOverlayPaneIds.set(new Set()))
+    expect(within(left).getByRole('button', { name: 'Show sidebar' })).toBeTruthy()
+  })
+
+  it('explicitly closes a visible overlay rather than pinning a hover reveal', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })
+    )
+    $narrowViewport.set(true)
+    $narrowOverlayPaneIds.set(new Set([CHAT_SIDEBAR_PANE_ID]))
+    const intents: unknown[] = []
+    const listener = (event: Event) => intents.push((event as CustomEvent).detail)
+    window.addEventListener(PANE_TOGGLE_REVEAL_EVENT, listener)
+
+    try {
+      renderControls('/')
+      fireEvent.click(screen.getByRole('button', { name: 'Hide sidebar' }))
+      expect(intents).toEqual([{ id: CHAT_SIDEBAR_PANE_ID, mode: 'close' }])
+    } finally {
+      window.removeEventListener(PANE_TOGGLE_REVEAL_EVENT, listener)
+    }
+  })
+
+  it('hides a review-only right sidebar instead of opening files', () => {
+    $narrowViewport.set(true)
+    $narrowOverlayPaneIds.set(new Set([REVIEW_PANE_ID]))
+    const intents: unknown[] = []
+    const listener = (event: Event) => intents.push((event as CustomEvent).detail)
+    window.addEventListener(PANE_TOGGLE_REVEAL_EVENT, listener)
+
+    try {
+      renderControls('/')
+      fireEvent.click(screen.getByRole('button', { name: 'Hide right sidebar' }))
+      expect(intents).toEqual([{ id: 'review', mode: 'close' }])
+    } finally {
+      window.removeEventListener(PANE_TOGGLE_REVEAL_EVENT, listener)
+    }
+  })
+
+  it('moves settings, layout, and HUD to the left when the appearance setting says left', () => {
+    setTitlebarAppActionsSide('left')
+    renderControls('/')
+
+    const left = screen.getByLabelText('Window controls')
+    const right = screen.getByLabelText('App controls')
+
+    expect(within(left).getByLabelText('Open settings')).toBeTruthy()
+    expect(within(left).getByLabelText('Layout editor')).toBeTruthy()
+    expect(within(left).getByLabelText('HUD mode')).toBeTruthy()
+    expect(within(right).queryByLabelText('Open settings')).toBeNull()
+  })
+
+  it.each(['left', 'right'] as const)('keeps HUD hidden in the browser with app actions on the %s', side => {
+    vi.stubGlobal('hermesDesktop', { ...window.hermesDesktop, hud: undefined })
+    setTitlebarAppActionsSide(side)
+    renderControls('/')
+
+    expect(screen.queryByLabelText('HUD mode')).toBeNull()
+    expect(screen.getByLabelText('Open settings')).toBeTruthy()
+  })
+
+  it('keeps three right-side tools on the bar and moves the rest under More tools', () => {
+    renderControls('/')
+
+    const right = screen.getByLabelText('App controls')
+
+    expect(within(right).getAllByRole('button')).toHaveLength(4)
+    expect(within(right).getByLabelText('Open settings')).toBeTruthy()
+    expect(within(right).queryByLabelText('Layout editor')).toBeNull()
+
+    openMoreTools()
+
+    expect(screen.getByRole('menuitem', { name: 'Layout editor' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Swap sidebar sides' })).toBeTruthy()
+  })
+
+  it('runs a tool picked from More tools', () => {
+    renderControls('/')
+    openMoreTools()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Swap sidebar sides' }))
+
+    expect($panesFlipped.get()).toBe(true)
+  })
+})
