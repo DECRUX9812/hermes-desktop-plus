@@ -18,6 +18,15 @@ Paths cited here are real paths: upstream paths are from stock `main`, and fork-
 | 8 | `fix(qqbot): stop blocking the event loop during media sends and narrow error handling` | bugfix | no | low |
 | 9 | `fix(credential-files): report the original skills source for sanitized copies` | bugfix | no | low |
 | 10 | `feat(cua): configurable cursor motion style for the cua-driver backend` | bugfix | no | low |
+| 11 | `feat(plugins): let plugins attach display metadata to tool events` | hook | no | high |
+| 12 | `fix(session-lifecycle): guard the deferred active-session lease registries` | bugfix | no | medium |
+| 13 | `fix(installer): resolve --branch as a git ref on an existing checkout` | bugfix | no | medium |
+
+Numbers are stable once published; 11 to 13 were added after the first ten and are
+listed here in the order they were written, not in priority order. PR 11 is the
+second-highest-value item after PR 4: it is what lets the bridge attach display
+metadata without the sidecar deriving it from event text.
+
 
 ---
 
@@ -296,3 +305,99 @@ Unknown styles degrade safely: cua-driver validates, and a failed start stays be
 **Test plan.** Unit tests on the config reader covering the string form, the nested dict form, unset, and whitespace-only values. A driver-backed test asserts the start payload carries the configured style and that `set_agent_cursor_motion` issues the right action name. Skip when no cua-driver is installed.
 
 **What hermes-desktop-plus does today without it.** The add-on renders the computer-use timeline but sends no cursor configuration, so there is nothing to migrate. Without this PR, users cannot tune cursor motion from `config.yaml`.
+
+---
+
+## 11. `feat(plugins): let plugins attach display metadata to tool events`
+
+**Problem.** `transform_tool_result` is the only hook that sees a finished tool result, and it can do exactly one thing: replace the result string (`model_tools.py`, `_apply_transform_tool_result_hook`, around line 849: the first `str` return wins and is what enters context). Display-only metadata has no seam at all. The `tool.complete` payload is assembled in `tui_gateway/tool_progress.py::_prepare_tool_result_metadata` (around line 305) from data the gateway itself knows, and the same payload is what history rehydration replays. A plugin therefore cannot attach a thumbnail, a retry badge or a risk label to a tool card, and it cannot do so by replacing the result: that string is model-visible context, so changing it for the UI's benefit would alter what the model sees and break the prompt cache.
+
+**Proposed change.** Add `tool_display_metadata` to `VALID_HOOKS` and merge its returns into the payload that `_prepare_tool_result_metadata` already builds:
+
+```python
+# in tui_gateway/tool_progress.py, beside the inline_diff / todo merging
+with contextlib.suppress(Exception):
+    from hermes_cli.lifecycle import has_hook, invoke_hook
+    if has_hook("tool_display_metadata"):
+        for extra in invoke_hook(
+            "tool_display_metadata", tool_name=name, args=args, result=result,
+            tool_call_id=tool_call_id, session_id=sid,
+        ):
+            if isinstance(extra, dict):
+                metadata.update({key: value for key, value in extra.items() if key not in metadata})
+```
+
+Run-all with first-wins per key, matching how `transform_tool_result` already arbitrates between plugins, and fail-open: a listener that raises must not cost the event. The keys land under the existing payload, so no contract model changes beyond declaring the merge.
+
+**Backward compatibility.** Purely additive. With no listener, `has_hook` is false and the path costs one dict lookup. Existing payload fields keep their current producers' precedence.
+
+**Test plan.** A directory plugin registers `tool_display_metadata` and returns a stable key. A scripted tool call asserts the emitted `tool.complete` payload carries it, that a built-in field (`inline_diff`) still wins for its own key, that a listener raising an exception leaves the event intact, and that the model-visible result string is byte-identical with and without the listener.
+
+**What hermes-desktop-plus does today without it.** The bridge plugin derives display metadata from the events it already taps and stores it in `plus.db`, and the sidecar serves it back to the UI out of band. That works, but it means the desktop reads tool-card metadata from two sources with two lifetimes. PR 1 would let us emit our own event instead, but the renderer and history rehydration both read `tool.complete`, so a parallel event would need a parallel renderer path. This hook is the narrow version: one extra field on the event that already carries the card. It is the second-highest-value item here after PR 4.
+
+---
+
+## 12. `fix(session-lifecycle): guard the deferred active-session lease registries`
+
+**Problem.** `tui_gateway/session_lifecycle.py` keeps two module-level dicts, `_deferred_active_session_leases` (line 629) and `_deferred_active_session_lease_ages` (line 664), holding session leases whose isolated child turn has not settled. They are plain dicts with no lock, and at least four call sites touch them from different threads:
+
+- `_settle_isolated_turn_before_close` (line 649) inserts, on the close RPC path;
+- `_reap_stale_deferred_leases` (lines 671 to 677) iterates and pops, called from the reaper tick;
+- `_release_deferred_active_session_lease` (lines 696 to 697) pops, from the compute-host turn completion callback;
+- `_own_live_lease_ids` (line 279) builds a set from the first dict during the orphan sweep.
+
+`_schedule_ws_orphan_reap` starts its reap on a `threading.Timer` daemon thread (line 1029), so the reaper genuinely runs off the caller's thread. Two consequences follow. `list(_deferred_active_session_lease_ages.items())` at line 671 can raise `RuntimeError: dictionary changed size during iteration` when another thread inserts, which aborts the whole reaper tick. And an unsynchronized read-then-pop at lines 676 to 677 can drop a lease without releasing it (or release it twice), which is exactly the zombie concurrency slot the file's own `#62823` comment describes.
+
+**Proposed change.** One module-level `threading.Lock` guarding every read and write of both dicts:
+
+```python
+_deferred_active_session_lease_lock = threading.Lock()
+```
+
+Every mutation and the snapshot in `_own_live_lease_ids` take it; the lease object's own `release()` call stays outside the critical section, so the lock never wraps I/O:
+
+```python
+with _deferred_active_session_lease_lock:
+    return live | set(_deferred_active_session_leases)
+```
+
+**Backward compatibility.** Lock only. No signature, payload or user-visible behaviour changes, and the lock is uncontended on the single-threaded paths.
+
+**Test plan.** A behaviour contract, not a source check: two threads, one inserting a lease through `_settle_isolated_turn_before_close`'s deferred path and one running `_reap_stale_deferred_leases` past the TTL, repeated enough times to lose a race on the base. Assert no `RuntimeError` and that the fake lease's `release` was called exactly once per lease. Proven red on the base before the lock.
+
+**What hermes-desktop-plus does today without it.** The sidecar runs the same gateway module in the same process, so it inherits the race; a wedged reaper tick shows up as a session that never frees its concurrency slot. The fix is the one the fork carries (`_deferred_active_session_lease_lock` at `feat/hermes-next @ f13e8fd3ae`), so it is already exercised in a real desktop workload.
+
+---
+
+## 13. `fix(installer): resolve --branch as a git ref on an existing checkout`
+
+**Problem.** `scripts/install.sh` treats `--branch` as a branch on one path and as any ref on another. The usage text says `--branch NAME` (line 68). A fresh install clones with `git clone --branch "$BRANCH"` (lines 733 and 745), which accepts a tag, and that is how a release tag gets pinned. Over an **existing** checkout the same flag goes to `git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"` (lines 635 and 647), which only accepts a branch: `--branch v0.22.1` fails with a fetch error, and the install stops. Anyone re-running the installer against a checkout it already created, or pinning a tag on a machine that has one, hits it.
+
+**Proposed change.** Resolve the ref before fetching, so a tag and a branch behave the same:
+
+```sh
+# resolve "$BRANCH" against the remote once, then use the resolved ref
+ref="refs/heads/$BRANCH"
+git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1 || ref="refs/tags/$BRANCH"
+run_logged "Fetching origin/$BRANCH" git -C "$INSTALL_DIR" fetch origin "+$ref:refs/remotes/origin/$BRANCH"
+```
+
+The same resolution feeds the treeless refetch at line 635. A branch name still resolves to `refs/heads/`, so nothing changes for the default `main` path.
+
+**Backward compatibility.** Identical behaviour for a branch name, and the previously broken tag case starts working. No new flag, no new environment variable.
+
+**Test plan.** Two integration cases against a scratch clone: `--branch <release tag>` over an existing checkout lands on that tag's commit, and `--branch main` still tracks the branch tip. Assert the installer exits 0 in both, where the tag case exits non-zero on the base.
+
+**What hermes-desktop-plus does today without it.** `install.sh` pins stock Hermes with `HERMES_PLUS_INSTALL_HERMES=1`, which runs upstream's installer with `--branch "$HERMES_KNOWN_GOOD_TAG"`. On a machine that already has a Hermes checkout, that step fails and the whole add-on install aborts. We work around it by only passing the tag on the path where we know the checkout is fresh, which is a guess we would rather not make.
+
+---
+
+## Candidates considered and not filed
+
+Recorded so the next person does not re-open them. Each was checked against stock `main` before being dropped.
+
+- **Prompt-attachment upload tickets.** The plan made this conditional: file it only if upstream refuses a path outside the session workspace. It does not. `tui_gateway/prompt_attachments.py::_stage_session_file_attachment` (line 199) copies a gateway-visible file outside the workspace into `attachments/`, honours `attachments.storage: workspace` (line 100), and decodes a `data_url` when the file is not on the gateway. The sidecar's upload route already produces a gateway-visible path, so nothing is blocked.
+- **`session.create` not writing a `state.db` row.** Deliberate, not a bug. `tui_gateway/methods_session.py` line 772 (line 792 in the fork) says the stored key is minted "intentionally writes no state.db row", and `_ensure_session_db_row` is the documented seeding path. Filing this would be a "fix" that destroys the lazy-row design.
+- **A `kanban.task.create` gateway method.** There is no `kanban.*` JSON-RPC method anywhere: `grep -rn '@method("kanban'` matches nothing in stock `main` or in the fork. The kanban dispatcher is internal, so there is no contract to fix and no seam to widen. This gap is ours to close in the sidecar.
+- **Profile lifecycle fencing.** The plan's note said a behaviour difference here becomes an upstream PR. There is no behaviour difference to file: the sidecar is the only writer and serializes profile operations through the `hermes profile` CLI, so stock Hermes keeps its own semantics. The fork's larger generation and incarnation rework (`hermes_cli/profile_lifecycle.py`, `hermes_cli/profile_incarnation.py`) is a design change with no single failing repro on `main`, which is below the bar the contribution rubric sets for a bug fix.
+
