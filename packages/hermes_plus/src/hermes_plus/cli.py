@@ -182,6 +182,98 @@ def cmd_version(args: argparse.Namespace) -> int:
     return 0
 
 
+def _copy_tree_atomic(source: Path, target: Path, workdir: Path) -> None:
+    tmp = Path(tempfile.mkdtemp(prefix=f".tmp_{target.name}_", dir=workdir))
+    try:
+        shutil.copytree(source, tmp, dirs_exist_ok=True)
+        if target.exists():
+            backup = Path(tempfile.mkdtemp(prefix=f".tmp_old_{target.name}_", dir=workdir))
+            target.replace(backup)
+            tmp.replace(target)
+            shutil.rmtree(backup, ignore_errors=True)
+        else:
+            tmp.replace(target)
+    finally:
+        if tmp.exists():
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _hash_tree(root: Path) -> dict[str, str]:
+    """sha256 of every file under root, keyed by relative path."""
+    hashes: dict[str, str] = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            hashes[path.relative_to(root).as_posix()] = hashlib.sha256(
+                path.read_bytes()).hexdigest()
+    return hashes
+
+
+def _install_bridge_and_extras(*, bridge_src: Path, extras_src: Path, plugins_dir: Path,
+                               skills_dir: Path, plus_home: Path, extras: str | None,
+                               profile: str | None,
+                               enable_plugin: Callable[..., Any] | None) -> list[str]:
+    """Copy the bridge plugin, the selected extra plugins and every bundled skill.
+
+    Skills are refreshed only when the user has not modified them since our last install; the
+    per-file hashes recorded in <plus_home>/installed-extras.json decide. Returns log lines.
+    """
+    lines: list[str] = []
+
+    # The bridge plugin: replace atomically on every install.
+    if bridge_src.is_dir():
+        _copy_tree_atomic(bridge_src, plugins_dir / "hermes-plus", plugins_dir)
+        if enable_plugin is not None:
+            enable_plugin("hermes-plus", profile=profile)
+        lines.append("Installed and enabled bridge plugin 'hermes-plus'.")
+    else:
+        lines.append("Note: bridge/ plugin is not packaged yet, skipping bridge install.")
+
+    # Selected extra plugins (opt-in via --extras).
+    for extra_name in [x.strip() for x in (extras or "").split(",") if x.strip()]:
+        extra_src = extras_src / "plugins" / extra_name
+        if extra_src.is_dir():
+            _copy_tree_atomic(extra_src, plugins_dir / extra_name, plugins_dir)
+            if enable_plugin is not None:
+                enable_plugin(extra_name, profile=profile)
+            lines.append(f"Installed and enabled extra plugin '{extra_name}'.")
+        else:
+            lines.append(f"Note: extra plugin '{extra_name}' is not packaged yet, skipping.")
+
+    # Bundled skills: always refreshed unless the user modified their copy.
+    ledger_path = plus_home / "installed-extras.json"
+    try:
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        ledger = {}
+    recorded_skills: dict[str, dict[str, str]] = ledger.get("skills", {})
+    new_skills: dict[str, dict[str, str]] = {}
+
+    for skill_src in sorted((extras_src / "skills").glob("*")) if extras_src.is_dir() else []:
+        if not skill_src.is_dir():
+            continue
+        target = skills_dir / skill_src.name
+        recorded = recorded_skills.get(skill_src.name, {})
+        if target.exists() and _hash_tree(target) != recorded:
+            lines.append(f"Kept user-modified skill '{skill_src.name}'.")
+            new_skills[skill_src.name] = _hash_tree(target)
+            continue
+        try:
+            shutil.copytree(skill_src, target, dirs_exist_ok=True)
+        except OSError as err:
+            lines.append(f"Warning: could not install skill '{skill_src.name}': {err}")
+            continue
+        hashes = _hash_tree(skill_src)
+        new_skills[skill_src.name] = hashes
+        lines.append(f"Installed skill '{skill_src.name}'.")
+
+    ledger["skills"] = new_skills
+    try:
+        ledger_path.write_text(json.dumps(ledger, indent=2), encoding="utf-8")
+    except OSError as err:
+        lines.append(f"Warning: could not write {ledger_path}: {err}")
+    return lines
+
+
 def cmd_install(args: argparse.Namespace) -> int:
     """Install bridge plugin, configure profile, and migrate database."""
     # 1. detect() and check_compat()
@@ -228,14 +320,13 @@ def cmd_install(args: argparse.Namespace) -> int:
     plugins_dir = h_home / "plugins"
     plugins_dir.mkdir(parents=True, exist_ok=True)
 
-    # Resolve plus_home for installed-extras tracking
+    # 2+3. Bridge plugin, selected extra plugins, and the bundled skills
     if hasattr(adapter, "plus_home"):
         p_home = Path(adapter.plus_home(args.profile))
     else:
         p_home = _get_plus_home(args.profile)
     p_home.mkdir(parents=True, exist_ok=True)
 
-    # 2. Copy packaged bridge/ plugin, selected extra plugins, and bundled skills
     pkg_root = Path(__file__).resolve().parent
     for line in _install_bridge_and_extras(
             bridge_src=pkg_root / "bridge",
@@ -248,7 +339,7 @@ def cmd_install(args: argparse.Namespace) -> int:
             enable_plugin=getattr(adapter, "enable_plugin", None)):
         print(line)
 
-    # 3. open_store(plus_home).migrate()
+    # 4. open_store(plus_home).migrate()
     try:
         from hermes_plus.store import open_store
     except ImportError:
@@ -573,6 +664,30 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 "message": "Bridge plugin is installed but not enabled in config.yaml",
                 "hint": "Run 'hermes-plus install' or enable with hermes CLI.",
             })
+
+        # The bridge's own handshake: what it registered, and against which version.
+        bridge_json = p_home / "bridge.json"
+        if bridge_json.exists():
+            try:
+                handshake = json.loads(bridge_json.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                handshake = {}
+            bridge_version = str(handshake.get("version") or "")
+            if bridge_version and bridge_version != __version__:
+                checks.append({
+                    "name": "bridge_version",
+                    "status": "warn",
+                    "message": f"Bridge {bridge_version} does not match hermes-plus {__version__}",
+                    "hint": "Run 'hermes-plus install' to refresh the bridge plugin.",
+                })
+            else:
+                checks.append({
+                    "name": "bridge_version",
+                    "status": "ok",
+                    "message": f"Bridge {bridge_version or __version__} registered "
+                               f"{len(handshake.get('features') or [])} features",
+                    "hint": "",
+                })
 
     # Check 6: plus.db schema version vs the code's
     db_path = p_home / "plus.db"

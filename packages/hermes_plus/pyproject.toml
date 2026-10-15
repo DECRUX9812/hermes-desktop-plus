@@ -28,6 +28,16 @@ hermes-plus = "hermes_plus.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hermes_plus"]
+include = [
+  { path = "src/hermes_plus/bridge/**/*.yaml", from = "src/hermes_plus" },
+  { path = "src/hermes_plus/bridge/**/*.json", from = "src/hermes_plus" },
+  { path = "src/hermes_plus/extras/**/*.yaml", from = "src/hermes_plus" },
+  { path = "src/hermes_plus/extras/**/*.md", from = "src/hermes_plus" },
+  { path = "src/hermes_plus/extras/**/*.json", from = "src/hermes_plus" },
+  { path = "src/hermes_plus/extras/**/*.png", from = "src/hermes_plus" },
+  { path = "src/hermes_plus/extras/**/*.jpg", from = "src/hermes_plus" },
+  { path = "src/hermes_plus/extras/**/*.js", from = "src/hermes_plus" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

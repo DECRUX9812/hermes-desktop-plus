@@ -11,12 +11,15 @@ from hermes_plus.rpc.errors import FEATURE_UNAVAILABLE, RpcFault
 from hermes_plus.store import (
     ApprovalJournal,
     BotIdentities,
+    BrowserThumbnails,
+    DelegationReports,
     Mailbox,
     Onboarding,
     RoutineMetas,
     SetupProfiles,
     Store,
     TeamStore,
+    ToolCalls,
 )
 
 
@@ -90,6 +93,18 @@ class RpcContext:
     @cached_property
     def setup_profiles(self) -> SetupProfiles:
         return SetupProfiles(self.store)
+
+    @cached_property
+    def tool_calls(self) -> ToolCalls:
+        return ToolCalls(self.store)
+
+    @cached_property
+    def delegation_reports(self) -> DelegationReports:
+        return DelegationReports(self.store)
+
+    @cached_property
+    def browser_thumbnails(self) -> BrowserThumbnails:
+        return BrowserThumbnails(self.store)
 
 
 def require_upstream(ctx: RpcContext, capability: str, extra: dict[str, Any] | None = None) -> UpstreamCaller:

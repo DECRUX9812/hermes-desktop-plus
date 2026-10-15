@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -15,10 +16,14 @@ from hermes_plus import adapter
 from hermes_plus.adapter import Capabilities, DashboardProcess, GatewayClient, probe_capabilities
 from hermes_plus.adapter.mcp import McpClientManager
 from hermes_plus.server.auth import FrontDoorAuth
+from hermes_plus.server.spool import SpoolIngester
 from hermes_plus.settings import ServeSettings
 from hermes_plus.store import Store, open_store
 
 log = logging.getLogger(__name__)
+
+SIDECAR_FILE = "sidecar.json"
+_SPOOL_INTERVAL_SECONDS = 2.0
 
 
 def _websocket_url(url: str) -> str:
@@ -55,6 +60,8 @@ class Runtime:
         self._stores: dict[Path, Store] = {}
         self._stores_lock = threading.RLock()
         self._clients: set[tuple[Any, asyncio.Lock]] = set()
+        self._spool_task: asyncio.Task[None] | None = None
+        self._spool_ingester: SpoolIngester | None = None
         self.started = False
 
     def register_client(self, client: tuple[Any, asyncio.Lock]) -> None:
@@ -109,11 +116,47 @@ class Runtime:
             await self.internal.connect()
             self.capabilities = await probe_capabilities(self.internal)
             self.http_client = httpx.AsyncClient(timeout=None, follow_redirects=False)
+            self._write_sidecar_json()
+            self._start_spool_ingester()
             self.started = True
             self._log_login_url()
         except BaseException:
             await self.stop()
             raise
+
+    def _write_sidecar_json(self) -> None:
+        """Contact card for the bridge plugin's tools: loopback URL, token, pid. Mode 0600."""
+        plus_home = adapter.plus_home(self.settings.profile)
+        body = json.dumps({
+            "url": f"http://127.0.0.1:{self.settings.port}",
+            "token": self.auth.token,
+            "pid": os.getpid(),
+        })
+        fd = os.open(plus_home / SIDECAR_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, body.encode("utf-8"))
+        finally:
+            os.close(fd)
+
+    def _remove_sidecar_json(self) -> None:
+        try:
+            (adapter.plus_home(self.settings.profile) / SIDECAR_FILE).unlink()
+        except OSError:
+            pass
+
+    def _start_spool_ingester(self) -> None:
+        plus_home = adapter.plus_home(self.settings.profile)
+        self._spool_ingester = SpoolIngester(self.store_for(self.settings.profile), plus_home)
+        self._spool_task = asyncio.create_task(self._spool_loop(), name="hermes-plus-spool-ingest")
+
+    async def _spool_loop(self) -> None:
+        assert self._spool_ingester is not None
+        while True:
+            await asyncio.sleep(_SPOOL_INTERVAL_SECONDS)
+            try:
+                await asyncio.to_thread(self._spool_ingester.ingest_once)
+            except Exception:
+                log.exception("spool ingest pass failed")
 
     async def _attach(self) -> None:
         if self.settings.upstream_token_file is None:
@@ -147,6 +190,14 @@ class Runtime:
             return store
 
     async def stop(self) -> None:
+        self._remove_sidecar_json()
+        task, self._spool_task = self._spool_task, None
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         internal, self.internal = self.internal, None
         if internal is not None:
             try:
