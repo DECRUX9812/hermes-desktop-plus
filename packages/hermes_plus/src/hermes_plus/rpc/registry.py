@@ -24,11 +24,11 @@ log = logging.getLogger(__name__)
 NAMESPACES = (
     "fork.bot.identity", "fork.memory", "fork.onboarding", "fork.approvals", "fork.routines",
     "fork.browser", "fork.computer",
-    "bots_team", "bots_mailbox",
+    "bots_team", "bots_mailbox", "mcp_apps",
 )
 # Upstream owns these namespaces; plus may add individual methods there, but the
 # multiplexer must keep routing every other name in them to the stock gateway.
-SHARED_NAMESPACES = ("session", "delegation")
+SHARED_NAMESPACES = ("session", "bot_relay", "delegation")
 
 Handler = Callable[[RpcContext, dict[str, Any]], Any]
 _handlers: dict[str, Handler] = {}
@@ -51,9 +51,17 @@ def methods() -> tuple[str, ...]:
     return tuple(sorted(_handlers))
 
 
-def owns(name: str) -> bool:
+def owns(name: str, capabilities: Any = None) -> bool:
     """Whether the plus gateway claims this method name or namespace."""
-    return name in _handlers or any(name.startswith(f"{namespace}.") for namespace in NAMESPACES)
+    if any(name.startswith(f"{namespace}.") for namespace in NAMESPACES):
+        return True
+    if capabilities is not None:
+        methods = getattr(capabilities, "methods", capabilities)
+        if isinstance(methods, (set, list, tuple, dict)) and name in methods:
+            return False
+    if any(name.startswith(f"{namespace}.") for namespace in SHARED_NAMESPACES):
+        return name in _handlers
+    return name in _handlers
 
 
 def _reply(rid: Any, *, result: Any = None, fault: RpcFault | None = None) -> str:

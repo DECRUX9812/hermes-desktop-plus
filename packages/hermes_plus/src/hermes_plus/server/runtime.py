@@ -14,6 +14,7 @@ import httpx
 
 from hermes_plus import adapter
 from hermes_plus.adapter import Capabilities, DashboardProcess, GatewayClient, probe_capabilities
+from hermes_plus.adapter.mcp import McpClientManager
 from hermes_plus.server.auth import FrontDoorAuth
 from hermes_plus.server.spool import SpoolIngester
 from hermes_plus.settings import ServeSettings
@@ -55,11 +56,39 @@ class Runtime:
         self.upstream_http_origin = ""
         self.upstream_token = ""
         self.http_client: httpx.AsyncClient | None = None
+        self.mcp = McpClientManager()
         self._stores: dict[Path, Store] = {}
         self._stores_lock = threading.RLock()
+        self._clients: set[tuple[Any, asyncio.Lock]] = set()
         self._spool_task: asyncio.Task[None] | None = None
         self._spool_ingester: SpoolIngester | None = None
         self.started = False
+
+    def register_client(self, client: tuple[Any, asyncio.Lock]) -> None:
+        self._clients.add(client)
+
+    def unregister_client(self, client: tuple[Any, asyncio.Lock]) -> None:
+        self._clients.discard(client)
+
+    async def broadcast(
+        self, event_name: str, payload: dict[str, Any], session_id: str | None = None
+    ) -> None:
+        event_params: dict[str, Any] = {"type": event_name, "payload": payload}
+        if session_id:
+            event_params["session_id"] = session_id
+        message = {"jsonrpc": "2.0", "method": "event", "params": event_params}
+        raw = json.dumps(message, ensure_ascii=False, separators=(",", ":"))
+        for ws, lock in list(self._clients):
+            try:
+                async with lock:
+                    await ws.send_text(raw)
+            except Exception:
+                pass
+
+    async def emit(
+        self, event_name: str, payload: dict[str, Any], session_id: str | None = None
+    ) -> None:
+        await self.broadcast(event_name, payload, session_id=session_id)
 
     async def start(self) -> None:
         if self.started:
@@ -182,6 +211,11 @@ class Runtime:
                 await http_client.aclose()
             except Exception:
                 log.exception("Failed to close the sidecar HTTP client")
+
+        try:
+            await self.mcp.close_all()
+        except Exception:
+            log.exception("Failed to close MCP client connections")
 
         with self._stores_lock:
             stores = list(self._stores.values())

@@ -3,13 +3,22 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        # Official Hermes Agent release tag to build on.
+        HERMES_TAG: ${HERMES_TAG:-v0.22.1}
     image: hermes-desktop-plus:latest
     container_name: hermes-plus
     ports:
       - "127.0.0.1:9129:9129"
     volumes:
-      - hermes-data:/data/hermes
+      # The official image's HERMES_HOME. Everything Hermes and hermes-plus
+      # write (config, profiles, plus.db, uploads) lives here.
+      - hermes-data:/opt/data
     environment:
+      # The base image remaps its `hermes` user to these ids at boot so files
+      # in the volume match the host user. Defaults to the image's own 10000.
+      - HERMES_UID=${HERMES_UID:-10000}
+      - HERMES_GID=${HERMES_GID:-10000}
       - HERMES_PLUS_AUTH=${HERMES_PLUS_AUTH:-password}
       - HERMES_PLUS_PASSWORD=${HERMES_PLUS_PASSWORD:-}
       - HERMES_PLUS_TRUST_PROXY_HEADERS=${HERMES_PLUS_TRUST_PROXY_HEADERS:-0}

@@ -1,17 +1,20 @@
 #!/bin/sh
+# Container command: install the bridge plugin + migrations into HERMES_HOME,
+# then serve the sidecar. The image's entrypoint (kept from the base image) has
+# already prepared /opt/data and dropped to the hermes user.
 set -eu
 
-# Authentication comes from environment (HERMES_PLUS_AUTH)
-# Refuse auth='none' when running in container since it binds to 0.0.0.0
+# The container binds 0.0.0.0, so unauthenticated serving is never allowed.
 AUTH="${HERMES_PLUS_AUTH:-password}"
 if [ "$AUTH" = "none" ]; then
-    echo "Error: HERMES_PLUS_AUTH cannot be 'none' when binding to 0.0.0.0 in Docker." >&2
-    echo "Please set HERMES_PLUS_AUTH to 'password' (with HERMES_PLUS_PASSWORD) or 'token'." >&2
+    echo "Error: HERMES_PLUS_AUTH cannot be 'none' in this container: it binds 0.0.0.0." >&2
+    echo "Set HERMES_PLUS_AUTH=password with HERMES_PLUS_PASSWORD, or HERMES_PLUS_AUTH=token." >&2
     exit 1
 fi
 
-echo "Running hermes-plus install..."
+hermes_home="${HERMES_HOME:-/opt/data}"
+echo "[hermes-plus] installing into HERMES_HOME=${hermes_home}"
 hermes-plus install
 
-echo "Starting hermes-plus serve on 0.0.0.0:9129..."
+echo "[hermes-plus] serving on 0.0.0.0:9129"
 exec hermes-plus serve --host 0.0.0.0

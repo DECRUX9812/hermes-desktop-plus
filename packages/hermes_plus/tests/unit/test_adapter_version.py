@@ -20,7 +20,7 @@ from hermes_plus.adapter.version import (
 GIT_STAMP_OUTPUT = "Hermes Agent vgit.379cf12 (2026.9.24)"
 UNKNOWN_STAMP_OUTPUT = (
     "Hermes Agent vunknown (2026.9.24)\n"
-    "Install directory: /home/demo/ship-test/sh/installs/a2caf6ebe0bf88e1/environments/"
+    "Install directory: /opt/demo/ship-test/sh/installs/a2caf6ebe0bf88e1/environments/"
     "c7a5974d86884d46b8f78718ac7522ad/workspace\n"
     "Install method: unknown\n"
 )
@@ -50,7 +50,7 @@ def test_parse_version_output_reads_all_three_stamp_formats() -> None:
 
 def test_install_directory_is_extracted_from_the_vunknown_stamp() -> None:
     assert install_directory(UNKNOWN_STAMP_OUTPUT) == (
-        "/home/demo/ship-test/sh/installs/a2caf6ebe0bf88e1/environments/"
+        "/opt/demo/ship-test/sh/installs/a2caf6ebe0bf88e1/environments/"
         "c7a5974d86884d46b8f78718ac7522ad/workspace"
     )
     assert install_directory(GIT_STAMP_OUTPUT) is None
@@ -83,8 +83,8 @@ def test_commit_recovery_returns_none_without_any_owning_checkout(tmp_path) -> N
 
 
 def test_probe_environment_scrubs_hermes_vars_and_uses_a_fresh_home(monkeypatch) -> None:
-    monkeypatch.setenv("HERMES_HOME", "/home/demo/stale-home")
-    monkeypatch.setenv("HERMES_WEB_DIST", "/home/demo/stale-dist")
+    monkeypatch.setenv("HERMES_HOME", "/opt/demo/stale-home")
+    monkeypatch.setenv("HERMES_WEB_DIST", "/opt/demo/stale-dist")
     monkeypatch.setenv("HERMES_DASHBOARD_SESSION_TOKEN", "stale-token")
     monkeypatch.setenv("PATH", "/usr/bin")
 
@@ -93,7 +93,7 @@ def test_probe_environment_scrubs_hermes_vars_and_uses_a_fresh_home(monkeypatch)
         assert env["PATH"] == "/usr/bin"
         assert not [key for key in env if key.startswith("HERMES_") and key != "HERMES_HOME"]
         assert env["HERMES_HOME"] == probe_home.name
-        assert env["HERMES_HOME"] != "/home/demo/stale-home"
+        assert env["HERMES_HOME"] != "/opt/demo/stale-home"
         assert Path(probe_home.name).is_dir()
     finally:
         probe_home.cleanup()

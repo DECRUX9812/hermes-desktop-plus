@@ -1,0 +1,150 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  # Official Hermes Agent image tag the Docker image is built on. Keep in step
+  # with HERMES_KNOWN_GOOD_TAG in install.sh and the compatibility matrix.
+  HERMES_TAG: v0.22.1
+
+jobs:
+  ui:
+    name: build the web bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm --prefix packages/ui run build:webapp
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-webapp
+          path: packages/ui/dist-webapp
+          if-no-files-found: error
+
+  wheel:
+    name: build the wheel
+    needs: ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-webapp
+          path: packages/hermes_plus/src/hermes_plus/ui_dist
+      - name: Build the wheel with the UI inside it
+        run: |
+          set -euo pipefail
+          test -f packages/hermes_plus/src/hermes_plus/ui_dist/index.html
+          uv build --wheel packages/hermes_plus --out-dir dist
+      - name: Check the wheel payload
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, sys, zipfile
+
+          wheels = glob.glob("dist/*.whl")
+          if len(wheels) != 1:
+              sys.exit(f"expected exactly one wheel, found {wheels}")
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+
+          required = ["hermes_plus/ui_dist/index.html", "hermes_plus/compat/matrix.json"]
+          missing = [name for name in required if name not in names]
+          if not any(name.startswith("hermes_plus/bridge/") for name in names):
+              missing.append("hermes_plus/bridge/*")
+          if missing:
+              sys.exit(f"the wheel is missing: {missing}")
+          print(f"{wheels[0]}: {len(names)} entries, ui_dist/index.html + bridge/ + compat/matrix.json present")
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  pypi:
+    name: publish to PyPI
+    needs: wheel
+    runs-on: ubuntu-latest
+    # A human approves this environment before anything reaches PyPI.
+    environment: release
+    permissions:
+      id-token: write # trusted publishing: no API token is stored
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-wheel
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+
+  docker:
+    name: publish the image
+    needs: wheel
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve the image reference
+        id: image
+        # The owner is the repository owner; no registry owner is hardcoded.
+        run: |
+          set -euo pipefail
+          owner="$(printf '%s' "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          printf 'ref=ghcr.io/%s/hermes-desktop-plus\n' "$owner" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            HERMES_TAG=${{ env.HERMES_TAG }}
+          tags: |
+            ${{ steps.image.outputs.ref }}:${{ github.ref_name }}
+            ${{ steps.image.outputs.ref }}:latest
+
+  github-release:
+    name: attach install.sh to the release
+    needs: wheel
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-wheel
+          path: dist
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" install.sh dist/*.whl --clobber
+          else
+            gh release create "$tag" --title "$tag" --generate-notes --verify-tag \
+              install.sh dist/*.whl
+          fi

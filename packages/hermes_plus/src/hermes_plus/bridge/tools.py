@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from . import paths, sidecar
-from hermes_plus.bridge.spool import truncate
+from .spool import truncate
 
 log = logging.getLogger(__name__)
 

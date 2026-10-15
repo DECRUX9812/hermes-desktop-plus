@@ -1,29 +1,42 @@
 # Hermes Desktop Plus Docker Deployment
 
-Hermes Desktop Plus runs alongside stock Hermes Agent in an isolated container environment.
+The image is a thin layer on top of the official Hermes Agent image
+(`nousresearch/hermes-agent`): stock Hermes stays untouched, and our sidecar
+runs beside it from its own virtualenv under `/opt/hermes-plus/venv`.
 
-## 1. Running Locally
+What the image adds:
 
-Copy the example environment configuration:
+| Path | Content |
+| --- | --- |
+| `/opt/hermes-plus/venv` | the `hermes-plus` sidecar (its own venv; Hermes's `/opt/hermes/.venv` is never written) |
+| `/opt/hermes-plus/venv/lib/.../hermes_plus/ui_dist` | the built web UI (no Node needed at runtime) |
+| `/opt/hermes-plus/entrypoint.sh` | container command: `hermes-plus install`, then `hermes-plus serve --host 0.0.0.0` |
+
+The base image keeps ownership of PID 1 (s6-overlay), the `hermes` user
+(UID 10000, remapped by `HERMES_UID`/`HERMES_GID`) and `HERMES_HOME=/opt/data`.
+The sidecar's own stock dashboard child binds to loopback inside the container;
+only the sidecar is published.
+
+## 1. Running locally
 
 ```bash
-cp docker/.env.example docker/.env
+cp docker/.env.example docker/.env      # set HERMES_PLUS_PASSWORD
+docker compose -f docker/compose.yaml up -d --build
 ```
 
-Edit `docker/.env` to configure your `HERMES_PLUS_PASSWORD`. Then start the service:
+The desktop web application is then at `http://127.0.0.1:9129`.
 
-```bash
-docker compose -f docker/compose.yaml up -d
+All state (Hermes config and profiles, `hermes-plus/plus.db`, uploads, the
+installed bridge plugin) lives in the `hermes-data` volume mounted at `/opt/data`.
+
+To keep a host Hermes home instead, replace the volume with a bind mount:
+
+```yaml
+    volumes:
+      - ~/.hermes:/opt/data
 ```
 
-The desktop web application will be accessible at:
-`http://127.0.0.1:9129`
-
-All data, profiles, and state persist in the `hermes-data` volume mounted at `/data/hermes`.
-
-## 2. Remote Access via Cloudflare Tunnel
-
-To expose Hermes Desktop Plus securely without opening router ports:
+## 2. Remote access via Cloudflare Tunnel
 
 1. Create a Cloudflare Tunnel in the Cloudflare Zero Trust dashboard.
 2. Route a public hostname (e.g. `desktop.example.com`) to the container service origin:
@@ -41,11 +54,25 @@ To expose Hermes Desktop Plus securely without opening router ports:
 ### Recommended Security: Cloudflare Access
 Pair Cloudflare Tunnel with Cloudflare Access (Zero Trust SSO / MFA) in front of your public hostname. With `HERMES_PLUS_TRUST_PROXY_HEADERS=1`, authenticated identity headers are preserved.
 
-## 3. Upgrading Stock Hermes Agent
+## 3. Changing the Hermes version
 
-The Docker image installs stock Hermes Agent from GitHub pinned to `HERMES_REF`. To upgrade to a newer stock Hermes release, rebuild the image with the updated tag:
+`HERMES_TAG` selects the official base image tag and is what the sidecar is
+tested against:
 
 ```bash
-docker compose -f docker/compose.yaml build --build-arg HERMES_REF=v0.22.2
+docker compose -f docker/compose.yaml build --build-arg HERMES_TAG=v0.22.2
 docker compose -f docker/compose.yaml up -d
+```
+
+Or set `HERMES_TAG` in `docker/.env` and rebuild. Tag names are upstream's
+release tags (`vX.Y.Z`); `latest` tracks the newest stable release.
+
+Inside the container `hermes update` refuses to run: a published image is
+image-managed, so the upgrade path is pulling/rebuilding the image above.
+
+## 4. Inspecting a running container
+
+```bash
+docker compose -f docker/compose.yaml exec hermes-plus hermes-plus doctor
+docker compose -f docker/compose.yaml logs -f hermes-plus
 ```

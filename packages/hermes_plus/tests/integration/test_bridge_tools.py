@@ -81,6 +81,10 @@ async def test_bot_team_tool_round_trips_through_the_sidecar(installed_home: Pat
         capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr[-2000:]
     payload = json.loads(result.stdout.strip().rsplit("TOOL_RESULT:", 1)[1])
+    # Tool handlers return a JSON string (stock convention); the loader print
+    # above JSON-encodes it once more.
+    if isinstance(payload, str):
+        payload = json.loads(payload)
     assert "error" not in payload, payload
     team = payload.get("team", payload)
     assert team.get("name") == "demo-team"
