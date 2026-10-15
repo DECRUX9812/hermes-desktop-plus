@@ -497,7 +497,7 @@ try {
 
   await page.goto(BASE + '/#/team', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(6000)
-  await shot(page, '04-botroom')
+  await shot(page, '04-team')
   diagnostics.teamPage = (await bodyText(page)).slice(0, 3000)
   await check('the team appears on the Team page', async () => {
     const text = await bodyText(page)

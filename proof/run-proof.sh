@@ -245,6 +245,8 @@ fi
 
 say "browser proof"
 if [ -n "$LOGIN_URL" ]; then
+  # Drop last run's artefacts so a stale png can never be mistaken for this run.
+  rm -f "$SHOTS_DIR"/[0-9][0-9]-*.png "$SHOTS_DIR/browser-report.json"
   heavy node "$REPO_ROOT/proof/playwright/proof.mjs" \
     --base "http://127.0.0.1:$PORT" \
     --token-url "$LOGIN_URL" \

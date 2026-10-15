@@ -37,6 +37,12 @@ it('mounts the runtime without a useSyncExternalStore loop', async () => {
   const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
     logged.push(args.map(String).join(' '))
   })
+  // tap throws out of an effect once it has re-rendered 50 times, so the loop
+  // also shows up as an uncaught error rather than only as a console warning.
+  const uncaught = (event: ErrorEvent) => {
+    logged.push(String(event.error ?? event.message))
+  }
+  window.addEventListener('error', uncaught)
 
   try {
     const { getByTestId } = render(<Harness />)
@@ -44,6 +50,7 @@ it('mounts the runtime without a useSyncExternalStore loop', async () => {
     // Let the resource fibers run a few commit-time snapshot checks.
     await new Promise(resolve => setTimeout(resolve, 100))
   } finally {
+    window.removeEventListener('error', uncaught)
     spy.mockRestore()
   }
 
