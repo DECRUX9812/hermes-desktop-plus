@@ -28,22 +28,20 @@ hermes-plus install
 From a clone (development):
 
 ```sh
-cd /path/to/hermes-desktop-plus
+cd hermes-desktop-plus
 
-# Build the UI first (requires Node.js and pnpm)
-cd packages/ui
-pnpm install
-pnpm build
+# Build the web UI (Node.js 22; the repo uses npm workspaces)
+npm ci
+npm --prefix packages/ui run build:webapp
 
-# Stage the built UI into the package
-rm -rf ../hermes_plus/src/hermes_plus/ui_dist
-mkdir -p ../hermes_plus/src/hermes_plus/ui_dist
-cp -a dist-webapp/. ../hermes_plus/src/hermes_plus/ui_dist/
+# Stage the built UI into the Python package
+rm -rf packages/hermes_plus/src/hermes_plus/ui_dist
+mkdir -p packages/hermes_plus/src/hermes_plus/ui_dist
+cp -a packages/ui/dist-webapp/. packages/hermes_plus/src/hermes_plus/ui_dist/
 
 # Build the wheel and install from it
-cd ../..
-uv build --wheel packages/hermes_plus --out-dir /tmp/hermes-plus-build
-HERMES_PLUS_SOURCE=/tmp/hermes-plus-build/hermes_plus-*.whl ./install.sh
+uv build --wheel packages/hermes_plus --out-dir dist
+HERMES_PLUS_SOURCE="$(ls dist/hermes_plus-*.whl)" ./install.sh
 ```
 
 ## Serve over the web
