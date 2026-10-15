@@ -1,4 +1,14 @@
 name: hermes-plus
 version: 0.1.0
-description: Hermes Desktop Plus bridge plugin for stock Hermes Agent
-author: Nous Research Contrib
+manifest_version: 2
+description: "Hermes Desktop Plus bridge: tools, hooks and prompt sections that stream fork-feature data to the hermes-plus sidecar over a file spool and loopback RPC."
+author: Hermes Desktop Plus contributors
+kind: standalone
+license: MIT
+tags:
+  - hermes-plus
+  - desktop
+provides_hooks:
+  - post_tool_call
+  - pre_approval_request
+  - post_approval_response
