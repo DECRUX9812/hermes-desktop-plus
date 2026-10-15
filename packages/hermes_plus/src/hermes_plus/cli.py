@@ -1,0 +1,813 @@
+"""Hermes Desktop Plus CLI."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+
+def _get_hermes_home(profile: str | None = None) -> Path:
+    """Resolve HERMES_HOME path."""
+    try:
+        from hermes_plus import adapter
+
+        if hasattr(adapter, "hermes_home"):
+            return Path(adapter.hermes_home(profile))
+    except Exception:
+        pass
+
+    env_home = os.environ.get("HERMES_HOME")
+    if env_home:
+        base = Path(env_home).expanduser().resolve()
+    else:
+        base = Path.home() / ".hermes"
+
+    if profile:
+        return base / "profiles" / profile
+    return base
+
+
+def _get_plus_home(profile: str | None = None) -> Path:
+    """Resolve plus_home (<HERMES_HOME>/hermes-plus)."""
+    try:
+        from hermes_plus import adapter
+
+        if hasattr(adapter, "plus_home"):
+            return Path(adapter.plus_home(profile))
+    except Exception:
+        pass
+
+    return _get_hermes_home(profile) / "hermes-plus"
+
+
+def cmd_version(args: argparse.Namespace) -> int:
+    """Show hermes-plus version, adapter API, and detected Hermes version."""
+    from hermes_plus import __version__
+
+    adapter_api: str = "unavailable"
+    hermes_ver: str = "not detected"
+
+    try:
+        from hermes_plus import adapter
+
+        if hasattr(adapter, "ADAPTER_API"):
+            adapter_api = str(adapter.ADAPTER_API)
+        if hasattr(adapter, "detect"):
+            inst = adapter.detect()
+            if inst and getattr(inst, "version", None):
+                hermes_ver = str(inst.version)
+    except Exception:
+        pass
+
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {
+                    "hermes_plus": __version__,
+                    "adapter_api": adapter_api,
+                    "hermes": hermes_ver,
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(f"hermes-plus {__version__}")
+        print(f"adapter API: {adapter_api}")
+        print(f"hermes: {hermes_ver}")
+
+    return 0
+
+
+def cmd_install(args: argparse.Namespace) -> int:
+    """Install bridge plugin, configure profile, and migrate database."""
+    # 1. detect() and check_compat()
+    try:
+        from hermes_plus import adapter
+    except ImportError:
+        sys.stderr.write("Component not installed yet: hermes_plus.adapter\n")
+        return 2
+
+    if not hasattr(adapter, "detect") or not hasattr(adapter, "check_compat"):
+        sys.stderr.write(
+            "Component not installed yet: hermes_plus.adapter (missing detect or check_compat)\n"
+        )
+        return 2
+
+    try:
+        inst = adapter.detect(args.hermes)
+    except Exception as exc:
+        sys.stderr.write(f"Error detecting Hermes installation: {exc}\n")
+        return 2
+
+    compat = adapter.check_compat(inst)
+    compat_status = getattr(compat, "status", "untested")
+    compat_msg = getattr(compat, "message", "")
+
+    if compat_status == "unsupported":
+        sys.stderr.write(
+            f"Unsupported Hermes version: {compat_msg or 'Version not supported'}\n"
+        )
+        return 3
+    elif compat_status == "untested":
+        print(f"Warning: Hermes version is untested ({compat_msg})")
+
+    # Resolve paths
+    if hasattr(adapter, "hermes_home"):
+        h_home = Path(adapter.hermes_home(args.profile))
+    else:
+        h_home = Path(getattr(inst, "hermes_home", _get_hermes_home(args.profile)))
+    h_home.mkdir(parents=True, exist_ok=True)
+
+    plugins_dir = h_home / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+
+    # 2. Copy packaged bridge/ plugin into <hermes_home>/plugins/hermes-plus/ atomically
+    bridge_src = Path(__file__).resolve().parent / "bridge"
+    if bridge_src.exists() and bridge_src.is_dir():
+        target_plugin = plugins_dir / "hermes-plus"
+        tmp_plugin = Path(
+            tempfile.mkdtemp(prefix=".tmp_bridge_", dir=plugins_dir)
+        )
+        try:
+            shutil.copytree(bridge_src, tmp_plugin, dirs_exist_ok=True)
+            if target_plugin.exists():
+                backup = Path(
+                    tempfile.mkdtemp(prefix=".tmp_old_bridge_", dir=plugins_dir)
+                )
+                target_plugin.replace(backup)
+                tmp_plugin.replace(target_plugin)
+                shutil.rmtree(backup, ignore_errors=True)
+            else:
+                tmp_plugin.replace(target_plugin)
+        finally:
+            if tmp_plugin.exists():
+                shutil.rmtree(tmp_plugin, ignore_errors=True)
+
+        if hasattr(adapter, "enable_plugin"):
+            adapter.enable_plugin("hermes-plus", profile=args.profile)
+        print("Installed and enabled bridge plugin 'hermes-plus'.")
+    else:
+        print("Note: bridge/ plugin is not packaged yet, skipping bridge install.")
+
+    # 3. Copy selected extras if present
+    if args.extras:
+        extras_dir = Path(__file__).resolve().parent / "extras" / "plugins"
+        requested = [x.strip() for x in args.extras.split(",") if x.strip()]
+        for extra_name in requested:
+            extra_src = extras_dir / extra_name
+            if extra_src.exists() and extra_src.is_dir():
+                target_extra = plugins_dir / extra_name
+                tmp_extra = Path(
+                    tempfile.mkdtemp(prefix=f".tmp_{extra_name}_", dir=plugins_dir)
+                )
+                try:
+                    shutil.copytree(extra_src, tmp_extra, dirs_exist_ok=True)
+                    if target_extra.exists():
+                        shutil.rmtree(target_extra, ignore_errors=True)
+                    tmp_extra.replace(target_extra)
+                finally:
+                    if tmp_extra.exists():
+                        shutil.rmtree(tmp_extra, ignore_errors=True)
+
+                if hasattr(adapter, "enable_plugin"):
+                    adapter.enable_plugin(extra_name, profile=args.profile)
+                print(f"Installed and enabled extra plugin '{extra_name}'.")
+            else:
+                print(f"Note: extra plugin '{extra_name}' is not packaged yet, skipping.")
+
+    # 4. open_store(plus_home).migrate()
+    if hasattr(adapter, "plus_home"):
+        p_home = Path(adapter.plus_home(args.profile))
+    else:
+        p_home = _get_plus_home(args.profile)
+    p_home.mkdir(parents=True, exist_ok=True)
+
+    try:
+        from hermes_plus.store import open_store
+    except ImportError:
+        sys.stderr.write("Component not installed yet: hermes_plus.store\n")
+        return 2
+
+    if not callable(open_store):
+        sys.stderr.write(
+            "Component not installed yet: hermes_plus.store.open_store\n"
+        )
+        return 2
+
+    try:
+        store = open_store(p_home)
+        if hasattr(store, "migrate"):
+            store.migrate()
+            print(f"Database migrated at {p_home / 'plus.db'}.")
+    except Exception as exc:
+        sys.stderr.write(f"Database migration failed: {exc}\n")
+        return 2
+
+    # 5. Optionally run the importer
+    if args.import_fork_data:
+        try:
+            from hermes_plus.store import import_fork_data  # type: ignore
+
+            import_fork_data(p_home)
+            print("Imported fork data successfully.")
+        except ImportError:
+            print("Note: fork importer is not packaged yet, skipping.")
+        except Exception as exc:
+            print(f"Warning: fork data import failed: {exc}")
+
+    # 6. Print the next step
+    print("\nHermes Plus installation complete!")
+    print("Next step: run 'hermes-plus serve' to start the web app.")
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Build settings, validate them, and launch the hermes-plus server."""
+    from hermes_plus.settings import ServeSettings
+
+    try:
+        settings = ServeSettings.from_env_and_args(args).validate()
+    except ValueError as exc:
+        sys.stderr.write(f"Configuration error: {exc}\n")
+        return 1
+
+    try:
+        from hermes_plus import server
+    except ImportError:
+        sys.stderr.write("Component not installed yet: hermes_plus.server\n")
+        return 2
+
+    if not hasattr(server, "run"):
+        sys.stderr.write("Component not installed yet: hermes_plus.server.run\n")
+        return 2
+
+    server.run(settings)
+    return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Run health checks on environment, dependencies, and configuration."""
+    checks: list[dict[str, Any]] = []
+
+    profile = getattr(args, "profile", None)
+    h_home = _get_hermes_home(profile)
+    p_home = _get_plus_home(profile)
+
+    # Check 1: hermes found and its version
+    hermes_bin: str | None = None
+    hermes_ver: str | None = None
+    compat_status: str | None = None
+    compat_msg: str = ""
+
+    adapter_available = False
+    inst = None
+    try:
+        from hermes_plus import adapter
+
+        adapter_available = True
+        if hasattr(adapter, "detect"):
+            inst = adapter.detect(getattr(args, "hermes", None))
+            if inst:
+                hermes_bin = inst.hermes_bin
+                hermes_ver = inst.version
+        if inst and hasattr(adapter, "check_compat"):
+            compat = adapter.check_compat(inst)
+            compat_status = getattr(compat, "status", None)
+            compat_msg = getattr(compat, "message", "")
+    except Exception:
+        pass
+
+    if not hermes_bin:
+        hermes_bin = shutil.which("hermes")
+        if not hermes_bin:
+            candidate = Path.home() / "Code/ship-test/venv/bin/hermes"
+            if candidate.exists():
+                hermes_bin = str(candidate)
+
+    if hermes_bin:
+        if not hermes_ver:
+            try:
+                out = subprocess.check_output(
+                    [hermes_bin, "--version"], text=True, timeout=5
+                ).strip()
+                hermes_ver = out
+            except Exception:
+                hermes_ver = "unknown"
+        checks.append({
+            "name": "hermes_binary",
+            "status": "ok",
+            "message": f"Hermes binary found: {hermes_bin} ({hermes_ver})",
+            "hint": "",
+        })
+    else:
+        checks.append({
+            "name": "hermes_binary",
+            "status": "fail",
+            "message": "Hermes binary not found in PATH or standard locations",
+            "hint": "Install Hermes Agent or run install.sh with HERMES_PLUS_INSTALL_HERMES=1.",
+        })
+
+    # Check 2: compat status
+    if compat_status == "supported":
+        checks.append({
+            "name": "hermes_compat",
+            "status": "ok",
+            "message": f"Hermes version is supported ({hermes_ver})",
+            "hint": "",
+        })
+    elif compat_status == "untested":
+        checks.append({
+            "name": "hermes_compat",
+            "status": "warn",
+            "message": f"Hermes version is untested: {compat_msg}",
+            "hint": "Upgrade hermes-plus or test with caution.",
+        })
+    elif compat_status == "unsupported":
+        checks.append({
+            "name": "hermes_compat",
+            "status": "fail",
+            "message": f"Hermes version is unsupported: {compat_msg}",
+            "hint": "Use a supported Hermes version from compat matrix.",
+        })
+    else:
+        if hermes_ver and hermes_ver != "unknown":
+            checks.append({
+                "name": "hermes_compat",
+                "status": "ok",
+                "message": f"Detected Hermes version {hermes_ver}",
+                "hint": "",
+            })
+        else:
+            checks.append({
+                "name": "hermes_compat",
+                "status": "warn",
+                "message": "Unable to verify Hermes compatibility matrix",
+                "hint": "Check adapter installation and compat/matrix.json.",
+            })
+
+    # Check 3: HERMES_HOME exists and is writable
+    if h_home.exists():
+        if os.access(h_home, os.W_OK):
+            checks.append({
+                "name": "hermes_home",
+                "status": "ok",
+                "message": f"HERMES_HOME exists and is writable: {h_home}",
+                "hint": "",
+            })
+        else:
+            checks.append({
+                "name": "hermes_home",
+                "status": "fail",
+                "message": f"HERMES_HOME is not writable: {h_home}",
+                "hint": f"Grant write permissions to {h_home}.",
+            })
+    else:
+        if h_home.parent.exists() and os.access(h_home.parent, os.W_OK):
+            checks.append({
+                "name": "hermes_home",
+                "status": "warn",
+                "message": f"HERMES_HOME does not exist yet: {h_home} (parent writable)",
+                "hint": "Run 'hermes-plus install' to initialize it.",
+            })
+        else:
+            checks.append({
+                "name": "hermes_home",
+                "status": "fail",
+                "message": f"HERMES_HOME does not exist and parent is not writable: {h_home}",
+                "hint": f"Create {h_home} with write permissions.",
+            })
+
+    # Check 4: bridge plugin installed (and its version matches ours) and enabled (via adapter.load_config)
+    from hermes_plus import __version__
+
+    plugin_dir = h_home / "plugins" / "hermes-plus"
+    if not plugin_dir.exists():
+        checks.append({
+            "name": "bridge_plugin",
+            "status": "fail",
+            "message": f"Bridge plugin is not installed at {plugin_dir}",
+            "hint": "Run 'hermes-plus install' to install the bridge plugin.",
+        })
+    else:
+        # Check enabled via adapter.load_config
+        is_enabled = False
+        if adapter_available:
+            try:
+                from hermes_plus import adapter
+
+                if hasattr(adapter, "load_config"):
+                    cfg = adapter.load_config(profile)
+                    plugins = cfg.get("plugins", {})
+                    if isinstance(plugins, dict):
+                        enabled_list = plugins.get("enabled", [])
+                        is_enabled = "hermes-plus" in enabled_list or plugins.get(
+                            "hermes-plus"
+                        ) is True
+                    elif isinstance(plugins, list):
+                        is_enabled = "hermes-plus" in plugins
+                else:
+                    is_enabled = True
+            except Exception:
+                is_enabled = True
+        else:
+            is_enabled = True
+
+        if is_enabled:
+            checks.append({
+                "name": "bridge_plugin",
+                "status": "ok",
+                "message": "Bridge plugin is installed and enabled",
+                "hint": "",
+            })
+        else:
+            checks.append({
+                "name": "bridge_plugin",
+                "status": "warn",
+                "message": "Bridge plugin is installed but not enabled in config.yaml",
+                "hint": "Run 'hermes-plus install' or enable with hermes CLI.",
+            })
+
+    # Check 5: plus.db schema version vs the code's
+    db_path = p_home / "plus.db"
+    if not db_path.exists():
+        checks.append({
+            "name": "plus_db",
+            "status": "warn",
+            "message": f"plus.db does not exist at {db_path}",
+            "hint": "Run 'hermes-plus install' to create and migrate database.",
+        })
+    else:
+        current_schema = None
+        try:
+            from hermes_plus.store import open_store
+
+            store = open_store(p_home)
+            if hasattr(store, "schema_version"):
+                current_schema = store.schema_version()
+        except Exception:
+            pass
+
+        if current_schema is None:
+            try:
+                import sqlite3
+
+                with sqlite3.connect(db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT version FROM plus_meta ORDER BY version DESC LIMIT 1"
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        current_schema = row[0]
+            except Exception:
+                pass
+
+        if current_schema is not None:
+            checks.append({
+                "name": "plus_db",
+                "status": "ok",
+                "message": f"plus.db schema version: {current_schema}",
+                "hint": "",
+            })
+        else:
+            checks.append({
+                "name": "plus_db",
+                "status": "warn",
+                "message": "plus.db exists but schema version could not be determined",
+                "hint": "Run 'hermes-plus install' to apply migrations.",
+            })
+
+    # Check 6: ui_dist/index.html present
+    ui_dir = Path(__file__).resolve().parent / "ui_dist"
+    index_file = ui_dir / "index.html"
+    if index_file.exists():
+        checks.append({
+            "name": "ui_dist",
+            "status": "ok",
+            "message": f"Web UI found at {index_file}",
+            "hint": "",
+        })
+    else:
+        checks.append({
+            "name": "ui_dist",
+            "status": "fail",
+            "message": f"Web UI not found: {index_file} is missing",
+            "hint": "Build UI with 'npm run build:webapp' in packages/ui or install pre-built wheel.",
+        })
+
+    # Check 7: default port is free
+    port = getattr(args, "port", None) or 9129
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    port_free = False
+    try:
+        sock.bind(("127.0.0.1", port))
+        port_free = True
+    except OSError:
+        port_free = False
+    finally:
+        sock.close()
+
+    if port_free:
+        checks.append({
+            "name": "default_port",
+            "status": "ok",
+            "message": f"Port {port} is free",
+            "hint": "",
+        })
+    else:
+        checks.append({
+            "name": "default_port",
+            "status": "fail",
+            "message": f"Port {port} is already in use",
+            "hint": f"Stop the process using port {port} or configure a different port with --port.",
+        })
+
+    # Check 8: free disk above 1G
+    disk_target = h_home if h_home.exists() else Path.cwd()
+    try:
+        free_bytes = shutil.disk_usage(disk_target).free
+        free_gb = free_bytes / (1024**3)
+        if free_bytes >= 1024 * 1024 * 1024:
+            checks.append({
+                "name": "free_disk",
+                "status": "ok",
+                "message": f"Free disk space is {free_gb:.2f} GB (minimum 1.0 GB required)",
+                "hint": "",
+            })
+        else:
+            checks.append({
+                "name": "free_disk",
+                "status": "fail",
+                "message": f"Free disk space is low: {free_gb:.2f} GB (minimum 1.0 GB required)",
+                "hint": f"Free up disk space on the partition hosting {disk_target}.",
+            })
+    except Exception as exc:
+        checks.append({
+            "name": "free_disk",
+            "status": "warn",
+            "message": f"Unable to check free disk space: {exc}",
+            "hint": "",
+        })
+
+    # Output formatting
+    if getattr(args, "json", False):
+        print(json.dumps(checks, indent=2))
+    else:
+        print("Hermes Desktop Plus Doctor\n" + "-" * 30)
+        for c in checks:
+            tag = f"[{c['status'].upper():4}]"
+            print(f"{tag} {c['name']}: {c['message']}")
+            if c["status"] != "ok" and c["hint"]:
+                print(f"       -> Fix: {c['hint']}")
+
+    has_fails = any(c["status"] == "fail" for c in checks)
+    return 1 if has_fails else 0
+
+
+def _detect_upgrade_command() -> list[str]:
+    """Detect installation method to construct upgrade command."""
+    prefix = sys.prefix
+    uv_tool_dir = os.environ.get("UV_TOOL_DIR", "")
+    if (
+        "uv/tools" in prefix
+        or (uv_tool_dir and uv_tool_dir in prefix)
+        or "uv" in Path(prefix).parts
+    ):
+        return ["uv", "tool", "upgrade", "hermes-plus"]
+
+    pipx_home = os.environ.get("PIPX_HOME", "")
+    if (
+        "pipx" in prefix
+        or (pipx_home and pipx_home in prefix)
+        or "pipx" in Path(prefix).parts
+    ):
+        return ["pipx", "upgrade", "hermes-plus"]
+
+    if hasattr(sys, "base_prefix") and sys.prefix != sys.base_prefix:
+        return [sys.executable, "-m", "pip", "install", "-U", "hermes-plus"]
+
+    return ["pip", "install", "-U", "hermes-plus"]
+
+
+def cmd_update(args: argparse.Namespace) -> int:
+    """Detect installation method, upgrade package, re-install plugins, and run doctor."""
+    upgrade_cmd = _detect_upgrade_command()
+
+    if getattr(args, "check", False):
+        print("Upgrade Check:")
+        print(f"  Upgrade command: {' '.join(upgrade_cmd)}")
+        profile_flag = f" --profile {args.profile}" if args.profile else ""
+        print(f"  Re-install command: hermes-plus install{profile_flag}")
+        print("  Health check command: hermes-plus doctor")
+        return 0
+
+    print(f"Upgrading hermes-plus with: {' '.join(upgrade_cmd)}...")
+    try:
+        subprocess.run(upgrade_cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(f"Upgrade failed with exit code {exc.returncode}\n")
+        return exc.returncode
+
+    # Re-exec hermes-plus install
+    print("Re-executing 'hermes-plus install'...")
+    install_args = [sys.executable, "-m", "hermes_plus.cli", "install"]
+    if args.profile:
+        install_args.extend(["--profile", args.profile])
+    res = subprocess.run(install_args)
+    if res.returncode != 0:
+        sys.stderr.write(f"Post-upgrade install failed (code {res.returncode})\n")
+        return res.returncode
+
+    # Run doctor
+    print("\nRunning health checks...")
+    doctor_args = [sys.executable, "-m", "hermes_plus.cli", "doctor"]
+    if args.profile:
+        doctor_args.extend(["--profile", args.profile])
+    return subprocess.run(doctor_args).returncode
+
+
+def cmd_uninstall(args: argparse.Namespace) -> int:
+    """Disable bridge plugin, remove plugin directory, and optionally purge data."""
+    h_home = _get_hermes_home(args.profile)
+    p_home = _get_plus_home(args.profile)
+
+    # Disable plugin
+    try:
+        from hermes_plus import adapter
+
+        if hasattr(adapter, "disable_plugin"):
+            adapter.disable_plugin("hermes-plus", profile=args.profile)
+        elif hasattr(adapter, "run_hermes"):
+            adapter.run_hermes(
+                ["plugins", "disable", "hermes-plus"], profile=args.profile
+            )
+    except Exception:
+        pass
+
+    # Remove plugin dir
+    target_plugin = h_home / "plugins" / "hermes-plus"
+    if target_plugin.exists():
+        shutil.rmtree(target_plugin, ignore_errors=True)
+        print(f"Removed bridge plugin directory: {target_plugin}")
+    else:
+        print(f"Bridge plugin directory not found at {target_plugin}")
+
+    # Purge if requested
+    if args.purge:
+        if not args.yes:
+            sys.stderr.write("Purging data requires --yes confirmation.\n")
+            return 1
+        if p_home.exists():
+            shutil.rmtree(p_home, ignore_errors=True)
+            print(f"Purged hermes-plus data directory: {p_home}")
+        else:
+            print(f"Data directory {p_home} does not exist.")
+
+    print("Uninstallation complete.")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for hermes-plus."""
+    parser = argparse.ArgumentParser(
+        prog="hermes-plus",
+        description="Hermes Desktop Plus: standalone add-on for stock Hermes Agent",
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
+
+    # version
+    p_version = subparsers.add_parser("version", help="Show version information")
+    p_version.add_argument("--json", action="store_true", help="Output as JSON")
+    p_version.set_defaults(func=cmd_version)
+
+    # install
+    p_install = subparsers.add_parser(
+        "install", help="Install bridge plugin and migrate database"
+    )
+    p_install.add_argument(
+        "--profile", "-p", default=None, help="Hermes profile name"
+    )
+    p_install.add_argument(
+        "--hermes", default=None, help="Path to hermes binary"
+    )
+    p_install.add_argument(
+        "--extras",
+        default=None,
+        help="Comma-separated extra plugins (e.g. memory,langfuse,backdrops)",
+    )
+    p_install.add_argument(
+        "--import-fork-data",
+        action="store_true",
+        help="Import historical data from fork install",
+    )
+    p_install.set_defaults(func=cmd_install)
+
+    # serve
+    p_serve = subparsers.add_parser("serve", help="Run the hermes-plus web server")
+    p_serve.add_argument("--host", default=None, help="Host to bind (default: 127.0.0.1)")
+    p_serve.add_argument("--port", type=int, default=None, help="Port to bind (default: 9129)")
+    p_serve.add_argument("--profile", "-p", default=None, help="Hermes profile name")
+    p_serve.add_argument("--hermes-bin", default=None, help="Path to hermes binary")
+    p_serve.add_argument(
+        "--upstream-url", "--upstream", dest="upstream_url", default=None, help="Stock hermes upstream URL"
+    )
+    p_serve.add_argument(
+        "--upstream-token-file",
+        type=Path,
+        default=None,
+        help="Path to stock hermes upstream session token file",
+    )
+    p_serve.add_argument(
+        "--auth",
+        choices=["token", "password", "none"],
+        default=None,
+        help="Authentication method (token, password, none; none loopback only)",
+    )
+    p_serve.add_argument(
+        "--password-file",
+        type=Path,
+        default=None,
+        help="Path to password file for password auth",
+    )
+    p_serve.add_argument(
+        "--trust-proxy-headers",
+        action="store_true",
+        default=None,
+        help="Trust reverse proxy headers (e.g. Cloudflare Access)",
+    )
+    p_serve.add_argument(
+        "--ui-dir",
+        type=Path,
+        default=None,
+        help="Path to directory containing compiled static UI bundle",
+    )
+    p_serve.add_argument(
+        "--dev-ui-url",
+        default=None,
+        help="Upstream URL for Vite dev server proxying",
+    )
+    p_serve.add_argument(
+        "--base-path",
+        default=None,
+        help="URL base path prefix (default: /)",
+    )
+    p_serve.add_argument(
+        "--log-level",
+        choices=["debug", "info", "warning", "error", "critical"],
+        default=None,
+        help="Logging level (default: info)",
+    )
+    p_serve.set_defaults(func=cmd_serve)
+
+    # doctor
+    p_doctor = subparsers.add_parser("doctor", help="Run diagnostic health checks")
+    p_doctor.add_argument("--json", action="store_true", help="Output checks as JSON")
+    p_doctor.add_argument("--profile", "-p", default=None, help="Hermes profile name")
+    p_doctor.add_argument("--hermes", default=None, help="Path to hermes binary")
+    p_doctor.add_argument("--port", type=int, default=None, help="Port to verify")
+    p_doctor.set_defaults(func=cmd_doctor)
+
+    # update
+    p_update = subparsers.add_parser("update", help="Update hermes-plus installation")
+    p_update.add_argument(
+        "--check", action="store_true", help="Print what update would do without executing"
+    )
+    p_update.add_argument("--profile", "-p", default=None, help="Hermes profile name")
+    p_update.set_defaults(func=cmd_update)
+
+    # uninstall
+    p_uninstall = subparsers.add_parser("uninstall", help="Uninstall hermes-plus plugin and data")
+    p_uninstall.add_argument("--profile", "-p", default=None, help="Hermes profile name")
+    p_uninstall.add_argument(
+        "--purge", action="store_true", help="Also delete plus_home database and data"
+    )
+    p_uninstall.add_argument(
+        "--yes", "-y", action="store_true", help="Confirm destructive purge action"
+    )
+    p_uninstall.set_defaults(func=cmd_uninstall)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if not hasattr(args, "func"):
+        parser.print_help()
+        return 0
+
+    return int(args.func(args))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
