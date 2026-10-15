@@ -1,0 +1,7 @@
+# Secret-shaped test fixtures, verified false positives (2026-10-15 secret/PII audit):
+# - in-page.test.ts:149 asserts that secret-looking data attributes are redacted
+#   before markup leaves the page ('sk-live-1234567890' is a placeholder).
+# - group-activity.test.ts:170 needs a provider-URL-shaped error string
+#   ('sk-live-0123456789abcdef' is a placeholder).
+5889d711970d54633a280e61aea04ca7dc2b17cb:packages/ui/src/lib/preview-annotate/in-page.test.ts:generic-api-key:149
+5889d711970d54633a280e61aea04ca7dc2b17cb:packages/ui/src/plugins/hermes-bots/group-activity.test.ts:generic-api-key:170
