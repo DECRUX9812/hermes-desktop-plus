@@ -854,6 +854,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Logging level (default: info)",
     )
+    p_serve.add_argument(
+        "--host-terminal",
+        action="store_true",
+        default=None,
+        help="Enable host terminal (default: true on loopback, false otherwise)",
+    )
     p_serve.set_defaults(func=cmd_serve)
 
     # doctor

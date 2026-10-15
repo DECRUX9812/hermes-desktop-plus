@@ -13,8 +13,9 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
 
 from hermes_plus import __version__, adapter
-from hermes_plus.http import ROUTERS
+from hermes_plus.http import ROUTERS, files, uploads
 from hermes_plus.server import multiplexer, proxy, static
+from hermes_plus.server import auth as auth_module
 from hermes_plus.server.auth import AuthMiddleware, login_page
 from hermes_plus.server.runtime import Runtime
 from hermes_plus.settings import ServeSettings
@@ -95,10 +96,15 @@ def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
     app = Starlette(
         routes=routes,
         lifespan=lifespan,
-        middleware=[Middleware(AuthMiddleware, auth=runtime.auth)],
+        middleware=[
+            Middleware(AuthMiddleware, auth=runtime.auth),
+            Middleware(uploads.ChatFileUploadLimitMiddleware),
+        ],
     )
     app.state.auth = runtime.auth
     app.state.runtime = runtime
+    # File tickets are admitted by the front-door auth (fork auth_middleware seam).
+    auth_module.file_ticket_redeem = files.redeem_scope
     return app
 
 

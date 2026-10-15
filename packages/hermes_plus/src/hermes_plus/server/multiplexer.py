@@ -77,6 +77,27 @@ def _profile(value: Any, fallback: str | None) -> str | None:
     return fallback if normalized.casefold() in {"default", "current"} else normalized
 
 
+def _translate_for_upstream(frame: dict[str, Any]) -> dict[str, Any]:
+    """Rewrite fork-only RPC params into what STOCK accepts.
+
+    The UI stages a browser upload at our ``/api/chat/file-upload`` and passes
+    the returned ``staged_upload`` identity to ``file.attach`` (fork
+    contracts/prompt_voice.py StagedFileUpload). STOCK's ``file.attach``
+    accepts a plain ``path`` (upstream tui_gateway/methods_prompt.py:1031) and
+    copies workspace-external files itself, so the sidecar rewrites the fork
+    shape into that path. This is the only method whose params differ.
+    """
+    if frame.get("method") != "file.attach":
+        return frame
+    params = frame.get("params")
+    staged = params.get("staged_upload") if isinstance(params, dict) else None
+    if not isinstance(staged, dict) or not isinstance(staged.get("path"), str) or not staged["path"]:
+        return frame
+    translated = {key: value for key, value in params.items() if key != "staged_upload"}
+    translated["path"] = staged["path"]
+    return {**frame, "params": translated}
+
+
 async def _send_json(websocket: WebSocket, lock: asyncio.Lock, frame: dict[str, Any]) -> None:
     async with lock:
         await websocket.send_text(json.dumps(frame, ensure_ascii=False, separators=(",", ":")))
@@ -170,18 +191,22 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
                 except (TypeError, ValueError):
                     frame = None
                 if isinstance(frame, dict):
-                    taps.offer(frame)
-                    method_name = frame.get("method")
+                    translated = _translate_for_upstream(frame)
+                    taps.offer(translated)
+                    method_name = translated.get("method")
                     if isinstance(method_name, str) and owns(method_name, capabilities=runtime.capabilities):
                         task = asyncio.create_task(
                             _dispatch_local(
-                                websocket, send_lock, runtime, link, connection_profile, frame
+                                websocket, send_lock, runtime, link, connection_profile, translated
                             ),
                             name="hermes-plus-local-rpc",
                         )
                         local_tasks.add(task)
                         task.add_done_callback(local_tasks.discard)
                         continue
+                    if translated is not frame:
+                        # The translation changed params: forward the rewritten frame.
+                        raw = json.dumps(translated, ensure_ascii=False, separators=(",", ":"))
                 elif isinstance(frame, list):
                     local_items = []
                     forwarded = []
@@ -206,7 +231,10 @@ async def handle_websocket(websocket: WebSocket, runtime: Any) -> None:
                             task.add_done_callback(local_tasks.discard)
                         if not forwarded:
                             continue
-                        raw = json.dumps(forwarded, ensure_ascii=False, separators=(",", ":"))
+                    translated_items = [_translate_for_upstream(item) if isinstance(item, dict) else item
+                                        for item in forwarded]
+                    if local_items or any(a is not b for a, b in zip(translated_items, forwarded)):
+                        raw = json.dumps(translated_items, ensure_ascii=False, separators=(",", ":"))
                 await upstream.send(raw)
             else:
                 await upstream.send(raw)
