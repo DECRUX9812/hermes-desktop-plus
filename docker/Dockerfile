@@ -41,6 +41,7 @@ COPY packages/hermes_plus /app/packages/hermes_plus
 RUN set -eu; \
     /usr/bin/python3 -c 'import sys; sys.exit("base image python3 is older than 3.11") if sys.version_info < (3, 11) else None'; \
     /usr/bin/python3 -m venv /opt/hermes-plus/venv; \
+    test -x /opt/hermes-plus/venv/bin/pip || { echo "the base image's python3-venv provides no pip" >&2; exit 1; }; \
     /opt/hermes-plus/venv/bin/python -m pip install --no-cache-dir --upgrade pip; \
     /opt/hermes-plus/venv/bin/python -m pip install --no-cache-dir /app/packages/hermes_plus
 
