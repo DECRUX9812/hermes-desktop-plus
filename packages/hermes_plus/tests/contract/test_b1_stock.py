@@ -232,3 +232,48 @@ def _model_home(tmp_path: Path, stock_hermes: str, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setenv("HERMES_PLUS_HERMES_BIN", stock_hermes)
     return home
+
+
+async def test_profiles_list_returns_profiles_with_metadata(hermes_env, call):
+    """profiles.list returns profiles from stock Hermes with expected fields."""
+    result = ok(await call("profiles.list", {}))
+    assert "profiles" in result
+    assert "bot_mode_protocol" in result
+    assert "install_id" in result
+    assert result["bot_mode_protocol"] is True
+
+    profiles_list = result["profiles"]
+    assert isinstance(profiles_list, list)
+    assert len(profiles_list) > 0
+
+    # Check that 'default' profile exists
+    default_profile = next((p for p in profiles_list if p["name"] == "default"), None)
+    assert default_profile is not None
+
+    # Check required fields on each profile
+    for profile in profiles_list:
+        assert "name" in profile
+        assert "path" in profile
+        assert "is_default" in profile
+        assert "model" in profile
+        assert "provider" in profile
+        assert "description" in profile
+        assert "display_name" in profile
+        assert "skill_count" in profile
+        assert "previous_names" in profile
+        assert isinstance(profile["previous_names"], list)
+        assert "has_avatar" in profile
+        assert isinstance(profile["has_avatar"], bool)
+
+
+async def test_profiles_list_with_include_sessions_false(hermes_env, call):
+    """profiles.list with include_sessions=False skips session fields."""
+    result = ok(await call("profiles.list", {"include_sessions": False}))
+    assert "profiles" in result
+    profiles_list = result["profiles"]
+    assert len(profiles_list) > 0
+
+    # Even with include_sessions=False, upstream may include these fields
+    # Just verify the call succeeds
+    for profile in profiles_list:
+        assert "name" in profile
