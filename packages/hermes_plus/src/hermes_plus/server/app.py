@@ -53,6 +53,10 @@ def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
                     "status": getattr(compat, "status", "unknown"),
                     "message": getattr(compat, "message", ""),
                 },
+                # "unknown" = the startup probe failed; the UI/doctor banners it.
+                "capabilities": (
+                    "unknown" if not getattr(runtime.capabilities, "known", True) else "known"
+                ),
                 "features": dict(runtime.capabilities.features),
             }
         )

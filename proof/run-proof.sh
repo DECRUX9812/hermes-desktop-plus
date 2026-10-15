@@ -17,7 +17,7 @@
 #                                      # inner heavy steps then run unlocked)
 #
 # Environment:
-#   HERMES_PLUS_PROOF_HERMES  stock hermes binary (default ~/Code/ship-test/venv/bin/hermes)
+#   HERMES_PLUS_PROOF_HERMES  stock hermes binary (required; no default)
 #   HERMES_PLUS_PROOF_CHROME  chromium binary (default: newest ~/.cache/ms-playwright chromium)
 #   HERMES_PLUS_PROOF_MODEL   cliproxy model id (default gemini-3.8-flash-high; see below)
 #   HERMES_PLUS_PROOF_LOCK    lock file (default /tmp/hermes-build.lock; "none" = already held)
@@ -34,7 +34,12 @@
 set -uo pipefail
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-HERMES_BIN=${HERMES_PLUS_PROOF_HERMES:-"$HOME/Code/ship-test/venv/bin/hermes"}
+HERMES_BIN=${HERMES_PLUS_PROOF_HERMES:-}
+if [ -z "$HERMES_BIN" ]; then
+  echo "HERMES_PLUS_PROOF_HERMES is required: set it to the stock hermes binary to prove against." >&2
+  echo "The proof never defaults to a machine-specific path." >&2
+  exit 2
+fi
 PORT=${HERMES_PLUS_PROOF_PORT:-9230}
 SHOTS_DIR=${SHOTS_DIR:-"$HOME/Videos/ship-shots"}
 LOCK=${HERMES_PLUS_PROOF_LOCK:-/tmp/hermes-build.lock}

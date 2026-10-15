@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import socket
 import subprocess
 from contextlib import asynccontextmanager, contextmanager
@@ -14,19 +13,11 @@ import pytest
 from hermes_plus.adapter import DashboardProcess, GatewayClient, detect, run_hermes
 from hermes_plus.rpc import RpcContext
 from hermes_plus.rpc.context import GatewayUpstream
+from hermes_resolve import prepend_bin_dir, resolve_stock_hermes
 
 
 # Track all temp HERMES_HOME directories created during the session for cleanup
 _temp_homes: list[Path] = []
-
-# Helper subprocesses must use the stock binary the suite was pointed at: on a
-# developer machine PATH's `hermes` can be a personal install, and running it
-# leaves its own pm worker behind in the temp home (the cleanup assertion then
-# fails and the log mentions a foreign checkout).
-HERMES_BIN = Path(
-    os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
-).expanduser()
-
 
 @contextmanager
 def _environment(**values: str):
@@ -44,10 +35,9 @@ def _environment(**values: str):
 
 @pytest.fixture(scope="session")
 def stock_hermes() -> str:
-    configured = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
-    binary = Path(configured).expanduser()
+    binary, source = resolve_stock_hermes()
     if not binary.is_file() or not os.access(binary, os.X_OK):
-        pytest.skip(f"stock Hermes executable is unavailable: {binary}")
+        pytest.skip(f"stock Hermes executable is unavailable: {binary} ({source})")
     return str(binary.resolve())
 
 
@@ -137,11 +127,13 @@ def assert_no_orphaned_processes(home: Path) -> None:
 def _stop_gateway_daemons(home: Path) -> None:
     """Stop all gateway daemons associated with the given HERMES_HOME."""
     try:
-        # Set HERMES_HOME in environment and run hermes gateway stop
-        env = os.environ.copy()
+        # The configured binary, never `hermes` on PATH: a personal install
+        # resolved here would provision its own runtime into the temp home.
+        binary, _ = resolve_stock_hermes()
+        env = prepend_bin_dir(os.environ.copy())
         env["HERMES_HOME"] = str(home)
         subprocess.run(
-            [str(HERMES_BIN), "gateway", "stop"],
+            [str(binary), "gateway", "stop"],
             env=env,
             capture_output=True,
             text=True,
@@ -149,7 +141,7 @@ def _stop_gateway_daemons(home: Path) -> None:
             check=False,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass  # Timeout or hermes not in PATH; will be caught by process check
+        pass  # Timeout or hermes not available; will be caught by process check
 
 
 def start_dashboard(stock_install, home: Path) -> DashboardProcess:
@@ -159,10 +151,11 @@ def start_dashboard(stock_install, home: Path) -> DashboardProcess:
     be taken before the child binds it; retry that one case and let the rest raise.
     """
     inst = replace(stock_install, hermes_home=home)
+    extra_env = prepend_bin_dir({"HERMES_HOME": str(home)})
     taken: set[int] = set()
     for attempt in range(6):
         process = DashboardProcess(
-            inst, port=loopback_port(exclude=taken), extra_env={"HERMES_HOME": str(home)}
+            inst, port=loopback_port(exclude=taken), extra_env=extra_env
         )
         try:
             process.start(timeout=120)

@@ -20,7 +20,7 @@ from hermes_plus.adapter.version import (
 GIT_STAMP_OUTPUT = "Hermes Agent vgit.379cf12 (2026.9.24)"
 UNKNOWN_STAMP_OUTPUT = (
     "Hermes Agent vunknown (2026.9.24)\n"
-    "Install directory: /opt/demo/ship-test/sh/installs/a2caf6ebe0bf88e1/environments/"
+    "Install directory: /opt/demo/hermes-sandbox/sh/installs/a2caf6ebe0bf88e1/environments/"
     "c7a5974d86884d46b8f78718ac7522ad/workspace\n"
     "Install method: unknown\n"
 )
@@ -50,7 +50,7 @@ def test_parse_version_output_reads_all_three_stamp_formats() -> None:
 
 def test_install_directory_is_extracted_from_the_vunknown_stamp() -> None:
     assert install_directory(UNKNOWN_STAMP_OUTPUT) == (
-        "/opt/demo/ship-test/sh/installs/a2caf6ebe0bf88e1/environments/"
+        "/opt/demo/hermes-sandbox/sh/installs/a2caf6ebe0bf88e1/environments/"
         "c7a5974d86884d46b8f78718ac7522ad/workspace"
     )
     assert install_directory(GIT_STAMP_OUTPUT) is None

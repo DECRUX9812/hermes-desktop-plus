@@ -59,8 +59,12 @@ def owns(name: str, capabilities: Any = None) -> bool:
         methods = getattr(capabilities, "methods", capabilities)
         if isinstance(methods, (set, list, tuple, dict)) and name in methods:
             return False
+    known = capabilities is None or getattr(capabilities, "known", True)
     if any(name.startswith(f"{namespace}.") for namespace in SHARED_NAMESPACES):
-        return name in _handlers
+        # Only claim a shared-namespace handler on a KNOWN upstream: when the
+        # capability probe failed we never saw what stock owns, and answering
+        # `session.*` ourselves would shadow a live stock method.
+        return name in _handlers and known
     return name in _handlers
 
 

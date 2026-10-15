@@ -8,7 +8,6 @@ import asyncio
 import json
 import os
 import secrets
-import shutil
 import signal
 import socket
 import subprocess
@@ -21,15 +20,14 @@ import httpx
 import pytest
 import websockets
 
+from hermes_resolve import prepend_bin_dir, resolve_stock_hermes
+
 # Track all temp HERMES_HOME directories created during the session for cleanup
 _temp_homes: list[Path] = []
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 HERMES_PLUS_BIN = REPO_ROOT / ".venv" / "bin" / "hermes-plus"
-HERMES_BIN = Path(
-    # HERMES_PLUS_TEST_HERMES wins; otherwise resolve `hermes` from PATH.
-    os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
-).expanduser()
+HERMES_BIN, _HERMES_SOURCE = resolve_stock_hermes()
 
 
 # Several executors share the 9300-9399 loopback range, so a port that probes
@@ -85,8 +83,7 @@ def assert_no_orphaned_processes(home: Path) -> None:
 def _stop_gateway_daemons(home: Path) -> None:
     """Stop all gateway daemons associated with the given HERMES_HOME."""
     try:
-        # Set HERMES_HOME in environment and run hermes gateway stop
-        env = os.environ.copy()
+        env = prepend_bin_dir(os.environ.copy())
         env["HERMES_HOME"] = str(home)
         subprocess.run(
             [str(HERMES_BIN), "gateway", "stop"],
@@ -116,7 +113,7 @@ class Sidecar:
         return self.home / "sidecar.log"
 
     def start(self, attempts: int = 8) -> None:
-        env = os.environ.copy()
+        env = prepend_bin_dir(os.environ.copy())
         env.update(
             {
                 "HERMES_HOME": str(self.home),
@@ -304,7 +301,7 @@ def seed_stock_session(stock_hermes: str, home: Path, session_id: str, messages:
               "db.close()\n")
     result = subprocess.run(
         [str(python), "-c", script, session_id, json.dumps(messages)],
-        env={**os.environ, "HERMES_HOME": str(home)}, capture_output=True, text=True, timeout=120, check=False,
+        env=prepend_bin_dir({**os.environ, "HERMES_HOME": str(home)}), capture_output=True, text=True, timeout=120, check=False,
     )
     assert result.returncode == 0, result.stderr
 
@@ -315,10 +312,9 @@ PLUS_BIN = Path(__file__).resolve().parents[4] / ".venv" / "bin" / "hermes-plus"
 
 @pytest.fixture(scope="session")
 def stock_hermes() -> str:
-    configured = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
-    binary = Path(configured).expanduser()
+    binary, source = resolve_stock_hermes()
     if not binary.is_file() or not os.access(binary, os.X_OK):
-        pytest.skip(f"stock Hermes executable is unavailable: {binary}")
+        pytest.skip(f"stock Hermes executable is unavailable: {binary} ({source})")
     return str(binary.resolve())
 
 

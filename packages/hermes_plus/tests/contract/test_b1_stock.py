@@ -26,6 +26,8 @@ from hermes_plus.rpc.context import GatewayUpstream
 from hermes_plus.store import Store
 from support import fault, ok
 
+pytestmark = pytest.mark.contract
+
 MODEL_CONFIG = os.environ.get("HERMES_PLUS_TEST_MODEL_CONFIG", "")
 PREDICT_GATE = "auxiliary.composer_prediction.enabled"
 
@@ -182,7 +184,7 @@ async def test_session_ask_reports_stock_failures_structurally(hermes_env, dashb
         seeded = await ctx.internal.call("session.create", {})
         seed_transcript(stock_hermes, home, seeded["stored_session_id"], [
             {"role": "user", "content": "Which command runs the release build?"},
-            {"role": "assistant", "content": "The release build runs with `make ship-test`."},
+            {"role": "assistant", "content": "The release build runs with `make smoke-test`."},
         ])
         no_transcript = await ctx.internal.call("session.create", {})
 
@@ -231,12 +233,12 @@ async def test_session_ask_answers_from_a_real_transcript(stock_hermes, make_das
         session = await ctx.internal.call("session.create", {})
         seed_transcript(stock_hermes, home, session["stored_session_id"], [
             {"role": "user", "content": "Which command runs the release build?"},
-            {"role": "assistant", "content": "The release build runs with `make ship-test`."},
+            {"role": "assistant", "content": "The release build runs with `make smoke-test`."},
         ])
         answer = ok(await rpc(ctx, "session.ask", {
             "session_id": session["session_id"], "question": "Which command runs the release build?",
         }))
-        assert "make ship-test" in answer["answer"].lower()
+        assert "make smoke-test" in answer["answer"].lower()
         assert answer["messages_considered"] == 2
 
 

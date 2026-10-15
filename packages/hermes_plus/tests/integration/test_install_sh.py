@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from hermes_resolve import resolve_stock_hermes
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 INSTALL_SH = REPO_ROOT / "install.sh"
 PACKAGE_DIR = REPO_ROOT / "packages" / "hermes_plus"
@@ -25,14 +27,8 @@ PACKAGE_DIR = REPO_ROOT / "packages" / "hermes_plus"
 
 def _stock_hermes() -> Path | None:
     """The stock launcher: HERMES_PLUS_TEST_HERMES, then `hermes` on PATH."""
-    candidates = [
-        os.environ.get("HERMES_PLUS_TEST_HERMES"),
-        shutil.which("hermes"),
-    ]
-    for candidate in candidates:
-        if candidate and os.access(candidate, os.X_OK):
-            return Path(candidate)
-    return None
+    binary, _ = resolve_stock_hermes()
+    return binary if os.access(binary, os.X_OK) else None
 
 
 def _bridge_packaged() -> bool:

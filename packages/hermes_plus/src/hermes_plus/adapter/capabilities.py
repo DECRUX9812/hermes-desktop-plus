@@ -35,6 +35,11 @@ class Capabilities:
     methods: set[str]
     events: set[str]
     features: dict[str, bool]
+    # False only for the "we could not ask the gateway" fallback: with
+    # known=False, shared-namespace methods must forward upstream because a
+    # local handler there would shadow a stock method we never saw (see
+    # rpc/registry.owns).
+    known: bool = True
 
 
 async def _probe_method(client: GatewayClient, name: str, params: dict[str, Any]) -> bool:

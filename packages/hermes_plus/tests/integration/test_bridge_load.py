@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from hermes_resolve import resolve_stock_hermes
 
 pytestmark = pytest.mark.integration
 
@@ -74,9 +75,8 @@ def test_register_ran_through_upstreams_loader(installed_home: Path) -> None:
 
 
 def _stock_python() -> str:
-    configured = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
-    binary = Path(configured).resolve()
-    python = binary.parent / "python3"
+    binary, _ = resolve_stock_hermes()
+    python = binary.resolve().parent / "python3"
     if not python.is_file():
         pytest.skip(f"stock Hermes venv has no python3 next to the launcher: {python}")
     return str(python)

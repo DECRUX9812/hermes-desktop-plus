@@ -15,6 +15,7 @@ import httpx
 from hermes_plus import adapter
 from hermes_plus.adapter import Capabilities, DashboardProcess, GatewayClient, probe_capabilities
 from hermes_plus.adapter.mcp import McpClientManager
+from hermes_plus.adapter.protocol import EVENT_NAMES
 from hermes_plus.server.auth import FrontDoorAuth
 from hermes_plus.server.spool import SpoolIngester
 from hermes_plus.settings import ServeSettings
@@ -49,7 +50,7 @@ class Runtime:
         self.auth = FrontDoorAuth(settings)
         self.install = None
         self.compat = None
-        self.capabilities = Capabilities(None, set(), set(), {})
+        self.capabilities = Capabilities(None, set(), set(), {}, known=False)
         self.dashboard: DashboardProcess | None = None
         self.internal: GatewayClient | None = None
         self.upstream_ws_url = ""
@@ -114,7 +115,23 @@ class Runtime:
             self.upstream_http_origin = _http_origin(self.upstream_ws_url)
             self.internal = GatewayClient(self.upstream_ws_url, self.upstream_token)
             await self.internal.connect()
-            self.capabilities = await probe_capabilities(self.internal)
+            try:
+                self.capabilities = await probe_capabilities(self.internal)
+            except (TimeoutError, OSError, RuntimeError) as exc:
+                # A slow, wedged, or never-answering upstream must not take the
+                # sidecar down. known=False makes owns() forward every
+                # shared-namespace method upstream (a local handler there would
+                # shadow a stock method we never saw) while plus-only
+                # namespaces keep working. There is no re-probe on reconnect:
+                # restart the sidecar to re-probe.
+                log.warning(
+                    "upstream capability probe failed (%s); serving with capabilities "
+                    "unknown — shared-namespace calls forward to Hermes; restart the "
+                    "sidecar to re-probe", exc)
+                self.capabilities = Capabilities(
+                    version=None, methods=set(), events=set(EVENT_NAMES), features={},
+                    known=False,
+                )
             self.http_client = httpx.AsyncClient(timeout=None, follow_redirects=False)
             self._write_sidecar_json()
             self._start_spool_ingester()

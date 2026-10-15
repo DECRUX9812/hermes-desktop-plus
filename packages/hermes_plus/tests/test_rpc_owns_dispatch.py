@@ -41,6 +41,26 @@ def test_owns_with_capabilities():
     assert owns("session.ask", capabilities=caps)
 
 
+def test_owns_with_unknown_capabilities_forwards_shared_namespaces():
+    """known=False (probe failed): shared names go upstream even with a handler."""
+    from hermes_plus.adapter.capabilities import Capabilities
+
+    unknown = Capabilities(
+        version=None, methods=set(), events=set(), features={}, known=False,
+    )
+    # We DO have handlers for session.ask, session.predict_next and
+    # delegation.reports; unknown capabilities must not shadow stock methods.
+    assert not owns("session.ask", capabilities=unknown)
+    assert not owns("session.predict_next", capabilities=unknown)
+    assert not owns("delegation.reports", capabilities=unknown)
+    assert not owns("session.list", capabilities=unknown)
+    assert not owns("bot_relay.roster.sync", capabilities=unknown)
+    # Plus-only namespaces stay ours.
+    assert owns("bots_team.create", capabilities=unknown)
+    assert owns("bots_mailbox.list", capabilities=unknown)
+    assert owns("fork.memory.anything", capabilities=unknown)
+
+
 async def test_dispatch_returns_response_objects(ctx):
     reply = await dispatch(
         ctx, {"jsonrpc": "2.0", "id": "x1", "method": "bots_team.list", "params": {}}

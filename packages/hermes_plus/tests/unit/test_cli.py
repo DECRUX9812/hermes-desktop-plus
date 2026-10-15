@@ -2,10 +2,11 @@
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from hermes_resolve import resolve_stock_hermes
 
 
 def _run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -22,11 +23,10 @@ def _run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.Comple
 
 def _stock_hermes() -> str | None:
     """The stock launcher under test: HERMES_PLUS_TEST_HERMES, then `hermes` on PATH."""
-    candidate = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes")
-    if not candidate:
+    binary, _ = resolve_stock_hermes()
+    if not binary.is_file() or not os.access(binary, os.X_OK):
         return None
-    path = Path(candidate).expanduser()
-    return str(path) if path.is_file() and os.access(path, os.X_OK) else None
+    return str(binary)
 
 
 def test_cli_help() -> None:
