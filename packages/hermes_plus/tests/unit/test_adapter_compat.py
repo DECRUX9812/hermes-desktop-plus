@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hermes_plus.adapter import HermesInstall, check_compat
+from hermes_plus.adapter import HermesInstall, check_compat, known_good_ref_commit
 
 
 def _install(version: str | None, parsed: tuple[int, int, int] | None, commit: str | None = None) -> HermesInstall:
@@ -33,3 +33,16 @@ def test_unknown_commit_degrades_to_untested_but_keeps_running() -> None:
 
 def test_old_semver_is_unsupported_even_with_an_unknown_commit() -> None:
     assert check_compat(_install("0.21.6", (0, 21, 6), "deadbeef")).status == "unsupported"
+
+
+def test_known_good_refs_map_release_tags_to_their_proven_commit() -> None:
+    assert known_good_ref_commit("v0.22.1") == "297552a"
+    assert known_good_ref_commit("v9.9.9") is None
+    assert known_good_ref_commit("") is None
+
+
+def test_pinned_tag_commit_is_supported_without_a_semver_stamp() -> None:
+    # A checkout install at the pinned tag prints no semver; its recovered
+    # commit must classify as supported once the ref mapping is in the matrix.
+    assert check_compat(_install(None, None, "297552a")).status == "supported"
+    assert check_compat(_install(None, None, "297552a9d6")).status == "supported"

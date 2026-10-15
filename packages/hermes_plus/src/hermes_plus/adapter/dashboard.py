@@ -118,8 +118,12 @@ class DashboardProcess:
             self._ensure_web_dist(env)
         return env
 
-    def start(self, timeout: float = 60) -> None:
-        """Start dashboard and wait for the public liveness endpoint."""
+    def start(self, timeout: float = 120) -> None:
+        """Start dashboard and wait for the public liveness endpoint.
+
+        A cold HERMES_HOME pays a runtime prepare before the child serves,
+        so the default must exceed that, not just the import time.
+        """
         if self.process is not None and self.process.poll() is None:
             return
         self.port = self.port or self._free_port()
