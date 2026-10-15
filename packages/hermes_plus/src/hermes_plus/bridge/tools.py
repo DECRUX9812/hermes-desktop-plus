@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -230,8 +231,7 @@ def _git_ship(args: dict[str, Any], **_kw: Any) -> str:
 
 def _open_pr(args: dict[str, Any], **_kw: Any) -> str:
     """The fork's open_pr: push, then `gh pr create`. Needs the gh binary."""
-    if not any(Path(entry) / "gh" for entry in os.environ.get("PATH", "").split(os.pathsep)) \
-            and subprocess.which("gh") is None:
+    if not shutil.which("gh"):
         return _dump({"error": "the `gh` CLI is required to open a pull request"})
     resolved = _repo_root(args.get("path"))
     if isinstance(resolved, str):
@@ -253,10 +253,7 @@ def _open_pr(args: dict[str, Any], **_kw: Any) -> str:
         argv.append("--draft")
     if not args.get("title") and not args.get("body"):
         argv.append("--fill")
-    try:
-        code, out, err = _run(argv, cwd=cwd)
-    except FileNotFoundError:
-        return _dump({"error": "the `gh` CLI is required to open a pull request"})
+    code, out, err = _run(argv, cwd=cwd)
     if code != 0:
         return _dump({"error": f"gh pr create failed: {err.strip() or out.strip()}"})
     match = re.search(r"https://\S+/pull/(\d+)", out)

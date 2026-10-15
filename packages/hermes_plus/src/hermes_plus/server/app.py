@@ -16,6 +16,7 @@ from hermes_plus import __version__, adapter
 from hermes_plus.http import ROUTERS
 from hermes_plus.server import multiplexer, proxy, static
 from hermes_plus.server.auth import AuthMiddleware, login_page
+from hermes_plus.server.bridge_rpc import bridge_rpc
 from hermes_plus.server.runtime import Runtime
 from hermes_plus.settings import ServeSettings
 
@@ -83,6 +84,7 @@ def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
     routes: list[Any] = [
         Route("/healthz", healthz),
         Route("/api/plus/info", plus_info),
+        Route("/api/plus/bridge/rpc", bridge_rpc, methods=["POST"]),
     ]
     if settings.auth == "password":
         routes.append(Route("/login", login_page, methods=["GET", "POST"]))

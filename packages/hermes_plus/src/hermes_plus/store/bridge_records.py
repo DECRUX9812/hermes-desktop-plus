@@ -48,19 +48,21 @@ class ToolCalls:
 
     def record(self, *, tool_call_id: str, session_id: str, tool_name: str, status: str,
                error_type: str | None, error_message: str | None, args: Any,
-               result: Any, duration_ms: int | None, created_at: float) -> None:
+               result: Any, duration_ms: int | None, created_at: float,
+               detail: dict[str, Any] | None = None) -> None:
         with self._store.write() as conn:
             conn.execute(
                 "INSERT INTO tool_calls (tool_call_id, session_id, tool_name, status, error_type, "
-                "error_message, args_json, result_excerpt, duration_ms, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "error_message, args_json, result_excerpt, detail_json, duration_ms, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(tool_call_id) DO UPDATE SET "
                 "session_id = excluded.session_id, tool_name = excluded.tool_name, "
                 "status = excluded.status, error_type = excluded.error_type, "
                 "error_message = excluded.error_message, args_json = excluded.args_json, "
-                "result_excerpt = excluded.result_excerpt, duration_ms = excluded.duration_ms",
+                "result_excerpt = excluded.result_excerpt, detail_json = excluded.detail_json, "
+                "duration_ms = excluded.duration_ms",
                 (tool_call_id, session_id, tool_name, status, error_type, error_message,
-                 _json(args), _json(result), duration_ms, created_at))
+                 _json(args), _json(result), _json(detail), duration_ms, created_at))
 
     def list_for_session(self, session_id: str, limit: int = 500) -> list[dict[str, Any]]:
         with self._store.read() as conn:
@@ -180,3 +182,7 @@ class SpoolOffsets:
                 "ON CONFLICT(filename) DO UPDATE SET offset = excluded.offset, "
                 "ingested_at = excluded.ingested_at",
                 (filename, offset, time.time()))
+
+    def forget(self, filename: str) -> None:
+        with self._store.write() as conn:
+            conn.execute("DELETE FROM spool_offsets WHERE filename = ?", (filename,))

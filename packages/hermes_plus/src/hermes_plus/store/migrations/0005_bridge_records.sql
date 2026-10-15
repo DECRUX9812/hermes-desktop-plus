@@ -9,6 +9,7 @@ CREATE TABLE tool_calls (
     error_message TEXT,
     args_json TEXT,
     result_excerpt TEXT,
+    detail_json TEXT,
     duration_ms INTEGER,
     created_at REAL NOT NULL
 );

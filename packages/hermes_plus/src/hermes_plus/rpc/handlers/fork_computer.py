@@ -38,9 +38,10 @@ def timeline(ctx: RpcContext, params: dict[str, Any]) -> dict[str, Any]:
 
 def _step(row: dict[str, Any], index: int) -> dict[str, Any]:
     tool = str(row["tool_name"] or "")
+    stored_detail = _parsed(row["detail_json"])
     args = _parsed(row["args_json"])
     result = _parsed(row["result_excerpt"])
-    detail = _detail(args, result)
+    detail = stored_detail or _detail(args, result)
     return {
         "id": str(row["tool_call_id"]),
         "index": index,
