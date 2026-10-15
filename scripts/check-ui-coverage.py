@@ -171,7 +171,7 @@ def extract_plus_rpc(package_dir: Path) -> Set[str]:
     # Look for @method decorators in our handlers
     handlers_dir = package_dir / "src" / "hermes_plus" / "rpc" / "handlers"
     if handlers_dir.exists():
-        for py_file in handlers_dir.glob("*.py"):
+        for py_file in handlers_dir.rglob("*.py"):
             if py_file.name == "__init__.py":
                 continue
             try:
@@ -197,7 +197,12 @@ def extract_plus_http(package_dir: Path) -> Set[str]:
                 continue
             try:
                 content = py_file.read_text(errors="ignore")
-                # @app.route, @router.post, etc.
+                # Starlette Route patterns: Route("/path", ...) and Route("/path", ..., methods=[...])
+                for match in re.finditer(r'Route\(\s*["\'](/[^"\']*)["\']', content):
+                    path = match.group(1)
+                    path = re.sub(r"<[^>]+>|:id|:\w+", "*", path)
+                    paths.add(path)
+                # Also look for @app.route, @router.post, etc. (in case they're used)
                 for match in re.finditer(r'@(?:app|router)\.\w+\(\s*["\'](/[^"\']*)["\']', content):
                     path = match.group(1)
                     path = re.sub(r"<[^>]+>|:id|:\w+", "*", path)
@@ -205,11 +210,36 @@ def extract_plus_http(package_dir: Path) -> Set[str]:
             except Exception:
                 pass
 
-    # Look in server module
+    # Look in server package (recursively)
+    server_dir = package_dir / "src" / "hermes_plus" / "server"
+    if server_dir.exists():
+        for py_file in server_dir.rglob("*.py"):
+            if py_file.name == "__init__.py":
+                continue
+            try:
+                content = py_file.read_text(errors="ignore")
+                # Starlette Route patterns: Route("/path", ...)
+                for match in re.finditer(r'Route\(\s*["\'](/[^"\']*)["\']', content):
+                    path = match.group(1)
+                    path = re.sub(r"<[^>]+>|:id|:\w+", "*", path)
+                    paths.add(path)
+                # Also look for @app.route, @router.post, etc.
+                for match in re.finditer(r'@(?:app|router)\.\w+\(\s*["\'](/[^"\']*)["\']', content):
+                    path = match.group(1)
+                    path = re.sub(r"<[^>]+>|:id|:\w+", "*", path)
+                    paths.add(path)
+            except Exception:
+                pass
+
+    # Look in server.py if it exists (for backwards compatibility)
     server_file = package_dir / "src" / "hermes_plus" / "server.py"
     if server_file.exists():
         try:
             content = server_file.read_text(errors="ignore")
+            for match in re.finditer(r'Route\(\s*["\'](/[^"\']*)["\']', content):
+                path = match.group(1)
+                path = re.sub(r"<[^>]+>|:id|:\w+", "*", path)
+                paths.add(path)
             for match in re.finditer(r'@app\.\w+\(\s*["\'](/[^"\']*)["\']', content):
                 path = match.group(1)
                 path = re.sub(r"<[^>]+>|:id|:\w+", "*", path)
