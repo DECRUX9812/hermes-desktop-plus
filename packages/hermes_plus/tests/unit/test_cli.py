@@ -17,7 +17,10 @@ def _run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.Comple
         capture_output=True,
         text=True,
         env=env,
-        timeout=30,
+        # `doctor` cold-starts a real stock Hermes (hermes --version can take
+        # 60-110 s on a loaded machine / slow CI runner before the runtime is
+        # warmed); the same budget as the other real-subprocess CLI tests.
+        timeout=120,
     )
 
 
