@@ -33,4 +33,5 @@ asyncio_mode = "auto"
 markers = [
   "contract: runs the adapter against a real stock Hermes install (HERMES_PLUS_TEST_HERMES)",
   "integration: starts real processes",
+  "model: calls a real model provider (HERMES_PLUS_TEST_MODEL_CONFIG must name a config.yaml)",
 ]

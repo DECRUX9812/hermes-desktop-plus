@@ -12,7 +12,7 @@ def test_open_store_creates_wal_database_with_foreign_keys_on(tmp_path):
     store = open_store(tmp_path / "home")
     try:
         assert (tmp_path / "home" / DB_FILENAME).is_file()
-        assert store.schema_version() == 1
+        assert store.schema_version() == 3
         with store.read() as conn:
             assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
             assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
@@ -23,8 +23,8 @@ def test_open_store_creates_wal_database_with_foreign_keys_on(tmp_path):
 def test_migrate_is_idempotent(tmp_path):
     store = open_store(tmp_path / "home")
     try:
-        assert store.migrate() == 1
-        assert store.migrate() == 1
+        assert store.migrate() == 3
+        assert store.migrate() == 3
         with store.read() as conn:
             rows = conn.execute("SELECT COUNT(*) FROM plus_meta WHERE key = 'schema_version'").fetchone()[0]
         assert rows == 1

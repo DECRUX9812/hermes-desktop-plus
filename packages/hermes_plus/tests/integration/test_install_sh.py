@@ -114,6 +114,9 @@ def test_install_sh_execution(tmp_path: Path) -> None:
         pytest.skip(
             f"adapter/store not fully implemented yet (adapter={adapter_ready}, store={store_ready})"
         )
+    bridge_packaged = (pkg_dir / "src" / "hermes_plus" / "bridge").is_dir()
+    if not bridge_packaged:
+        pytest.skip("bridge/ plugin is not packaged yet; install.sh has no plugin to copy")
 
     plugin_dir = hermes_home / "plugins" / "hermes-plus"
     assert plugin_dir.exists(), f"Plugin dir {plugin_dir} does not exist"
