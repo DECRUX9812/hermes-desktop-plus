@@ -256,6 +256,99 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+_ENV_FAILURE_HINT = (
+    "this HERMES_HOME can't borrow the Hermes install; use the home that owns it "
+    "(the one containing hermes-agent/) or a profile under it"
+)
+
+
+def _first_error_line(text: str) -> str:
+    """Pick the line worth showing from a failed command's output."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        lowered = line.lower()
+        if "error" in lowered or "no module named" in lowered or "traceback" in lowered:
+            return line[:200]
+    return lines[-1][:200] if lines else "no output"
+
+
+def _check_hermes_env(hermes_bin: str | None, h_home: Path) -> dict[str, Any]:
+    """Run the stock CLI against HERMES_HOME.
+
+    Hermes resolves its Python environment from the home it is handed; a home
+    that does not own a checkout fails here with missing modules or an
+    unresolved install, which is what breaks `hermes-plus serve` later.
+    """
+    if not hermes_bin:
+        return {
+            "name": "hermes_env",
+            "status": "warn",
+            "message": "Cannot check the Hermes environment: no hermes executable found",
+            "hint": "Install Hermes Agent, or set HERMES_PLUS_HERMES_BIN.",
+        }
+    if not h_home.exists():
+        return {
+            "name": "hermes_env",
+            "status": "warn",
+            "message": f"HERMES_HOME does not exist yet: {h_home}",
+            "hint": "Run 'hermes-plus install' to initialize it.",
+        }
+    if not os.environ.get("HERMES_HOME", "").strip():
+        # Probing the implicit default home would run a real user's Hermes
+        # install; only check homes the operator named explicitly.
+        return {
+            "name": "hermes_env",
+            "status": "warn",
+            "message": (
+                "HERMES_HOME is not set; the Hermes CLI was not run against the "
+                f"implicit default home {h_home}"
+            ),
+            "hint": "Set HERMES_HOME to the home you want checked.",
+        }
+
+    env = os.environ.copy()
+    env["HERMES_HOME"] = str(h_home)
+    try:
+        version = subprocess.run(
+            [hermes_bin, "--version"], capture_output=True, text=True, env=env,
+            timeout=30, check=False,
+        )
+        plugins = subprocess.run(
+            [hermes_bin, "plugins", "list", "--plain", "--no-bundled"],
+            capture_output=True, text=True, env=env, timeout=60, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {
+            "name": "hermes_env",
+            "status": "fail",
+            "message": f"Hermes CLI could not be executed for HERMES_HOME={h_home}: {exc}",
+            "hint": _ENV_FAILURE_HINT,
+        }
+
+    if version.returncode == 0 and plugins.returncode == 0:
+        reported = (version.stdout or version.stderr).strip().splitlines()
+        return {
+            "name": "hermes_env",
+            "status": "ok",
+            "message": (
+                f"Hermes CLI runs for HERMES_HOME={h_home}"
+                + (f" ({reported[0]})" if reported else "")
+            ),
+            "hint": "",
+        }
+
+    failed = plugins if plugins.returncode else version
+    return {
+        "name": "hermes_env",
+        "status": "fail",
+        "message": (
+            f"Hermes CLI fails for HERMES_HOME={h_home} "
+            f"(exit {failed.returncode}): {_first_error_line(failed.stderr or failed.stdout)}"
+        ),
+        "hint": _ENV_FAILURE_HINT,
+    }
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Run health checks on environment, dependencies, and configuration."""
     checks: list[dict[str, Any]] = []
@@ -289,11 +382,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         pass
 
     if not hermes_bin:
-        hermes_bin = shutil.which("hermes")
-        if not hermes_bin:
-            candidate = Path.home() / "Code/ship-test/venv/bin/hermes"
-            if candidate.exists():
-                hermes_bin = str(candidate)
+        # Same precedence the adapter uses: HERMES_PLUS_HERMES_BIN, then PATH.
+        hermes_bin = shutil.which(os.environ.get("HERMES_PLUS_HERMES_BIN") or "hermes")
 
     if hermes_bin:
         if not hermes_ver:
@@ -356,7 +446,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 "hint": "Check adapter installation and compat/matrix.json.",
             })
 
-    # Check 3: HERMES_HOME exists and is writable
+    # Check 3: the stock CLI can resolve its environment for THIS HERMES_HOME
+    checks.append(_check_hermes_env(hermes_bin, h_home))
+
+    # Check 4: HERMES_HOME exists and is writable
     if h_home.exists():
         if os.access(h_home, os.W_OK):
             checks.append({
@@ -388,7 +481,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 "hint": f"Create {h_home} with write permissions.",
             })
 
-    # Check 4: bridge plugin installed (and its version matches ours) and enabled (via adapter.load_config)
+    # Check 5: bridge plugin installed (and its version matches ours) and enabled (via adapter.load_config)
     from hermes_plus import __version__
 
     plugin_dir = h_home / "plugins" / "hermes-plus"
@@ -438,7 +531,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 "hint": "Run 'hermes-plus install' or enable with hermes CLI.",
             })
 
-    # Check 5: plus.db schema version vs the code's
+    # Check 6: plus.db schema version vs the code's
     db_path = p_home / "plus.db"
     if not db_path.exists():
         checks.append({
@@ -465,7 +558,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 with sqlite3.connect(db_path) as conn:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "SELECT version FROM plus_meta ORDER BY version DESC LIMIT 1"
+                        "SELECT value FROM plus_meta WHERE key = 'schema_version'"
                     )
                     row = cursor.fetchone()
                     if row:
@@ -488,7 +581,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 "hint": "Run 'hermes-plus install' to apply migrations.",
             })
 
-    # Check 6: ui_dist/index.html present
+    # Check 7: ui_dist/index.html present
     ui_dir = Path(__file__).resolve().parent / "ui_dist"
     index_file = ui_dir / "index.html"
     if index_file.exists():
@@ -506,7 +599,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             "hint": "Build UI with 'npm run build:webapp' in packages/ui or install pre-built wheel.",
         })
 
-    # Check 7: default port is free
+    # Check 8: default port is free
     port = getattr(args, "port", None) or 9129
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     port_free = False
@@ -533,7 +626,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             "hint": f"Stop the process using port {port} or configure a different port with --port.",
         })
 
-    # Check 8: free disk above 1G
+    # Check 9: free disk above 1G
     disk_target = h_home if h_home.exists() else Path.cwd()
     try:
         free_bytes = shutil.disk_usage(disk_target).free
