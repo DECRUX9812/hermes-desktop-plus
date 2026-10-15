@@ -15,6 +15,7 @@ no public hook and is not claimed here.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 _PROMPT_MAX_TEAMS = 2
 _PROMPT_TEAMS_SCANNED = 20
 _PROMPT_RPC_TIMEOUT = 2.0
+_PROMPT_TEAM_BUDGET = 4.0  # total wall clock the section may spend on the sidecar
 _MAX_TEAM_CHARS = 3800  # upstream caps a section at 4000 chars
 
 _POLICIES_SECTION = """\
@@ -96,8 +98,10 @@ def _team_content(session_info: Any) -> str:
     profile holds a seat on, rendered from the sidecar (the team store lives in plus.db).
 
     Empty when the sidecar is not running, when the profile sits on no team, or on any malformed
-    reply — a missing team section must never break a session start.
+    reply — a missing team section must never break a session start. The whole lookup is bounded by
+    ``_PROMPT_TEAM_BUDGET`` so a wedged sidecar cannot stall the first model call.
     """
+    deadline = time.monotonic() + _PROMPT_TEAM_BUDGET
     plus_home = paths.plus_home(None)
     profile = _profile_name(_home())
     listing = sidecar.call(plus_home, "bots_team.list", {}, timeout=_PROMPT_RPC_TIMEOUT)
@@ -109,8 +113,11 @@ def _team_content(session_info: Any) -> str:
         team_id = summary.get("id") if isinstance(summary, dict) else None
         if not isinstance(team_id, str) or not team_id:
             continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         brief = sidecar.call(plus_home, "bots_team.brief", {"team_id": team_id, "member": profile},
-                             timeout=_PROMPT_RPC_TIMEOUT)
+                             timeout=min(_PROMPT_RPC_TIMEOUT, remaining))
         text = brief.get("brief") if isinstance(brief, dict) else None
         if isinstance(text, str) and text.strip():
             blocks.append(text.strip())
