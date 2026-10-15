@@ -1,4 +1,10 @@
 from hermes_plus.store.approvals import ApprovalJournal
+from hermes_plus.store.bridge_records import (
+    BrowserThumbnails,
+    DelegationReports,
+    SpoolOffsets,
+    ToolCalls,
+)
 from hermes_plus.store.db import DB_FILENAME, SchemaTooNewError, Store, open_store
 from hermes_plus.store.identity import BotIdentities, RevisionConflictError
 from hermes_plus.store.importer import import_fork_data
@@ -13,6 +19,8 @@ __all__ = [
     "DB_FILENAME",
     "ApprovalJournal",
     "BotIdentities",
+    "BrowserThumbnails",
+    "DelegationReports",
     "Mailbox",
     "MailboxNotFound",
     "MailboxTransitionError",
@@ -23,10 +31,12 @@ __all__ = [
     "RoutineMetas",
     "SchemaTooNewError",
     "SetupProfiles",
+    "SpoolOffsets",
     "Store",
     "TeamError",
     "TeamNotFound",
     "TeamStore",
+    "ToolCalls",
     "import_fork_data",
     "open_store",
 ]

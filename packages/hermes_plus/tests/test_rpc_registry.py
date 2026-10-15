@@ -24,6 +24,9 @@ SURFACE = sorted([
     "bots_team.learning.add", "bots_team.learning.remove", "bots_team.brief", "bots_team.pack.export",
     "bots_team.pack.import", "bots_team.audit.list",
     "bots_mailbox.list", "bots_mailbox.send", "bots_mailbox.update",
+    "delegation.reports",
+    "fork.browser.snapshot", "fork.browser.thumbnail",
+    "fork.computer.timeline",
 ])
 
 

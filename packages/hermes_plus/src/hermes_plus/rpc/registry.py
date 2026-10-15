@@ -23,11 +23,12 @@ log = logging.getLogger(__name__)
 
 NAMESPACES = (
     "fork.bot.identity", "fork.memory", "fork.onboarding", "fork.approvals", "fork.routines",
+    "fork.browser", "fork.computer",
     "bots_team", "bots_mailbox",
 )
 # Upstream owns these namespaces; plus may add individual methods there, but the
 # multiplexer must keep routing every other name in them to the stock gateway.
-SHARED_NAMESPACES = ("session",)
+SHARED_NAMESPACES = ("session", "delegation")
 
 Handler = Callable[[RpcContext, dict[str, Any]], Any]
 _handlers: dict[str, Handler] = {}
