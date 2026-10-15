@@ -1,0 +1,7 @@
+{
+  "adapter_api": 1,
+  "min": "0.22.0",
+  "known_good": ["0.22.0", "0.22.1"],
+  "tested_main": "379cf122",
+  "max_minor": "0.22"
+}
