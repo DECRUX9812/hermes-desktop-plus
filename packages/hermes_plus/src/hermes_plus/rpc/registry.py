@@ -49,6 +49,11 @@ def methods() -> tuple[str, ...]:
     return tuple(sorted(_handlers))
 
 
+def owns(name: str) -> bool:
+    """Whether the plus gateway claims this method name or namespace."""
+    return name in _handlers or any(name.startswith(f"{namespace}.") for namespace in NAMESPACES)
+
+
 def _reply(rid: Any, *, result: Any = None, fault: RpcFault | None = None) -> str:
     body: dict[str, Any] = {"jsonrpc": "2.0", "id": rid}
     if fault is not None:
@@ -93,6 +98,12 @@ async def _dispatch(ctx: RpcContext, message: Any) -> str | None:
     else:
         return None if notification else _reply(rid, result=result)
     return None if notification else _reply(rid, fault=failure)
+
+
+async def dispatch(ctx: RpcContext, request: dict[str, Any]) -> dict[str, Any] | None:
+    """Dispatch one parsed JSON-RPC request and return its response object."""
+    serialized = await _dispatch(ctx, request)
+    return json.loads(serialized) if serialized is not None else None
 
 
 async def handle_text(ctx: RpcContext, text: str) -> str | None:

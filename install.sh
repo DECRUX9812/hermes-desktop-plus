@@ -87,6 +87,9 @@ fi
 
 # Step 3: Run hermes-plus install
 INSTALL_CMD="$HP_BIN install"
+if [ "${HERMES_PLUS_FORCE:-0}" = "1" ]; then
+    INSTALL_CMD="$INSTALL_CMD --force"
+fi
 if [ -n "$HERMES_PLUS_PROFILE" ]; then
     INSTALL_CMD="$INSTALL_CMD --profile $HERMES_PLUS_PROFILE"
 fi

@@ -111,11 +111,14 @@ def cmd_install(args: argparse.Namespace) -> int:
     compat_status = getattr(compat, "status", "untested")
     compat_msg = getattr(compat, "message", "")
 
+    force = getattr(args, "force", False) or os.environ.get("HERMES_PLUS_FORCE") == "1"
     if compat_status == "unsupported":
-        sys.stderr.write(
-            f"Unsupported Hermes version: {compat_msg or 'Version not supported'}\n"
-        )
-        return 3
+        if not force:
+            sys.stderr.write(
+                f"Unsupported Hermes version: {compat_msg or 'Version not supported'}\n"
+            )
+            return 3
+        print(f"Warning: Hermes version is unsupported ({compat_msg}), proceeding due to --force")
     elif compat_status == "untested":
         print(f"Warning: Hermes version is untested ({compat_msg})")
 
@@ -707,6 +710,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--import-fork-data",
         action="store_true",
         help="Import historical data from fork install",
+    )
+    p_install.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Bypass compatibility check on unsupported Hermes version",
     )
     p_install.set_defaults(func=cmd_install)
 

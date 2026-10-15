@@ -106,6 +106,14 @@ def _python_from_launcher(hermes_bin: str) -> str | None:
             return None
         candidate = Path(executable).expanduser()
         return str(candidate.resolve()) if candidate.is_file() else None
+
+    # Sibling executable in the same bin/ directory (e.g. virtualenvs, polyglot scripts)
+    bin_parent = path.resolve().parent
+    for py_candidate in ("python", "python3"):
+        py_path = bin_parent / py_candidate
+        if py_path.is_file() and os.access(py_path, os.X_OK):
+            return str(py_path.resolve())
+
     return None
 
 
@@ -118,6 +126,7 @@ def detect(hermes_bin: str | None = None) -> HermesInstall:
         )
 
     env = os.environ.copy()
+    env.pop("HERMES_HOME", None)
     try:
         result = subprocess.run(
             [binary, "--version"],
