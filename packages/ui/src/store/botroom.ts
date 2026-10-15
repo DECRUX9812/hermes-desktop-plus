@@ -130,7 +130,11 @@ async function refreshBots(): Promise<void> {
     const res = await requestGatewayForProfile<{ profiles: ProfileRow[] }>(
       activeGatewayProfileKey(),
       'profiles.list',
-      { include_hidden: true },
+      // `profiles.list` has no hidden-row concept — it lists every profile
+      // (`hermes_cli.profiles.list_profiles`) — and the wire contract forbids
+      // unknown params, so an `include_hidden` here is rejected with 4000 and
+      // the roster never fills.
+      {},
     )
 
     const next = new Map<string, BotRoomBot>()
@@ -147,7 +151,9 @@ async function refreshBots(): Promise<void> {
       next.set(id, {
         id,
         name: p.name,
-        displayName: p.display_name ?? p.name,
+        // `profiles.list` sends "" for a profile that has no display name, so
+        // the fallback has to be on emptiness, not on nullishness.
+        displayName: p.display_name?.trim() || p.name,
         status,
         statusLine: p.last_active,
         color: (p.ui_meta?.color as string) ?? undefined,

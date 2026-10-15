@@ -100,7 +100,11 @@ export function createBrowserBotRoomBridge(): Window['hermesDesktop']['botroom']
     name: BOT_ROOM_CHANNEL,
     stateGuards: BOT_ROOM_STATE_GUARDS
   })
-  const overlay = createBrowserPopupWindow({ name: 'hermes-botroom', size: { height: 900, width: 1440 }, win: 'botroom' })
+  const overlay = createBrowserPopupWindow({
+    name: 'hermes-botroom',
+    size: { height: 900, width: 1440 },
+    win: 'botroom'
+  })
 
   return {
     close: overlay.close,
@@ -116,7 +120,9 @@ export function createBrowserBotRoomBridge(): Window['hermesDesktop']['botroom']
   }
 }
 
-const isAnchor = fields({ kind: isText, label: isText, rect: fields({ height: isNumber, width: isNumber, x: isNumber, y: isNumber }) })
+const isRect = fields({ height: isNumber, width: isNumber, x: isNumber, y: isNumber })
+
+const isAnchor = fields({ kind: isText, label: isText, rect: isRect })
 
 const isNotifyAction = fields({ id: isText, label: isText })
 
@@ -125,7 +131,7 @@ const isNotifyRequest = fields(
   ['action', 'source']
 )
 
-const isRects = (value: unknown): boolean => Array.isArray(value) && value.every(fields({ height: isNumber, width: isNumber, x: isNumber, y: isNumber }))
+const isRects = (value: unknown): boolean => Array.isArray(value) && value.every(isRect)
 
 const PANE3D_STATE_GUARDS = {
   'anchor': fields({ anchor: isAnchor }),
@@ -191,7 +197,11 @@ export function createBrowserPane3dBridge(): Window['hermesDesktop']['pane3d'] {
     name: PANE3D_CHANNEL,
     stateGuards: PANE3D_STATE_GUARDS
   })
-  const pane = createBrowserPopupWindow({ name: 'hermes-pane3d', size: { height: 900, width: 1440 }, win: 'pane3d' })
+  const pane = createBrowserPopupWindow({
+    name: 'hermes-pane3d',
+    size: { height: 900, width: 1440 },
+    win: 'pane3d'
+  })
   const controlListeners = new Set<(control: PaneControl) => void>()
   let pending: PaneState[] = []
   let ready = false

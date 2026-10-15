@@ -476,38 +476,57 @@ try {
     const BOT_PROFILE = 'proof-bot'
     await check('the Bot Room overlay opens from the roster toolbar and paints the team bot', async () => {
       // A bot IS a Hermes profile. `no_alias` keeps the create from dropping a
-      // launcher wrapper outside this proof's temp home.
-      const created = await rpc(page, 'profiles.create', {
-        clone_from: 'default',
-        description: 'Proof bot for the Bot Room overlay',
-        name: BOT_PROFILE,
-        no_alias: true,
-        no_skills: true,
-      })
-      if (created?.ok !== true) {
-        throw new Error(`profiles.create answered ${JSON.stringify(created).slice(0, 200)}`)
+      // launcher wrapper outside this proof's temp home. Re-runnable: a profile
+      // left by an earlier run in a kept temp home is reused, not re-created.
+      const listed = await rpc(page, 'profiles.list', {})
+      const already = (listed?.profiles ?? []).some(p => p.name === BOT_PROFILE)
+      if (!already) {
+        const created = await rpc(page, 'profiles.create', {
+          clone_from: 'default',
+          description: 'Proof bot for the Bot Room overlay',
+          name: BOT_PROFILE,
+          no_alias: true,
+        })
+        if (created?.ok !== true) {
+          throw new Error(`profiles.create answered ${JSON.stringify(created).slice(0, 200)}`)
+        }
       }
+      // Seat the bot on the team. The seat's own `profile` field is not used
+      // here: the sidecar reads `params.profile` as the profile-store selector
+      // (server/multiplexer.py `_dispatch_local`), so a seat carrying a *named*
+      // profile is answered by that bot's own plus.db, which holds no team
+      // ("no team 'team_…'"). The seat is named by its title instead.
       const added = await rpc(page, 'bots_team.member.upsert', {
-        profile: BOT_PROFILE,
         role: 'proofer',
         team_id: teamId,
+        title: BOT_PROFILE,
       })
-      if (added?.member?.profile !== BOT_PROFILE) {
+      if (added?.member?.title !== BOT_PROFILE) {
         throw new Error(`bots_team.member.upsert answered ${JSON.stringify(added).slice(0, 200)}`)
       }
 
-      // Reach the roster toolbar the way a user does: the command palette
-      // opens the Bots pane, whose toolbar owns the Bot Room button.
-      await page.keyboard.press('Control+k')
-      await page.waitForTimeout(1200)
-      await page.keyboard.type('Bots')
-      await page.waitForTimeout(1200)
-      await page.keyboard.press('Enter')
+      // Reach the roster toolbar the way a user does: the icon rail's Bots
+      // panel button shows the sidebar pane whose toolbar owns the Bot Room
+      // button. The rail entry is data-addressed (`data-rail-entry`) so the
+      // proof does not depend on localized tooltip text.
+      const railBots = page.locator('button[data-rail-entry="hermes-bots:pane"]').first()
+      await railBots.waitFor({ state: 'visible', timeout: 60000 })
       const button = page.getByRole('button', { name: 'Bot Room on desktop' }).first()
-      await button.waitFor({ state: 'visible', timeout: 60000 })
+      await railBots.click()
+      try {
+        await button.waitFor({ state: 'visible', timeout: 15000 })
+      } catch {
+        // The panel was already showing and the click folded it away; press again.
+        await railBots.click()
+        await button.waitFor({ state: 'visible', timeout: 60000 })
+      }
 
+      // `page.waitForEvent('popup')` (not the context-level twin) is the
+      // reliable signal for a `window.open` popup: the context event does not
+      // resolve for this same-origin popup even though the page lands in the
+      // context.
       const [overlay] = await Promise.all([
-        context.waitForEvent('popup', { timeout: 60000 }),
+        page.waitForEvent('popup', { timeout: 60000 }),
         button.click(),
       ])
       await overlay.waitForLoadState('domcontentloaded')
@@ -538,6 +557,20 @@ try {
       if (deck < 1) {throw new Error('the overlay deck listed no bot')}
       if (canvases !== 1) {throw new Error(`the overlay stage canvas is missing (${canvases} found)`)}
       return `popup ${overlay.url()} painted mascot "${painted}" with ${deck} deck chip(s) and 1 stage canvas`
+    })
+
+    // The `&demo=1` film/visual path replaces the bridge with a canned roster;
+    // it must keep working now that the browser host has a real one.
+    await check('the Bot Room demo path still paints its canned roster', async () => {
+      const demo = await context.newPage()
+      await demo.goto(`${BASE}/?win=botroom&demo=1`, { waitUntil: 'domcontentloaded' })
+      const muse = demo.locator('.hr-hit[data-bot-id="profile:muse"]')
+      await muse.waitFor({ state: 'attached', timeout: 60000 })
+      const label = (await muse.locator('.hr-name').innerText()).trim()
+      const deck = await demo.locator('.hr-deck-chip').count()
+      await demo.close()
+      if (label !== 'Muse') {throw new Error(`the demo overlay labelled its first mascot "${label}", expected Muse`)}
+      return `demo overlay painted "${label}" with ${deck} deck chip(s)`
     })
   }
 
