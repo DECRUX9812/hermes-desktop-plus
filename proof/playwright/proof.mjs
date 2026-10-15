@@ -20,10 +20,13 @@ import { join } from 'node:path'
 import { chromium } from 'playwright-core'
 
 const VIEWPORT = { width: 1440, height: 900 }
-// Session rows in the chat sidebar (`data-sidebar-row` is the rail's row
-// attribute, shared by session, bot and cron rows). Titles are the first user
-// message, which is what step (d) asserts after a reload.
-const SESSION_ROW_SELECTOR = '[data-sidebar-row]'
+// Session rows in the chat sidebar. Session rows carry no `data-*` hook, so
+// this is the class pair the app's own sidebar tests use
+// (`session-row.tsx` renders `SidebarRowShell className="group row-hover ..."`
+// and `chat-sidebar.integration.test.tsx` resolves rows with
+// `closest('.group.row-hover')`). Titles are the model's short session title,
+// which is what step (d) matches after a reload.
+const SESSION_ROW_SELECTOR = '.group.row-hover'
 
 function parseArgs(argv) {
   const out = {}
@@ -77,15 +80,39 @@ async function shot(page, name) {
   return target
 }
 
-/** RPC through a WebSocket built in the page from the sidecar's own origin and token. */
+/**
+ * RPC through a WebSocket built in the page, credentialed exactly the way the
+ * app itself does it (packages/ui/src/lib/browser-transport.ts): an ungated
+ * page sends its injected `?token=`, a cookie-authenticated page first mints a
+ * one-use ticket from `POST /api/auth/ws-ticket` and sends `?ticket=`.
+ */
 const RPC_HELPER = `
-window.__proofRpc = (method, params) => new Promise((resolve, reject) => {
+window.__proofRpc = (method, params) => new Promise(async (resolve, reject) => {
   const token = window.__HERMES_SESSION_TOKEN__ || ''
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-  const socket = new WebSocket(scheme + '://' + location.host + '/api/ws?token=' + encodeURIComponent(token))
+  let query = 'token=' + encodeURIComponent(token)
+  let credential = token ? 'session token' : ''
+  if (!token) {
+    try {
+      const response = await fetch('/api/auth/ws-ticket', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { accept: 'application/json' },
+      })
+      if (!response.ok) { reject(new Error('ws-ticket HTTP ' + response.status)); return }
+      const body = await response.json()
+      if (!body || !body.ticket) { reject(new Error('ws-ticket returned no ticket')); return }
+      query = 'ticket=' + encodeURIComponent(body.ticket)
+      credential = 'ticket (ttl ' + body.ttl_seconds + 's)'
+    } catch (error) {
+      reject(new Error('ws-ticket request failed: ' + error))
+      return
+    }
+  }
+  const socket = new WebSocket(scheme + '://' + location.host + '/api/ws?' + query)
   const id = Math.floor(Math.random() * 1e9)
   const timer = setTimeout(() => { try { socket.close() } catch {} ; reject(new Error('rpc timeout: ' + method)) }, 60000)
-  socket.onerror = () => { clearTimeout(timer); reject(new Error('rpc socket error: ' + method)) }
+  socket.onerror = () => { clearTimeout(timer); reject(new Error('rpc socket error: ' + method + ' via ' + credential)) }
   socket.onopen = () => socket.send(JSON.stringify({ jsonrpc: '2.0', id, method, params: params || {} }))
   socket.onmessage = event => {
     let frame
@@ -155,32 +182,26 @@ async function bodyText(page) {
   return (await page.evaluate(() => document.body.innerText || '')).replace(/\s+\n/g, '\n')
 }
 
-/** Describe the DOM around a session title so the rail selector can be verified. */
-async function describeTitleNodes(page, title) {
-  return await page.evaluate(value => {
-    const describe = node => {
-      const chain = []
-      let current = node
-      for (let depth = 0; current && depth < 5; depth += 1) {
-        chain.push(
-          current.tagName.toLowerCase()
-          + (current.getAttribute('role') ? `[role=${current.getAttribute('role')}]` : '')
-          + (current.dataset && Object.keys(current.dataset).length
-            ? `{data:${Object.keys(current.dataset).join(',')}}`
-            : '')
-          + (current.className && typeof current.className === 'string'
-            ? `.${current.className.split(/\s+/).slice(0, 4).join('.')}`
-            : ''),
-        )
-        current = current.parentElement
-      }
-      return chain.join(' < ')
-    }
-    return [...document.querySelectorAll('body *')]
-      .filter(node => node.children.length === 0 && (node.textContent || '').trim() === value)
-      .slice(0, 4)
-      .map(node => ({ text: node.textContent.trim(), outer: node.parentElement?.outerHTML.slice(0, 400), chain: describe(node) }))
-  }, title)
+/** Wait until the rail paints at least `min` rows (it hydrates after a reload). */
+async function waitForRailRows(page, min, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const count = await page.locator(SESSION_ROW_SELECTOR).count()
+    if (count >= min) {return count}
+    await page.waitForTimeout(1000)
+  }
+  return await page.locator(SESSION_ROW_SELECTOR).count()
+}
+
+/** Wait until a rail row carries `title` (the rail hydrates after a reload). */
+async function waitForRailTitle(page, title, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const titles = await sessionRailTitles(page)
+    if (titles.some(text => text.includes(title))) {return titles}
+    await page.waitForTimeout(1000)
+  }
+  return await sessionRailTitles(page)
 }
 
 /** Session rows live in the left rail; find them by title text and click one. */
@@ -265,15 +286,31 @@ try {
     labelled: await page.$$eval('[aria-label], [title]', nodes =>
       nodes.map(node => (node.getAttribute('aria-label') || node.getAttribute('title') || '').trim())
         .filter(Boolean).slice(0, 120)),
-    railRows: await page.$$eval(SESSION_ROW_SELECTOR, nodes =>
+    sessionRows: await page.$$eval(SESSION_ROW_SELECTOR, nodes =>
       nodes.slice(0, 6).map(node => node.outerHTML.slice(0, 600))),
   }
-  await check('app boots into the chat UI', () => {
+  await check('app boots into the chat UI', async () => {
+    const bridge = await page.evaluate(() => ({
+      desktop: typeof window.hermesDesktop,
+      surface: document.documentElement.getAttribute('data-hermes-desktop-host'),
+      bootstrap: typeof window.__HERMES_PLUS__,
+      authRequired: window.__HERMES_AUTH_REQUIRED__,
+    }))
+    diagnostics.bridge = bridge
     const fatal = /desktop boot failed|uncaught|application error/i
     if (consoleErrors.some(text => fatal.test(text))) {
       throw new Error(`boot error in console: ${consoleErrors.join(' | ')}`)
     }
-    return 'composer rendered, no boot-failure text'
+    if (bridge.desktop !== 'object') {
+      throw new Error(`the browser bridge did not install: window.hermesDesktop is ${bridge.desktop}`)
+    }
+    const text = await bodyText(page)
+    if (/failed to render|Hermes couldn't start/i.test(text)) {
+      throw new Error(`a surface fell back to its error boundary: ${text.replace(/\n/g, ' / ').slice(0, 300)}`)
+    }
+    const loop = consoleErrors.find(item => /Maximum update depth/i.test(item))
+    if (loop) {throw new Error(`render loop in the console: ${loop}`)}
+    return `bridge ${bridge.desktop}, host ${bridge.surface}, authRequired ${bridge.authRequired}, no render loop`
   })
 
   // ── 3. A real chat turn ──────────────────────────────────────────────────
@@ -295,44 +332,49 @@ try {
   }
   diagnostics.assistantTexts = await assistantTexts(page)
 
-  // ── 4. Tool cards (only when the turn used tools) ────────────────────────
-  const toolSlots = ['aui_tool-card', 'aui_tool_call', 'tool-card', 'aui_tool']
-  const foundToolSlot = await page.evaluate(slots => {
-    for (const slot of slots) {
-      const node = document.querySelector(`[data-slot="${slot}"]`)
-      if (node) {return slot}
-    }
-    const byText = [...document.querySelectorAll('button, [role="button"]')]
-      .find(node => /tool|bash|read file/i.test(node.getAttribute('aria-label') || ''))
-    return byText ? 'button:' + (byText.getAttribute('aria-label') || '') : null
-  }, toolSlots)
-  if (foundToolSlot && foundToolSlot !== 'button:') {
+  // ── 4. Tool cards (only when the turn actually used a tool) ──────────────
+  // The card slots are the UI's own (`tool-activity-stack` for a run of tool
+  // calls, `tool-block` for a single one). Nothing else counts: a "More tools"
+  // chrome button is not a tool card, and reporting one as such would be a
+  // false pass.
+  const TOOL_CARD_SELECTOR = '[data-slot="tool-activity-stack"], [data-slot="tool-block"]'
+  const toolCardText = await page.evaluate(selector => {
+    const node = document.querySelector(selector)
+    return node ? (node.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200) : ''
+  }, TOOL_CARD_SELECTOR)
+  if (toolCardText) {
     await shot(page, '02-tool-card')
-    await check('tool card rendered', () => `found ${foundToolSlot}`)
+    await check('tool card rendered', () => `card text: ${toolCardText}`)
   } else {
-    await blocked('tool card rendered', 'the turn used no tools, so no card was produced')
+    await blocked('tool card rendered', 'the proof turn used no tools, so the transcript holds no tool card')
   }
 
   // ── 5. Sessions survive a reload ─────────────────────────────────────────
   const SECOND_PROMPT = 'Second session: reply with exactly session two ok'
   const SECOND_TITLE = 'Second session'
   const NEW_SESSION_LABELS = ['New session', 'New chat', 'New session tab']
+  const sessionCount = value => {
+    if (!value || value.error) {return -1}
+    if (Array.isArray(value.sessions)) {return value.sessions.length}
+    return Array.isArray(value) ? value.length : -1
+  }
+  const sessionsBefore = sessionCount(
+    await rpc(page, 'session.list', { limit: 50 }).catch(error => ({ error: String(error) })),
+  )
+  diagnostics.sessionsBeforeSecond = sessionsBefore
   await check('start a second session from the UI', async () => {
-    const opened = await page.evaluate(async () => {
-      const view = document.querySelector('[data-slot="aui_thread-viewport"]')
-      return Boolean(view)
-    })
-    if (!opened) {throw new Error('thread viewport missing before starting a session')}
     for (const label of NEW_SESSION_LABELS) {
       const button = page.getByRole('button', { name: label, exact: false }).first()
       if (await button.count()) {
         await button.click()
-        return `clicked "${label}"`
+        await composer(page)
+        return `clicked "${label}" (${sessionsBefore} session(s) before)`
       }
     }
-    await page.goto(BASE + '/#/', { waitUntil: 'domcontentloaded' })
-    await composer(page)
-    return 'no new-session button; navigated to the new-chat route'
+    throw new Error(
+      `no new-session affordance among ${NEW_SESSION_LABELS.join(', ')}; rail: `
+      + JSON.stringify(await sessionRailTitles(page)).slice(0, 200),
+    )
   })
 
   await composer(page)
@@ -341,72 +383,112 @@ try {
   try {
     await waitForAssistant(page, 'session two ok', 240000)
     await waitForSettled(page)
+    await shot(page, '03-second-session')
+    await check('second session reply', async () => {
+      const texts = await assistantTexts(page)
+      const hit = texts.find(text => text.toLowerCase().includes('session two ok'))
+      return `assistant said "${hit}"`
+    })
   } catch (error) {
+    await shot(page, '03-second-session')
     await blocked('second session reply', `no reply: ${error.message}`)
   }
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await composer(page)
-  await page.waitForTimeout(4000)
-  await page.evaluate(() => {
-    window.__proofRpc = window.__proofRpc || null
-  })
   await page.evaluate(RPC_HELPER)
+  await waitForRailRows(page, 1)
   const sessions = await rpc(page, 'session.list', { limit: 50 }).catch(error => ({ error: String(error) }))
   diagnostics.sessions = sessions
-  diagnostics.titleNodes = await describeTitleNodes(page, FIRST_PROMPT)
-  diagnostics.secondTitleNodes = await describeTitleNodes(page, SECOND_TITLE)
-  const railTitles = await sessionRailTitles(page)
+  const sessionRows = Array.isArray(sessions?.sessions) ? sessions.sessions : []
+  const sessionTitles = sessionRows.map(session => session.title || session.name || '')
+  // The rail titles a session from its first user message, so the first
+  // session's rail label is the model's short title, not the prompt.
+  const firstTitle = sessionTitles.find(title => !title.includes(SECOND_TITLE)) || FIRST_PROMPT
+  const secondTitle = sessionTitles.find(title => title.includes(SECOND_TITLE)) || SECOND_TITLE
+  diagnostics.sessionTitlesAfterReload = sessionTitles
+  diagnostics.firstTitle = firstTitle
+  diagnostics.secondTitle = secondTitle
+  const railTitles = await waitForRailTitle(page, secondTitle.slice(0, 10))
+  const railRowCount = await page.locator(SESSION_ROW_SELECTOR).count()
   diagnostics.railTitles = railTitles
+  diagnostics.railRowCount = railRowCount
   await shot(page, '03-sessions')
 
   await check('both sessions are listed after a reload', async () => {
-    if (!railTitles.some(title => title.includes(FIRST_PROMPT.slice(0, 20)))) {
-      throw new Error(`first session missing from the rail: ${JSON.stringify(railTitles).slice(0, 300)}`)
+    const after = sessionCount(sessions)
+    if (after < 0) {
+      throw new Error(`session.list failed: ${JSON.stringify(sessions).slice(0, 200)}`)
     }
-    if (!railTitles.some(title => title.includes(SECOND_TITLE))) {
-      throw new Error(`second session missing from the rail: ${JSON.stringify(railTitles).slice(0, 300)}`)
+    if (after < sessionsBefore + 1 && sessionsBefore >= 0) {
+      throw new Error(`session.list has ${after} sessions, expected more than the ${sessionsBefore} before the second one`)
     }
-    return `${railTitles.length} rows: ${railTitles.join(' | ').slice(0, 200)}`
+    if (!sessionTitles.some(title => title.includes(SECOND_TITLE))) {
+      throw new Error(`second session missing from session.list: ${JSON.stringify(sessionTitles).slice(0, 200)}`)
+    }
+    if (railRowCount < 2) {
+      throw new Error(`the rail painted ${railRowCount} session rows, expected both sessions: ${JSON.stringify(railTitles).slice(0, 200)}`)
+    }
+    if (!railTitles.some(title => title.includes(secondTitle.slice(0, 10)))) {
+      throw new Error(`second session missing from the rail: ${JSON.stringify(railTitles).slice(0, 200)}`)
+    }
+    return `${after} sessions via session.list (${sessionTitles.join(' | ')}), ${railRowCount} rail rows`
   })
 
   await check('the first session still holds its messages after a reload', async () => {
-    const clicked = await clickSessionByTitle(page, FIRST_PROMPT.slice(0, 20))
-    if (!clicked) {throw new Error('could not click the first session row')}
-    await waitForAssistant(page, FIRST_REPLY, 60000)
-    await page.waitForTimeout(1200)
+    const clicked = await clickSessionByTitle(page, firstTitle.slice(0, 12))
+    if (!clicked) {
+      throw new Error(`could not click the first session row "${firstTitle}": ${JSON.stringify(railTitles).slice(0, 200)}`)
+    }
+    await waitForAssistant(page, FIRST_REPLY, 120000)
+    await waitForSettled(page)
     await shot(page, '03-sessions')
     const texts = await assistantTexts(page)
     if (!texts.some(text => text.toLowerCase().includes(FIRST_REPLY))) {
       throw new Error(`reopened session shows: ${JSON.stringify(texts).slice(0, 300)}`)
     }
-    return 'reopened the first session and its reply is on screen'
+    return `reopened "${firstTitle}" and its reply is on screen`
   })
 
   // ── 6. Bot team ──────────────────────────────────────────────────────────
   const TEAM_NAME = 'Proof Team'
   let teamId = null
   await check('create a bot team over the app transport', async () => {
-    const team = await rpc(page, 'bots_team.create', {
+    // `bots_team.create` answers with the team view (`{team: {...}}`), not the
+    // bare row.
+    const created = await rpc(page, 'bots_team.create', {
       name: TEAM_NAME,
       mission: 'Prove the group chat surface on stock Hermes.',
       lead_decides: true,
     })
-    teamId = team && team.id ? team.id : null
-    if (!teamId) {throw new Error(`bots_team.create returned ${JSON.stringify(team).slice(0, 200)}`)}
+    teamId = created?.team?.id ?? created?.id ?? null
+    if (!teamId) {throw new Error(`bots_team.create returned ${JSON.stringify(created).slice(0, 200)}`)}
     return `team ${teamId}`
   })
 
   {
+    // The Bot Room is a transparent always-on-top native window whose state is
+    // pushed over Electron IPC by the main renderer. The browser host stubs the
+    // bridge member (`lib/browser-bridge-stubs.ts`: `botroom.open` -> `{ok:false}`),
+    // so ask the app's own bridge rather than guessing from the empty overlay.
+    const openResult = await page.evaluate(async () => {
+      try {
+        return await window.hermesDesktop.botroom.open()
+      } catch (error) {
+        return { threw: String(error) }
+      }
+    })
     await page.goto(`${BASE}/?win=botroom`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(6000)
     await shot(page, '04-botroom-window')
     const text = (await bodyText(page)).trim()
     diagnostics.botRoomWindow = text.slice(0, 1000)
-    // The Bot Room is an Electron-only always-on-top overlay whose state is
-    // pushed over IPC by the main renderer; the browser host has no IPC, so an
-    // empty stage here is an Electron-only surface, not a broken add-on.
-    if (!text) {
+    diagnostics.botRoomOpen = openResult
+    if (/authentication required/i.test(text)) {
+      record('bot room overlay window', 'broken', `the overlay route answered with the auth gate: ${text.slice(0, 120)}`)
+    } else if (openResult && openResult.ok === false) {
+      await blocked('bot room overlay window', `Electron-only: window.hermesDesktop.botroom.open() answers ${JSON.stringify(openResult)} in the browser host, and the ?win=botroom tab paints nothing because its roster/room state arrives over IPC`)
+    } else if (!text) {
       await blocked('bot room overlay window', 'the ?win=botroom overlay paints nothing in a browser tab: its roster/room state arrives over Electron IPC from the main renderer')
     } else {
       record('bot room overlay window', 'pass', `text: ${text.slice(0, 120).replace(/\n/g, ' / ')}`)
@@ -450,9 +532,18 @@ try {
     if (read.display_name !== 'Demo Bot' || read.role !== 'proofer') {
       throw new Error(`identity did not round-trip: ${JSON.stringify(read).slice(0, 200)}`)
     }
-    await page.goto(BASE + '/#/roster', { waitUntil: 'domcontentloaded' })
+    // The bot pane is the plugin pane registered as `hermes-bots:pane`; its
+    // command-palette row is labelled "Bots" and opens it (the `/roster` route
+    // is the fleet-run roster, a different surface).
+    await page.keyboard.press('Control+k')
+    await page.waitForTimeout(1200)
+    await page.keyboard.type('Bots')
+    await page.waitForTimeout(1200)
+    await shot(page, '05-bot-palette')
+    await page.keyboard.press('Enter')
     await page.waitForTimeout(4000)
     await shot(page, '05-bot')
+    diagnostics.botPane = (await bodyText(page)).slice(0, 1500)
     await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' })
     await composer(page)
     await page.evaluate(RPC_HELPER)

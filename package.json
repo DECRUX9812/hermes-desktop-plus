@@ -9,6 +9,9 @@
     "@nous-research/ui": "0.18.2",
     "three": "0.180.0"
   },
+  "overrides": {
+    "@assistant-ui/tap": "0.9.8"
+  },
   "scripts": {
     "build:webapp": "npm --workspace @hermes/ui run build:webapp"
   }

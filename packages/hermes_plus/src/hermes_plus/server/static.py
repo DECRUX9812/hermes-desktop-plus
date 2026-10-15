@@ -17,16 +17,17 @@ _IMMUTABLE = "public, max-age=31536000, immutable"
 _NO_CACHE = "no-cache"
 # Vite-style content hashes: ``assets/index-B3k2x9Qz.js``.
 _HASHED_ASSET = re.compile(r"-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]{1,8}$")
+# Dev fallback: a local packages/ui build next to the Python package. Module
+# level so a test can point it away from a checkout that has been built.
+_DEV_UI_DIR = Path(__file__).resolve().parents[3].parent / "ui" / "dist-webapp"
 
 
 def _ui_root(settings: Any) -> Path | None:
     root = Path(settings.ui_dir)
     if (root / "index.html").is_file():
         return root
-    # Dev fallback: a local packages/ui build next to the Python package.
-    dev = Path(__file__).resolve().parents[3].parent / "ui" / "dist-webapp"
-    if (dev / "index.html").is_file():
-        return dev
+    if (_DEV_UI_DIR / "index.html").is_file():
+        return _DEV_UI_DIR
     return root if root.is_dir() else None
 
 

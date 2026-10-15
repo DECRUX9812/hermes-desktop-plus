@@ -12,12 +12,22 @@
 # Usage:
 #   proof/run-proof.sh                 # full run
 #   KEEP_TMP=1 proof/run-proof.sh      # keep the temp home and logs for debugging
+#   flock /tmp/hermes-build.lock env HERMES_PLUS_PROOF_LOCK=none proof/run-proof.sh
+#                                      # one lock hold for the whole proof (the
+#                                      # inner heavy steps then run unlocked)
 #
 # Environment:
 #   HERMES_PLUS_PROOF_HERMES  stock hermes binary (default ~/Code/ship-test/venv/bin/hermes)
 #   HERMES_PLUS_PROOF_CHROME  chromium binary (default: newest ~/.cache/ms-playwright chromium)
-#   SHOTS_DIR                 screenshot output (default ~/Videos/ship-shots)
+#   HERMES_PLUS_PROOF_MODEL   cliproxy model id (default gemini-3.8-flash-high; see below)
+#   HERMES_PLUS_PROOF_LOCK    lock file (default /tmp/hermes-build.lock; "none" = already held)
 #   HERMES_PLUS_PROOF_PORT    sidecar port (default 9230)
+#   SHOTS_DIR                 screenshot output (default ~/Videos/ship-shots)
+#
+# The model id is whatever the local cliproxy actually serves. TASK.md names
+# `gemini-3.7-flash-high`, which this proxy rejects with
+# `HTTP 400 unknown provider for model ...`; `gemini-3.8-flash-high` is the id
+# `GET /v1/models` advertises and the one the proof turn uses.
 
 set -uo pipefail
 
@@ -138,19 +148,43 @@ fi
 sed -n '1,40p' "$LOG_DIR/install.log"
 
 say "configure the model provider in the temp home"
-cat >"$HOME_DIR/config.yaml" <<'YAML'
-providers:
-  cliproxy:
-    api: http://127.0.0.1:8317/v1
-    name: Local proxy
-    key_env: CLIPROXY_API_KEY
-    transport: chat_completions
-    context_length: 1048576
-    default_model: gemini-3.7-flash-high
-model:
-  provider: cliproxy
-  default: gemini-3.7-flash-high
-YAML
+# The model id is whatever the local cliproxy actually serves. TASK.md names
+# `gemini-3.7-flash-high`, which this proxy answers with
+# "HTTP 400 unknown provider for model ..." (see the S10 report); the id below
+# is the one `GET /v1/models` advertises and the one the proof turn uses.
+PROOF_MODEL=${HERMES_PLUS_PROOF_MODEL:-gemini-3.8-flash-high}
+# MERGE, never clobber: `hermes-plus install` has already written
+# `plugins.enabled` (and onboarding state) into this file, and a plain
+# overwrite silently disables the bridge plugin — doctor then reports
+# `bridge_plugin: warn` even though install succeeded.
+if heavy python3 - "$HOME_DIR/config.yaml" "$PROOF_MODEL" <<'PY' >"$LOG_DIR/config-merge.log" 2>&1
+import sys
+from pathlib import Path
+
+import yaml
+
+path = Path(sys.argv[1])
+model = sys.argv[2]
+config = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+config = config if isinstance(config, dict) else {}
+providers = config.setdefault("providers", {})
+providers["cliproxy"] = {
+    "api": "http://127.0.0.1:8317/v1",
+    "name": "Local proxy",
+    "key_env": "CLIPROXY_API_KEY",
+    "transport": "chat_completions",
+    "context_length": 1048576,
+    "default_model": model,
+}
+config["model"] = {"provider": "cliproxy", "default": model}
+path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+print(f"providers.cliproxy + model.default = {model}; plugins section kept: {'plugins' in config}")
+PY
+then
+  verdict "provider configured" 0 "$(tail -1 "$LOG_DIR/config-merge.log")"
+else
+  verdict "provider configured" 1 "$(tail -3 "$LOG_DIR/config-merge.log" | tr '\n' ' ')"
+fi
 if grep '^CLIPROXY_API_KEY=' "$HOME/.hermes/.env" >"$HOME_DIR/.env" 2>/dev/null && [ -s "$HOME_DIR/.env" ]; then
   chmod 600 "$HOME_DIR/.env"
   verdict "provider key copied" 0 "1 line into the temp .env (never printed)"
@@ -164,20 +198,23 @@ if heavy "$TOOL" doctor --json >"$LOG_DIR/doctor.json" 2>"$LOG_DIR/doctor.err"; 
 else
   doctor_rc=$?
 fi
-python3 - "$LOG_DIR/doctor.json" <<'PY' | tee -a "$RESULTS"
-import json, sys
-checks = json.load(open(sys.argv[1]))["checks"]
+# `doctor --json` prints the check list itself (a JSON array), not an envelope.
+if python3 - "$LOG_DIR/doctor.json" <<'PY' | tee -a "$RESULTS"
+import json
+import sys
+
+checks = json.load(open(sys.argv[1]))
 bad = [c for c in checks if c["status"] != "ok"]
-for c in checks:
-    print(f'{c["status"].upper():4} {c["name"]}: {c["message"]}')
-print(("PASS  doctor all-ok" if not bad else "BROKEN doctor: " + ", ".join(c["name"] for c in bad)))
-sys.exit(0)
+for check in checks:
+    print(f'{check["status"].upper():4} {check["name"]}: {check["message"]}')
+print("PASS  doctor all-ok" if not bad else "BROKEN doctor: " + ", ".join(c["name"] for c in bad))
+sys.exit(1 if bad else 0)
 PY
-python3 -c '
-import json,sys
-checks=json.load(open(sys.argv[1]))["checks"]
-sys.exit(1 if [c for c in checks if c["status"]!="ok"] else 0)' "$LOG_DIR/doctor.json"
-verdict "doctor all-ok" $? "exit code $doctor_rc, $(grep -c . "$LOG_DIR/doctor.json") bytes of JSON"
+then
+  verdict "doctor all-ok" 0 "exit code $doctor_rc, $(grep -c . "$LOG_DIR/doctor.json") bytes of JSON"
+else
+  verdict "doctor all-ok" 1 "exit code $doctor_rc, see the check list above"
+fi
 
 say "update --check"
 if heavy "$TOOL" update --check >"$LOG_DIR/update-check.log" 2>&1; then
@@ -236,14 +273,24 @@ if [ -n "${TOKEN:-}" ]; then
     -H "X-Hermes-Session-Token: $TOKEN" "http://127.0.0.1:$PORT/api/plus/info")
   cat "$WORK/plus-info.json" | tee -a "$RESULTS"
   echo
-  python3 -c '
-import json,sys
-body=json.load(open(sys.argv[1]))
+  if python3 - "$WORK/plus-info.json" <<'PY' | tee -a "$RESULTS"
+import json
+import sys
+
+body = json.load(open(sys.argv[1]))
 assert body.get("hermes_version") or body.get("hermes_commit"), body
-assert (body.get("compat") or {}).get("status") in ("supported","untested","unsupported"), body
-print(f"PASS  /api/plus/info :: hermes {body.get(\"hermes_version\")} @ {body.get(\"hermes_commit\")}, compat {body[\"compat\"][\"status\"]}")' \
-    "$WORK/plus-info.json" | tee -a "$RESULTS"
-  verdict "api plus info" "$?" "HTTP $http_code"
+compat = (body.get("compat") or {}).get("status")
+assert compat in ("supported", "untested", "unsupported"), body
+print(
+    f'PASS  /api/plus/info :: hermes {body.get("hermes_version")} @ {body.get("hermes_commit")},'
+    f" compat {compat}"
+)
+PY
+  then
+    verdict "api plus info" 0 "HTTP $http_code"
+  else
+    verdict "api plus info" 1 "HTTP $http_code, body: $(head -c 200 "$WORK/plus-info.json")"
+  fi
 fi
 
 say "shut the sidecar down"
@@ -256,8 +303,8 @@ if [ -n "$SERVE_PID" ]; then
   fi
   SERVE_PID=""
 fi
-port_free=1
-ss -tln 2>/dev/null | grep -q ":$PORT " && port_free=0
+port_free=0
+ss -tln 2>/dev/null | grep -q ":$PORT " && port_free=1
 verdict "port $PORT released" "$port_free" "$(ss -tln 2>/dev/null | grep ":$PORT " || echo 'nothing listening')"
 dash_left=$(pgrep -af 'hermes dashboard' 2>/dev/null | grep -F "$HOME_DIR" || true)
 if [ -z "$dash_left" ]; then
@@ -275,9 +322,9 @@ PY
 )
 heavy "$TOOL" uninstall >"$LOG_DIR/uninstall.log" 2>&1
 uninstall_rc=$?
-[ -d "$HOME_DIR/plugins/hermes-plus" ] && plugin_gone=0 || plugin_gone=1
+[ -d "$HOME_DIR/plugins/hermes-plus" ] && plugin_gone=1 || plugin_gone=0
 verdict "uninstall removes the bridge plugin" "$plugin_gone" \
-  "exit $uninstall_rc, $(grep -c . "$LOG_DIR/uninstall.log") lines, plugin dir $([ "$plugin_gone" = 1 ] && echo gone || echo present)"
+  "exit $uninstall_rc, $(grep -c . "$LOG_DIR/uninstall.log") lines, plugin dir $([ "$plugin_gone" = 0 ] && echo gone || echo present)"
 
 heavy "$TOOL" install >"$LOG_DIR/reinstall.log" 2>&1
 reinstall_rc=$?
