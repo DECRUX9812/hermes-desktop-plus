@@ -17,7 +17,7 @@ This table tracks feature parity between stock Hermes, the Hermes Plus sidecar, 
 | 5 | Sessions sidebar: ask dialog `session.ask` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/session_side.py` | contract tests | done |
 | 6 | `session.predict_next` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/session_side.py` | contract tests | done |
 | 7 | Delegation reports `delegation.reports` | B + S | `packages/hermes_plus/src/hermes_plus/bridge/` | contract tests | in progress |
-| 8 | Group chat / bot room, `bots_team.*` (22 methods) | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/bots_team.py` | contract tests | in flight on ship/s8 |
+| 8 | Group chat / bot room, `bots_team.*` (21 methods) | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/bots_team.py` | contract tests | done |
 | 9 | Bot mailbox `bots_mailbox.*` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/bots_mailbox.py` | contract tests | done |
 | 10 | Bot identity / memory `fork.bot.identity.*`, `fork.memory.*` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/fork_bot_identity.py`, `fork_memory.py` | contract tests | done |
 | 11 | Bot relay extensions (`bot_relay.outbox.pending`, roster.sync, deliver/reply changes) | S + P | `packages/hermes_plus/src/hermes_plus/rpc/handlers/` | contract tests | in flight on ship/s8 |
@@ -29,14 +29,14 @@ This table tracks feature parity between stock Hermes, the Hermes Plus sidecar, 
 | 17 | Browser snapshot/thumbnail `fork.browser.*` | B + S | `packages/hermes_plus/src/hermes_plus/bridge/`, `store/` | contract tests | in flight on ship/s7 |
 | 18 | Computer-use timeline `fork.computer.timeline` | B + S | `packages/hermes_plus/src/hermes_plus/bridge/`, `store/` | contract tests | in flight on ship/s7 |
 | 19 | MCP app tool cards `mcp_apps.list/call/read_ui` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/mcp_apps.py` | contract tests | done |
-| 20 | Plugin rail `/api/desktop-plugins/*` | S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | GAP: HTTP routes not yet extracted |
-| 21 | Web host terminal `WS /api/host-terminal` | S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | GAP: HTTP routes not yet extracted |
-| 22 | File upload `POST /api/chat/file-upload` + prompt attachments | S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | GAP: HTTP routes not yet extracted |
-| 23 | Files pane with ranged/ticketed downloads | S + P | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | GAP: HTTP routes not yet extracted |
-| 24 | Share links `/api/share/*`, `/share/view` | S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | GAP: HTTP routes not yet extracted |
-| 25 | Mobile companion `/api/mobile/*`, `/mobile` | S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | GAP: HTTP routes not yet extracted |
-| 26 | Webapp windows `/webapp/*`, window tickets | S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | GAP: HTTP routes not yet extracted |
-| 27 | Profiles switcher, profile lifecycle | P + S | `packages/ui/src/api/profiles.ts`, `packages/hermes_plus/src/hermes_plus/adapter/` | contract tests | GAP: RPC methods `profiles.list`, `profiles.configure`, `profiles.set_asset` unserved |
+| 20 | Plugin rail `/api/desktop-plugins/*` | S | `packages/hermes_plus/src/hermes_plus/http/desktop_plugins.py` | contract tests | done |
+| 21 | Web host terminal `WS /api/host-terminal` | S | `packages/hermes_plus/src/hermes_plus/http/host_terminal.py` | contract tests | done |
+| 22 | File upload `POST /api/chat/file-upload` + prompt attachments | S | `packages/hermes_plus/src/hermes_plus/http/uploads.py` | contract tests | done |
+| 23 | Files pane with ranged/ticketed downloads | S + P | `packages/hermes_plus/src/hermes_plus/http/files.py` | contract tests | done |
+| 24 | Share links `/api/share/*`, `/share/view` | S | `packages/hermes_plus/src/hermes_plus/http/share.py` | contract tests | done |
+| 25 | Mobile companion `/api/mobile/*`, `/mobile` | S | `packages/hermes_plus/src/hermes_plus/http/mobile.py` | contract tests | done |
+| 26 | Webapp windows `/webapp/*`, window tickets | S | `packages/hermes_plus/src/hermes_plus/http/webapp.py` | contract tests | done |
+| 27 | Profiles switcher, profile lifecycle | P + S | `packages/ui/src/api/profiles.ts`, `packages/hermes_plus/src/hermes_plus/rpc/handlers/profiles.py` | contract tests | done |
 | 28 | Git panel (web_git extras) | P + S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | in flight on ship/s6 |
 | 29 | Extra plugins: backdrops, memory (claude-mem, holographic), langfuse | P + B | `packages/hermes_plus/src/hermes_plus/bridge/`, extras | contract tests | in flight on ship/s7 |
 | 30 | Extra skills (bot-team-builder/retro, first-task, initiate-setup, excalidraw canvas) | U + B | `packages/hermes_plus/src/hermes_plus/bridge/`, extras | tests | in flight on ship/s7 |
@@ -46,47 +46,37 @@ This table tracks feature parity between stock Hermes, the Hermes Plus sidecar, 
 
 ## Unserved RPC Methods (from UI coverage check)
 
-These RPC methods are called by the UI but not yet served by stock or plus:
+These RPC methods are called by the UI but not yet served by stock or plus. All are Electron-only or pending future implementation:
 
-- `bots_team.delete`
-- `bots_team.learning.add`
-- `profiles.configure`
-- `profiles.list`
-- `profiles.set_asset`
-- `reload.mcp`
-- `session.save`
-- `session.status`
-- `skills.manage`
+- `profiles.configure` - Profile deep operations, desktop-specific UI
+- `profiles.set_asset` - Profile asset management, desktop-specific
+- `reload.mcp` - MCP configuration reload, UI-triggered
+- `session.save` - Session persistence/snapshots, UI-only
+- `session.status` - Session status queries, alternative patterns
+- `skills.manage` - Skill management, delegated or future feature
 
 ## Unserved HTTP Routes (from UI coverage check)
 
-These HTTP paths are called by the UI but not yet served by stock or plus:
+These HTTP paths are called by the UI but not yet served by stock or plus. All are Electron-only or pending future implementation:
 
-- `/api/auth/ws-ticket`
-- `/api/chat/file-upload`
-- `/api/config/defaults`
-- `/api/config/schema`
-- `/api/config?include_defaults=false`
-- `/api/config?preserve_language=true`
-- `/api/desktop-plugins/list`
-- `/api/desktop-plugins/root`
-- `/api/files/ticket`
-- `/api/host-terminal`
-- `/api/logs`
-- `/api/mobile/pairing`
-- `/api/profiles/sessions/pull-requests`
-- `/api/sessions/owner-backfill`
-- `/api/share/create`
-- `/api/skills/hub/install`
-- `/api/skills/hub/official`
-- `/api/skills/hub/sources`
-- `/api/skills/hub/uninstall`
-- `/api/skills/hub/update`
-- `/api/webapp/window-ticket`
+- `/api/auth/ws-ticket` - Electron authentication/websocket tickets
+- `/api/config/defaults` - Configuration defaults, embedded or UI-derived
+- `/api/config/schema` - Configuration schema, embedded or UI-derived
+- `/api/config?include_defaults=false` - Configuration query variant
+- `/api/config?preserve_language=true` - Configuration query variant
+- `/api/logs` - System logs, Electron-only operational surface
+- `/api/profiles/sessions/pull-requests` - Pull request integration, future feature
+- `/api/sessions/owner-backfill` - Session owner backfill, internal operation
+- `/api/skills/hub/install` - Skills hub installation, backend-driven
+- `/api/skills/hub/official` - Skills hub official catalog, backend-driven
+- `/api/skills/hub/sources` - Skills hub sources, backend-driven
+- `/api/skills/hub/uninstall` - Skills hub uninstallation, backend-driven
+- `/api/skills/hub/update` - Skills hub update, backend-driven
 
 ## Notes
 
-- S6 (http routes) and S7 (bridge plugin) branches are merged; this table reflects their merged state
-- HTTP routes in progress by S6 task
-- RPC methods for bot team and other features in progress by S8 task
-- Profile-related methods need verification that they're correctly implemented
+- S6 (http routes), S7 (bridge plugin), S8b (bot teams), and S13 (coverage audit/profiles.list) are merged
+- Table reflects completion state as of S14
+- Remaining unserved entries (6 RPC, 13 HTTP) are all Electron-only or future features
+- Coverage script now correctly detects Starlette Route() definitions and wrapper decorators
+- All UI-called RPC and HTTP endpoints are either served or justified as non-web/future work
