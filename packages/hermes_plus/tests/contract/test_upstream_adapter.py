@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.request import urlopen
@@ -24,16 +25,47 @@ from hermes_plus.adapter.protocol import AUTH_REJECTION_CLOSE_CODE, AUTH_REJECTI
 
 pytestmark = pytest.mark.contract
 
+STOCK_CHECKOUT = Path.home() / "Code" / "ship-test" / "sh" / "hermes-agent"
+
+
+def _expected_upstream_commit() -> str:
+    result = subprocess.run(
+        ["git", "-C", str(STOCK_CHECKOUT), "rev-parse", "--short", "HEAD"],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, f"the stock checkout is unavailable: {STOCK_CHECKOUT}"
+    return result.stdout.strip()
+
 
 def test_stock_version_and_compat_detection(stock_hermes, stock_install) -> None:
     assert stock_install.hermes_bin == stock_hermes
-    assert stock_install.python is not None
-    assert stock_install.version is None or isinstance(stock_install.version, str)
-    assert stock_install.version_tuple is None or isinstance(stock_install.version_tuple, tuple)
-    assert stock_install.upstream_commit in {"379cf12", "0e427d78"}
-    assert check_compat(stock_install).status in {"supported", "untested", "unsupported"}
-    assert detect(stock_hermes).upstream_commit == stock_install.upstream_commit
-    assert len(stock_install.hermes_bin) > 0
+    # The probe runs against a fresh temp HERMES_HOME, where this pm-managed
+    # install prints the `vunknown` format: no semver, but a recoverable commit.
+    assert stock_install.version is None
+    assert stock_install.version_tuple is None
+    assert stock_install.upstream_commit == _expected_upstream_commit()
+    assert check_compat(stock_install).status == "supported"
+
+
+def test_stock_python_resolution_runs(stock_hermes, stock_install) -> None:
+    python = stock_install.python
+    assert python is not None
+    assert Path(python).is_file()
+    result = subprocess.run([python, "--version"], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0
+    assert result.stdout.strip().startswith("Python ")
+
+
+def test_detect_reflects_the_caller_environment_not_the_probe_temp_dir(
+    stock_hermes, stock_install, tmp_path
+) -> None:
+    caller_home = tmp_path / "caller-home"
+    with _with_home(caller_home, stock_hermes):
+        redetected = detect(stock_hermes)
+    assert redetected.hermes_home == caller_home
+    assert redetected.upstream_commit == stock_install.upstream_commit
+    assert redetected.python == stock_install.python
+    assert not list(tmp_path.glob("hermes-plus-probe-*"))
 
 
 @contextmanager
@@ -60,6 +92,11 @@ def test_real_stock_hermes_adapter_contract(stock_hermes, stock_install, dashboa
         config = load_config()
         assert config["display"]["compact"] is True
         assert process.process is not None and process.process.poll() is None
+
+    # The adapter had to create a stub dist: this runtime-only install has none.
+    assert process.web_dist is not None
+    assert (process.web_dist / "index.html").is_file()
+    assert STOCK_CHECKOUT not in process.web_dist.parents
 
     async def exercise_gateway() -> None:
         client = GatewayClient(process.ws_url, process.token)

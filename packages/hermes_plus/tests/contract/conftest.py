@@ -58,11 +58,10 @@ def loopback_port() -> int:
     pytest.skip("no free loopback port in 9300-9399 for the stock dashboard")
 
 
-def start_dashboard(stock_install, home: Path, web_dist: Path) -> DashboardProcess:
+def start_dashboard(stock_install, home: Path) -> DashboardProcess:
+    """Start a real dashboard child with no web dist; the adapter must stub one."""
     inst = replace(stock_install, hermes_home=home)
-    process = DashboardProcess(
-        inst, port=loopback_port(), extra_env={"HERMES_HOME": str(home), "HERMES_WEB_DIST": str(web_dist)}
-    )
+    process = DashboardProcess(inst, port=loopback_port(), extra_env={"HERMES_HOME": str(home)})
     process.start(timeout=120)
     return process
 
@@ -78,18 +77,12 @@ def stop_dashboard(process: DashboardProcess) -> None:
             os.killpg(pid, 0)
 
 
-def placeholder_web_dist(directory: Path) -> Path:
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / "index.html").write_text("<!doctype html><title>hermes</title>", encoding="utf-8")
-    return directory
-
-
 @pytest.fixture
 def make_dashboard(stock_install, tmp_path):
     started: list[DashboardProcess] = []
 
     def start(home: Path) -> DashboardProcess:
-        process = start_dashboard(stock_install, home, placeholder_web_dist(tmp_path / f"web-{len(started)}"))
+        process = start_dashboard(stock_install, home)
         started.append(process)
         return process
 
@@ -104,13 +97,11 @@ def dashboard(stock_hermes: str, stock_install, tmp_path_factory):
     with _environment(HERMES_HOME=str(home), HERMES_PLUS_HERMES_BIN=stock_hermes):
         configured = run_hermes(["config", "set", "display.compact", "true"], timeout=120)
     if configured.returncode:
-        if "No module named" in configured.stderr and "ruamel" in configured.stderr:
-            pytest.skip("stock Hermes runtime is incomplete: its installed environment lacks ruamel")
         pytest.fail(
             "stock Hermes could not initialize the contract home with config set: "
             f"{configured.stderr.strip() or configured.stdout.strip()}"
         )
-    process = start_dashboard(stock_install, home, placeholder_web_dist(tmp_path_factory.mktemp("web-dist")))
+    process = start_dashboard(stock_install, home)
     try:
         yield process, home
     finally:
