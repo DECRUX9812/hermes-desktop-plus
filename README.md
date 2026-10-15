@@ -25,6 +25,27 @@ uv tool install https://github.com/DECRUX9812/hermes-desktop-plus/releases/downl
 hermes-plus install
 ```
 
+From a clone (development):
+
+```sh
+cd /path/to/hermes-desktop-plus
+
+# Build the UI first (requires Node.js and pnpm)
+cd packages/ui
+pnpm install
+pnpm build
+
+# Stage the built UI into the package
+rm -rf ../hermes_plus/src/hermes_plus/ui_dist
+mkdir -p ../hermes_plus/src/hermes_plus/ui_dist
+cp -a dist-webapp/. ../hermes_plus/src/hermes_plus/ui_dist/
+
+# Build the wheel and install from it
+cd ../..
+uv build --wheel packages/hermes_plus --out-dir /tmp/hermes-plus-build
+HERMES_PLUS_SOURCE=/tmp/hermes-plus-build/hermes_plus-*.whl ./install.sh
+```
+
 ## Serve over the web
 
 ```sh

@@ -167,3 +167,79 @@ def test_cli_update_with_source_override() -> None:
     res = _run_cli("update", "--check", "--source", "/tmp/local-wheel.whl")
     assert res.returncode == 0
     assert "/tmp/local-wheel.whl" in res.stdout
+
+
+def test_extract_version_from_tag() -> None:
+    """Test that _extract_version_from_tag correctly strips 'v' prefix."""
+    from hermes_plus.cli import _extract_version_from_tag
+
+    assert _extract_version_from_tag("v0.1.0") == "0.1.0"
+    assert _extract_version_from_tag("v0.2.0") == "0.2.0"
+    assert _extract_version_from_tag("0.1.0") == "0.1.0"
+    assert _extract_version_from_tag("v1.2.3-rc1") == "1.2.3-rc1"
+
+
+def test_cli_update_version_derived_from_tag() -> None:
+    """Test that tag→version→URL mapping works for tags other than current version.
+
+    This verifies the fix for the bug where the hardcoded version did not
+    match the tag, resulting in incorrect wheel URLs.
+    """
+    from hermes_plus.cli import _build_wheel_url, _extract_version_from_tag
+
+    # Simulate fetching a newer release (v0.2.0)
+    tag = "v0.2.0"
+    version = _extract_version_from_tag(tag)
+    assert version == "0.2.0", "Version extraction failed"
+
+    url = _build_wheel_url("DECRUX9812/hermes-desktop-plus", tag, version)
+    expected = (
+        "https://github.com/DECRUX9812/hermes-desktop-plus/releases/download/"
+        "v0.2.0/hermes_plus-0.2.0-py3-none-any.whl"
+    )
+    assert url == expected, f"URL mismatch: expected {expected}, got {url}"
+
+
+def test_wheel_build_filename_matches_version() -> None:
+    """Verify that the wheel filename matches the version in pyproject.toml.
+
+    This test builds the actual wheel and checks that the filename matches
+    what _build_wheel_url expects.
+    """
+    import subprocess
+    import tempfile
+    import re
+
+    repo_root = Path(__file__).resolve().parents[4]
+    pyproject_toml = repo_root / "packages" / "hermes_plus" / "pyproject.toml"
+
+    # Extract version from pyproject.toml
+    pyproject_content = pyproject_toml.read_text()
+    match = re.search(r'version\s*=\s*"([^"]+)"', pyproject_content)
+    assert match, "Could not find version in pyproject.toml"
+    expected_version = match.group(1)
+
+    # Build the wheel
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = subprocess.run(
+            ["uv", "build", "--wheel", "packages/hermes_plus", "--out-dir", tmpdir],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, f"wheel build failed: {result.stderr}"
+
+        # Find the built wheel file
+        wheel_files = list(Path(tmpdir).glob("hermes_plus-*.whl"))
+        assert len(wheel_files) == 1, f"Expected exactly one wheel file, found {len(wheel_files)}"
+
+        wheel_filename = wheel_files[0].name
+        # Extract version from wheel filename (e.g., hermes_plus-0.1.0-py3-none-any.whl)
+        match = re.search(r"hermes_plus-([^-]+)-py3-none-any\.whl", wheel_filename)
+        assert match, f"Could not parse version from wheel filename: {wheel_filename}"
+        wheel_version = match.group(1)
+
+        assert (
+            wheel_version == expected_version
+        ), f"Wheel version ({wheel_version}) does not match pyproject.toml ({expected_version})"

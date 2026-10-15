@@ -15,6 +15,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+DEFAULT_GITHUB_REPO = "DECRUX9812/hermes-desktop-plus"
+
 
 def _get_hermes_home(profile: str | None = None) -> Path:
     """Resolve HERMES_HOME path."""
@@ -734,6 +736,18 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if has_fails else 0
 
 
+def _extract_version_from_tag(tag: str) -> str:
+    """Extract semantic version from a git tag.
+
+    Args:
+        tag: Git tag (e.g., "v0.1.0" or "0.1.0").
+
+    Returns:
+        The semantic version without "v" prefix (e.g., "0.1.0").
+    """
+    return tag.lstrip("v")
+
+
 def _resolve_github_release_tag(repo: str, timeout: int = 5) -> str:
     """Resolve the latest release tag from a GitHub repo.
 
@@ -783,20 +797,27 @@ def _build_wheel_url(repo: str, tag: str, version: str) -> str:
 
 
 def _detect_upgrade_command(
-    repo: str = "DECRUX9812/hermes-desktop-plus",
-    version: str = "0.1.0",
+    repo: str | None = None,
+    version: str | None = None,
     source: str | None = None,
 ) -> list[str]:
     """Detect installation method and build upgrade command.
 
     Args:
-        repo: GitHub repo in owner/name format.
-        version: Package version for wheel filename construction.
+        repo: GitHub repo in owner/name format (defaults to DEFAULT_GITHUB_REPO).
+        version: Package version for wheel filename construction (defaults to hermes_plus.__version__).
         source: Override the package source (wheel URL, directory, git URL, or package name).
 
     Returns:
         A command suitable for the tool manager (uv tool install/upgrade or pipx install/upgrade).
     """
+    from hermes_plus import __version__
+
+    if repo is None:
+        repo = DEFAULT_GITHUB_REPO
+    if version is None:
+        version = __version__
+
     prefix = sys.prefix
     uv_tool_dir = os.environ.get("UV_TOOL_DIR", "")
     is_uv = (
@@ -819,9 +840,10 @@ def _detect_upgrade_command(
         # Default: fetch latest release from GitHub and build wheel URL.
         try:
             tag = _resolve_github_release_tag(repo)
+            version = _extract_version_from_tag(tag)
         except Exception as exc:
             sys.stderr.write(f"Error resolving latest release: {exc}\n")
-            sys.exit(1)
+            raise RuntimeError(f"Failed to resolve latest release: {exc}") from exc
         source = _build_wheel_url(repo, tag, version)
 
     # Build the upgrade command based on the detected installation method.
@@ -838,7 +860,11 @@ def _detect_upgrade_command(
 def cmd_update(args: argparse.Namespace) -> int:
     """Detect installation method, upgrade package, re-install plugins, and run doctor."""
     source = getattr(args, "source", None)
-    upgrade_cmd = _detect_upgrade_command(source=source)
+    try:
+        upgrade_cmd = _detect_upgrade_command(source=source)
+    except RuntimeError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
 
     if getattr(args, "check", False):
         print("Upgrade Check:")

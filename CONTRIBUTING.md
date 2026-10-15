@@ -192,8 +192,9 @@ CI opens a pull request that adds the tag to `known_good` in
 
 1. Bump `version` in `packages/hermes_plus/pyproject.toml`.
 2. Build the UI, then the wheel, and check `ui_dist/index.html` is inside it.
-3. Tag `vX.Y.Z` and push the tag. `release.yml` then builds and publishes the
-   wheel to PyPI via trusted publishing, pushes a multi-arch image to GHCR, and
-   attaches `install.sh` to the GitHub release. Publishing waits on the
-   `release` environment, so a human approves it.
+3. Tag `vX.Y.Z` and push the tag. `release.yml` then builds the wheel, pushes a
+   multi-arch image to GHCR, and attaches both the wheel and `install.sh` to
+   the GitHub release. PyPI publishing is opt-in via the `PUBLISH_PYPI`
+   repository variable. GitHub release creation waits on the `release`
+   environment, so a human approves it.
 4. Announce the tag, and make sure the matrix names it.
