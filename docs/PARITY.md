@@ -36,7 +36,7 @@ This table tracks feature parity between stock Hermes, the Hermes Plus sidecar, 
 | 24 | Share links `/api/share/*`, `/share/view` | S | `packages/hermes_plus/src/hermes_plus/http/share.py` | contract tests | done |
 | 25 | Mobile companion `/api/mobile/*`, `/mobile` | S | `packages/hermes_plus/src/hermes_plus/http/mobile.py` | contract tests | done |
 | 26 | Webapp windows `/webapp/*`, window tickets | S | `packages/hermes_plus/src/hermes_plus/http/webapp.py` | contract tests | done |
-| 27 | Profiles switcher, profile lifecycle | P + S | `packages/ui/src/api/profiles.ts`, `packages/hermes_plus/src/hermes_plus/rpc/handlers/profiles.py` | contract tests | done |
+| 27 | Profiles switcher, profile lifecycle | P | `packages/ui/src/api/profiles.ts` | contract tests | done |
 | 28 | Git panel (web_git extras) | P + S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | in flight on ship/s6 |
 | 29 | Extra plugins: backdrops, memory (claude-mem, holographic), langfuse | P + B | `packages/hermes_plus/src/hermes_plus/bridge/`, extras | contract tests | in flight on ship/s7 |
 | 30 | Extra skills (bot-team-builder/retro, first-task, initiate-setup, excalidraw canvas) | U + B | `packages/hermes_plus/src/hermes_plus/bridge/`, extras | tests | in flight on ship/s7 |
@@ -46,37 +46,16 @@ This table tracks feature parity between stock Hermes, the Hermes Plus sidecar, 
 
 ## Unserved RPC Methods (from UI coverage check)
 
-These RPC methods are called by the UI but not yet served by stock or plus. All are Electron-only or pending future implementation:
-
-- `profiles.configure` - Profile deep operations, desktop-specific UI
-- `profiles.set_asset` - Profile asset management, desktop-specific
-- `reload.mcp` - MCP configuration reload, UI-triggered
-- `session.save` - Session persistence/snapshots, UI-only
-- `session.status` - Session status queries, alternative patterns
-- `skills.manage` - Skill management, delegated or future feature
+All RPC methods called by the UI are served by stock or plus. No unserved RPC methods remain.
 
 ## Unserved HTTP Routes (from UI coverage check)
 
-These HTTP paths are called by the UI but not yet served by stock or plus. All are Electron-only or pending future implementation:
-
-- `/api/auth/ws-ticket` - Electron authentication/websocket tickets
-- `/api/config/defaults` - Configuration defaults, embedded or UI-derived
-- `/api/config/schema` - Configuration schema, embedded or UI-derived
-- `/api/config?include_defaults=false` - Configuration query variant
-- `/api/config?preserve_language=true` - Configuration query variant
-- `/api/logs` - System logs, Electron-only operational surface
-- `/api/profiles/sessions/pull-requests` - Pull request integration, future feature
-- `/api/sessions/owner-backfill` - Session owner backfill, internal operation
-- `/api/skills/hub/install` - Skills hub installation, backend-driven
-- `/api/skills/hub/official` - Skills hub official catalog, backend-driven
-- `/api/skills/hub/sources` - Skills hub sources, backend-driven
-- `/api/skills/hub/uninstall` - Skills hub uninstallation, backend-driven
-- `/api/skills/hub/update` - Skills hub update, backend-driven
+All HTTP paths called by the UI are served by stock or plus. No unserved HTTP routes remain.
 
 ## Notes
 
-- S6 (http routes), S7 (bridge plugin), S8b (bot teams), and S13 (coverage audit/profiles.list) are merged
-- Table reflects completion state as of S14
-- Remaining unserved entries (6 RPC, 13 HTTP) are all Electron-only or future features
-- Coverage script now correctly detects Starlette Route() definitions and wrapper decorators
-- All UI-called RPC and HTTP endpoints are either served or justified as non-web/future work
+- S6 (http routes), S7 (bridge plugin), S8b (bot teams), and S13 (coverage audit) are merged
+- S14 round 2: fixed stock-side extraction to detect `@_profile_handler`, `@_projects_handler` wrappers; removed duplicate plus profiles.list handler
+- Table reflects completion state as of S14 round 2: all UI-called RPC and HTTP endpoints are served
+- Coverage script now correctly detects Starlette Route() definitions and all wrapper decorators (@_*_handler patterns)
+- Zero unserved RPC methods and zero unserved HTTP routes from UI coverage check

@@ -118,10 +118,10 @@ def extract_ui_http_calls(ui_src: Path) -> Set[str]:
 
 
 def extract_stock_rpc(upstream_dir: Path) -> Set[str]:
-    """Extract RPC methods served by stock Hermes from @method decorators."""
+    """Extract RPC methods served by stock Hermes from @method and wrapper decorators."""
     methods = set()
 
-    # Look for @method("name") in tui_gateway and hermes_cli
+    # Look for @method("name") in hermes_cli
     for py_file in (upstream_dir / "hermes_cli").rglob("*.py"):
         try:
             content = py_file.read_text(errors="ignore")
@@ -131,13 +131,18 @@ def extract_stock_rpc(upstream_dir: Path) -> Set[str]:
         except Exception:
             pass
 
-    # tui_gateway methods
+    # tui_gateway methods: both @method and wrapper decorators (@_profile_handler, @_projects_handler, etc.)
     tui_gateway_path = upstream_dir / "tui_gateway"
     if tui_gateway_path.exists():
         for py_file in tui_gateway_path.rglob("*.py"):
             try:
                 content = py_file.read_text(errors="ignore")
+                # @method("namespace.method")
                 for match in re.finditer(r'@method\(\s*["\']([a-zA-Z0-9._-]+)["\']\s*\)', content):
+                    methods.add(match.group(1))
+                # @_*_handler("namespace.method", ...) wrapper decorators that call method()
+                # Examples: @_profile_handler("profiles.list", 5061), @_projects_handler("projects.discover_repos")
+                for match in re.finditer(r'@_\w+_handler\(\s*["\']([a-zA-Z0-9._-]+)["\']\s*[,\)]', content):
                     methods.add(match.group(1))
             except Exception:
                 pass
