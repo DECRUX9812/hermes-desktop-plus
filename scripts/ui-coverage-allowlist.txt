@@ -1,0 +1,17 @@
+# UI Coverage Allowlist
+# RPC methods and HTTP routes that are allowed to be unserved
+# (Electron-only or not required for gateway)
+
+# Electron-only IPC, not gateway RPC
+wake.feed # Electron integration, desktop shell
+wake.pause # Electron integration, desktop shell
+
+# These may be Electron-specific or not yet implemented
+profiles.configure # Profile operations may be desktop-only
+profiles.set_asset # Asset management, desktop-specific
+reload.mcp # MCP reload, may be desktop-only
+skills.manage # Skill management, may be delegated
+session.save # Session persistence, may be UI-only
+session.status # Session status, may be proxied differently
+bots_team.delete # Bot team deletion, in flight on s8
+bots_team.learning.add # Bot learning, in flight on s8
