@@ -16,3 +16,4 @@ packages/ui/dist-webapp/
 .pytest_cache/
 .task/
 .hermes/
+.personal-data-patterns

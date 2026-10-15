@@ -109,14 +109,39 @@ fi
 # check only bans a lowercase letter after /home/, and keeping the /home/
 # prefix intact preserves functional code such as the ~/ display collapse in
 # src/lib/display-path.ts (its tests must still exercise a real Linux home).
+#
+# Owner-specific identifiers are NOT listed here: they live in the gitignored
+# pattern file .personal-data-patterns (one `REGEX[=>REPLACEMENT]` per line,
+# default replacement `demo`), the same file scripts/check-no-personal-data.sh
+# enforces. Order matters: longest/most-specific patterns first.
+patterns_file=${HERMES_PPD_PATTERNS:-"$root_dir/.personal-data-patterns"}
+perl_rules=()
+grep_patterns=()
+if [[ -f "$patterns_file" ]]; then
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    pattern=${line%%=>*}
+    replacement=demo
+    if [[ "$line" == *"=>"* ]]; then
+      replacement=${line#*=>}
+      grep_patterns+=("${pattern%%=>*}")
+    else
+      grep_patterns+=("$pattern")
+    fi
+    perl_rules+=("s/$pattern/$replacement/g")
+  done < "$patterns_file"
+fi
+perl_rules+=('s{/home/([a-z])}{"/home/" . uc($1)}ge')
+
 while IFS= read -r -d '' file; do
-  perl -pi -e \
-    's/desktop\.example\.com/example.com/g; s/example/demo/g; s/demo/demo/g; s/owner/demo/g; s{/home/([a-z])}{"/home/" . uc($1)}ge' \
-    "$file"
+  perl -pi -e "${perl_rules[*]}" "$file"
 done < <(
-  grep -RIlZ -E 'demo|example|owner|/home/[a-z]' "$ui_dir" "$shared_dir" \
-    --exclude-dir=overlay --exclude-dir=node_modules --exclude-dir=dist-webapp \
-    --exclude=FORK_SOURCE 2>/dev/null || true
+  if ((${#grep_patterns[@]})); then
+    printf '%s\n' "${grep_patterns[@]}" > "$tmp_dir/ppd-grep"
+    grep -RIlZ -f "$tmp_dir/ppd-grep" "$ui_dir" "$shared_dir" \
+      --exclude-dir=overlay --exclude-dir=node_modules --exclude-dir=dist-webapp \
+      --exclude=FORK_SOURCE 2>/dev/null || true
+  fi
 )
 
 "$root_dir/scripts/check-no-personal-data.sh"
