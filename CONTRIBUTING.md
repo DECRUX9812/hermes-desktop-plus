@@ -99,13 +99,19 @@ export HERMES_PLUS_TEST_HERMES="$ROOT/.local/bin/hermes"
 
 ## Running the tests
 
+`HERMES_PLUS_TEST_HERMES=/path/to/hermes ./run-tests.sh` runs all three legs
+below, in order, each under the shared build lock. The raw commands are:
+
 ```sh
 # one-time, in your worktree
 uv venv .venv --python 3.11
 uv pip install --python .venv/bin/python -e 'packages/hermes_plus[test]'
 
-# unit + integration (real processes, real SQLite)
-.venv/bin/pytest packages/hermes_plus/tests -q -m "not contract"
+# unit leg (no real processes)
+.venv/bin/pytest packages/hermes_plus/tests -q -m "not contract and not integration"
+
+# integration leg (real sidecar/dashboard subprocesses)
+HERMES_PLUS_TEST_HERMES=/path/to/hermes .venv/bin/pytest packages/hermes_plus/tests -q -m integration
 
 # contract: exercises the real stock Hermes CLI, dashboard and /api/ws
 HERMES_PLUS_TEST_HERMES=/path/to/hermes .venv/bin/pytest packages/hermes_plus/tests -q -m contract

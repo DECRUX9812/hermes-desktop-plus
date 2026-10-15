@@ -6,11 +6,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from hermes_resolve import resolve_stock_hermes
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SHIPPED_SKILL_DIR = (
@@ -18,10 +19,7 @@ SHIPPED_SKILL_DIR = (
     / "extras" / "skills" / "ambition"
 )
 HERMES_PLUS_BIN = REPO_ROOT / ".venv" / "bin" / "hermes-plus"
-STOCK_HERMES = Path(
-    # HERMES_PLUS_TEST_HERMES wins; otherwise resolve `hermes` from PATH.
-    os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
-).expanduser()
+STOCK_HERMES = resolve_stock_hermes()[0]
 
 pytestmark = pytest.mark.integration
 

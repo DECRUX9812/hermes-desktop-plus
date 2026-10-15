@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -9,8 +10,17 @@ import pytest
 
 from hermes_plus.rpc import RpcContext, handle_text
 from hermes_plus.store import Store, open_store
+from hermes_resolve import resolve_stock_hermes
 
 Call = Callable[..., Awaitable[Any]]
+
+
+def pytest_report_header(config: pytest.Config) -> str:
+    """Name the Hermes binary this session will test, once, at the top of the run."""
+    binary, source = resolve_stock_hermes()
+    usable = binary.is_file() and os.access(binary, os.X_OK)
+    note = "" if usable else "  (not executable — Hermes tests will skip)"
+    return f"stock Hermes under test: {binary} {source}{note}"
 
 
 @pytest.fixture
