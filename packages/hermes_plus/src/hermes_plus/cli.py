@@ -293,19 +293,6 @@ def _check_hermes_env(hermes_bin: str | None, h_home: Path) -> dict[str, Any]:
             "message": f"HERMES_HOME does not exist yet: {h_home}",
             "hint": "Run 'hermes-plus install' to initialize it.",
         }
-    if not os.environ.get("HERMES_HOME", "").strip():
-        # Probing the implicit default home would run a real user's Hermes
-        # install; only check homes the operator named explicitly.
-        return {
-            "name": "hermes_env",
-            "status": "warn",
-            "message": (
-                "HERMES_HOME is not set; the Hermes CLI was not run against the "
-                f"implicit default home {h_home}"
-            ),
-            "hint": "Set HERMES_HOME to the home you want checked.",
-        }
-
     env = os.environ.copy()
     env["HERMES_HOME"] = str(h_home)
     try:
