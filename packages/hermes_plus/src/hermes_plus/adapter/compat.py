@@ -11,6 +11,7 @@ from typing import Literal
 from hermes_plus.adapter.version import HermesInstall
 
 _VERSION_RE = re.compile(r"^\s*v?(\d+)\.(\d+)\.(\d+)")
+_COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -72,3 +73,21 @@ def check_compat(inst: HermesInstall) -> Compat:
     if inst.version in known_good:
         return Compat("supported", f"Hermes {inst.version} is in the tested compatibility matrix.")
     return Compat("untested", f"Hermes {inst.version} is not listed as a tested version.")
+
+
+def known_good_ref_commit(tag: str) -> str | None:
+    """The upstream commit recorded for a known-good release tag, if any.
+
+    ``known_good_refs`` in the matrix maps release tags (e.g. ``v0.22.1``) to the
+    upstream commit they were proven against, so a pin by tag has a commit to check.
+    """
+    try:
+        refs = _matrix().get("known_good_refs")
+    except (OSError, ValueError):
+        return None
+    if not isinstance(refs, dict):
+        return None
+    commit = refs.get(tag)
+    if not isinstance(commit, str) or not _COMMIT_RE.fullmatch(commit):
+        return None
+    return commit

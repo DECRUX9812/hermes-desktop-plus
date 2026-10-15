@@ -47,6 +47,10 @@ jobs:
     name: compat vs ${{ matrix.hermes_ref }}
     needs: refs
     runs-on: ubuntu-latest
+    env:
+      # `main` and not-yet-proven tags are allowed to report `untested`; they run
+      # the same suite with feature gating. The pinned CI tag must be `supported`.
+      HERMES_PLUS_TEST_EXPECT_COMPAT: supported,untested
     strategy:
       fail-fast: false
       matrix:

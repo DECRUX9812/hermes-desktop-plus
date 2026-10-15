@@ -25,26 +25,30 @@ from hermes_plus.adapter.protocol import AUTH_REJECTION_CLOSE_CODE, AUTH_REJECTI
 
 pytestmark = pytest.mark.contract
 
-STOCK_CHECKOUT = Path.home() / "Code" / "ship-test" / "sh" / "hermes-agent"
 
-
-def _expected_upstream_commit() -> str:
+def _expected_upstream_commit(stock_checkout: Path) -> str:
     result = subprocess.run(
-        ["git", "-C", str(STOCK_CHECKOUT), "rev-parse", "--short", "HEAD"],
+        ["git", "-C", str(stock_checkout), "rev-parse", "--short", "HEAD"],
         capture_output=True, text=True, timeout=30, check=False,
     )
-    assert result.returncode == 0, f"the stock checkout is unavailable: {STOCK_CHECKOUT}"
+    assert result.returncode == 0, f"the stock checkout is unavailable: {stock_checkout}"
     return result.stdout.strip()
 
 
-def test_stock_version_and_compat_detection(stock_hermes, stock_install) -> None:
+def test_stock_version_and_compat_detection(
+    stock_hermes, stock_install, stock_checkout, expected_compat
+) -> None:
     assert stock_install.hermes_bin == stock_hermes
     # The probe runs against a fresh temp HERMES_HOME, where this pm-managed
     # install prints the `vunknown` format: no semver, but a recoverable commit.
     assert stock_install.version is None
     assert stock_install.version_tuple is None
-    assert stock_install.upstream_commit == _expected_upstream_commit()
-    assert check_compat(stock_install).status == "supported"
+    assert stock_install.upstream_commit == _expected_upstream_commit(stock_checkout)
+    status = check_compat(stock_install).status
+    assert status in expected_compat, (
+        f"the pinned install reports compat status {status!r}, "
+        f"allowed: {sorted(expected_compat)}"
+    )
 
 
 def test_stock_python_resolution_runs(stock_hermes, stock_install) -> None:
@@ -85,7 +89,9 @@ def _with_home(home: Path, hermes_bin: str):
                 os.environ[key] = value
 
 
-def test_real_stock_hermes_adapter_contract(stock_hermes, stock_install, dashboard) -> None:
+def test_real_stock_hermes_adapter_contract(
+    stock_hermes, stock_install, stock_checkout, dashboard
+) -> None:
     process, home = dashboard
     with _with_home(home, stock_hermes):
         assert hermes_home() == home
@@ -96,7 +102,7 @@ def test_real_stock_hermes_adapter_contract(stock_hermes, stock_install, dashboa
     # The adapter had to create a stub dist: this runtime-only install has none.
     assert process.web_dist is not None
     assert (process.web_dist / "index.html").is_file()
-    assert STOCK_CHECKOUT not in process.web_dist.parents
+    assert stock_checkout not in process.web_dist.parents
 
     async def exercise_gateway() -> None:
         client = GatewayClient(process.ws_url, process.token)
