@@ -25,6 +25,9 @@ SURFACE = sorted([
     "bots_team.pack.import", "bots_team.audit.list",
     "bots_mailbox.list", "bots_mailbox.send", "bots_mailbox.update",
     "mcp_apps.list", "mcp_apps.call", "mcp_apps.read_ui",
+    "delegation.reports",
+    "fork.browser.snapshot", "fork.browser.thumbnail",
+    "fork.computer.timeline",
 ])
 
 

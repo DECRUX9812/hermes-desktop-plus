@@ -3,8 +3,11 @@
 from hermes_plus.rpc.handlers import (
     bots_mailbox,
     bots_team,
+    delegation_reports,
     fork_approvals,
     fork_bot_identity,
+    fork_browser,
+    fork_computer,
     fork_memory,
     fork_onboarding,
     fork_routines,
@@ -15,8 +18,11 @@ from hermes_plus.rpc.handlers import (
 __all__ = [
     "bots_mailbox",
     "bots_team",
+    "delegation_reports",
     "fork_approvals",
     "fork_bot_identity",
+    "fork_browser",
+    "fork_computer",
     "fork_memory",
     "fork_onboarding",
     "fork_routines",

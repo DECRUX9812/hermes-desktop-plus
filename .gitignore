@@ -15,3 +15,4 @@ packages/hermes_plus/src/hermes_plus/ui_dist/
 packages/ui/dist-webapp/
 .pytest_cache/
 .task/
+.hermes/
