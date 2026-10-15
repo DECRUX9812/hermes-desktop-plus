@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 from contextlib import asynccontextmanager, contextmanager
@@ -35,10 +36,7 @@ def _environment(**values: str):
 
 @pytest.fixture(scope="session")
 def stock_hermes() -> str:
-    configured = os.environ.get(
-        "HERMES_PLUS_TEST_HERMES",
-        str(Path.home() / "Code" / "ship-test" / "venv" / "bin" / "hermes"),
-    )
+    configured = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
     binary = Path(configured).expanduser()
     if not binary.is_file() or not os.access(binary, os.X_OK):
         pytest.skip(f"stock Hermes executable is unavailable: {binary}")
@@ -55,14 +53,12 @@ def stock_checkout() -> Path:
     """The upstream checkout a pm-managed install was installed from.
 
     Resolution order: HERMES_PLUS_TEST_HERMES_CHECKOUT, then
-    ``$HERMES_HOME/hermes-agent`` (the CI provisioning layout), then this
-    machine's local default.
+    ``$HERMES_HOME/hermes-agent`` (the CI provisioning layout).
     """
     candidates = [os.environ.get("HERMES_PLUS_TEST_HERMES_CHECKOUT")]
     hermes_home = os.environ.get("HERMES_HOME")
     if hermes_home:
         candidates.append(str(Path(hermes_home) / "hermes-agent"))
-    candidates.append(str(Path.home() / "Code" / "ship-test" / "sh" / "hermes-agent"))
     for candidate in candidates:
         path = Path(candidate).expanduser() if candidate else None
         if path is not None and (path / ".git").exists():

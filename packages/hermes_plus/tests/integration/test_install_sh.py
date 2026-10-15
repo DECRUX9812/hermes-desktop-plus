@@ -24,10 +24,9 @@ PACKAGE_DIR = REPO_ROOT / "packages" / "hermes_plus"
 
 
 def _stock_hermes() -> Path | None:
-    """The stock launcher: HERMES_PLUS_TEST_HERMES, then the shared ship-test install."""
+    """The stock launcher: HERMES_PLUS_TEST_HERMES, then `hermes` on PATH."""
     candidates = [
         os.environ.get("HERMES_PLUS_TEST_HERMES"),
-        str(Path.home() / "Code/ship-test/venv/bin/hermes"),
         shutil.which("hermes"),
     ]
     for candidate in candidates:

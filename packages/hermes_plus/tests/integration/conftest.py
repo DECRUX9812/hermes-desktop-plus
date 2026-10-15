@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import secrets
+import shutil
 import signal
 import socket
 import subprocess
@@ -26,7 +27,8 @@ _temp_homes: list[Path] = []
 REPO_ROOT = Path(__file__).resolve().parents[4]
 HERMES_PLUS_BIN = REPO_ROOT / ".venv" / "bin" / "hermes-plus"
 HERMES_BIN = Path(
-    os.environ.get("HERMES_PLUS_TEST_HERMES", "~/Code/ship-test/venv/bin/hermes")
+    # HERMES_PLUS_TEST_HERMES wins; otherwise resolve `hermes` from PATH.
+    os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
 ).expanduser()
 
 
@@ -281,10 +283,7 @@ PLUS_BIN = Path(__file__).resolve().parents[4] / ".venv" / "bin" / "hermes-plus"
 
 @pytest.fixture(scope="session")
 def stock_hermes() -> str:
-    configured = os.environ.get(
-        "HERMES_PLUS_TEST_HERMES",
-        str(Path.home() / "Code" / "ship-test" / "venv" / "bin" / "hermes"),
-    )
+    configured = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
     binary = Path(configured).expanduser()
     if not binary.is_file() or not os.access(binary, os.X_OK):
         pytest.skip(f"stock Hermes executable is unavailable: {binary}")

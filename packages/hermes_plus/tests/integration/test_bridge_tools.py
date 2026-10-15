@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import stat
 import subprocess
@@ -148,10 +149,7 @@ async def test_the_team_prompt_section_renders_this_profile_seat(installed_home:
 
 
 def _stock_python() -> str:
-    configured = os.environ.get(
-        "HERMES_PLUS_TEST_HERMES",
-        str(Path.home() / "Code" / "ship-test" / "venv" / "bin" / "hermes"),
-    )
+    configured = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
     python = Path(configured).resolve().parent / "python3"
     if not python.is_file():
         pytest.skip(f"stock Hermes venv has no python3 next to the launcher: {python}")
