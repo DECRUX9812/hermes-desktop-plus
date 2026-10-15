@@ -36,6 +36,15 @@ HERMES_BIN = Path(
 # free can be taken before the child binds it. Callers retry on this signature.
 ADDRESS_IN_USE = "address already in use"
 
+# Genuine "this host cannot run the stock dashboard" signals. Matching the bare
+# word "dashboard" used to turn every startup failure into a skip, because the
+# sidecar's own startup log names the dashboard child on the happy path too.
+UNAVAILABLE_SIGNATURES = (
+    "ModuleNotFoundError",
+    "Hermes dashboard exited with code",
+    "Hermes dashboard did not become ready",
+)
+
 
 def free_port(exclude: set[int] | None = None) -> int:
     skip = exclude or set()
@@ -153,8 +162,8 @@ class Sidecar:
                 self.port = free_port(exclude=taken)
                 self.url = f"http://127.0.0.1:{self.port}"
                 continue
-            if "ModuleNotFoundError" in log_text or "dashboard" in log_text:
-                pytest.skip(f"stock Hermes dashboard cannot start here:\n{log_text}")
+            if any(sig in log_text for sig in UNAVAILABLE_SIGNATURES):
+                pytest.skip(f"stock Hermes cannot serve a dashboard here:\n{log_text}")
             pytest.fail(f"hermes-plus exited with {self.proc.returncode}:\n{log_text}")
         pytest.fail(f"hermes-plus never got a free port in {attempts} attempts:\n{log_text}")
 
