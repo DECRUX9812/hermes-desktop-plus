@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from hermes_plus.adapter.kanban import create_task
 from hermes_plus.rpc.context import RpcContext, require_upstream
 from hermes_plus.rpc.errors import FEATURE_UNAVAILABLE, TEAM_FAILED, TEAM_NOT_FOUND, TEAM_REFUSED, RpcFault
 from hermes_plus.rpc.params import read_text
@@ -129,12 +130,22 @@ def link_task(ctx: RpcContext, params: dict[str, Any]) -> dict[str, Any]:
 def spawn_task(ctx: RpcContext, params: dict[str, Any]) -> dict[str, Any]:
     _require(params, "team_id", "goal_id", "title")
     team_id, goal_id = params["team_id"], params["goal_id"]
-    ctx.teams.spawn_brief(team_id, goal_id, params.get("assignee") or None, params["title"],
-                          params.get("body") or "")
-    require_upstream(ctx, KANBAN_CAPABILITY, {"team_id": team_id, "goal_id": goal_id})
-    raise RpcFault(FEATURE_UNAVAILABLE,
-                   f"{KANBAN_CAPABILITY} has no verified gateway contract, so the task was not created",
-                   data={"capability": KANBAN_CAPABILITY, "team_id": team_id, "goal_id": goal_id})
+    assignee, brief, idempotency_key = ctx.teams.spawn_brief(
+        team_id, goal_id, params.get("assignee") or None, title=params["title"], body=params.get("body") or ""
+    )
+    actor = _actor(params)
+    task = create_task(
+        params["title"],
+        body=brief,
+        assignee=assignee,
+        created_by=f"team:{team_id}",
+        idempotency_key=idempotency_key,
+        board=params.get("board"),
+        profile=params.get("profile"),
+    )
+    task_id = task["id"]
+    ctx.teams.link_task(team_id, goal_id, task_id, unlink=False, actor=actor)
+    return {"task_id": task_id, "assignee": assignee, **ctx.teams.view(team_id)}
 
 
 @_team("bots_team.approval.request")

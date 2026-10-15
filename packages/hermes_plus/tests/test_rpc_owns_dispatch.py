@@ -19,8 +19,26 @@ def test_owns_rejects_upstream_and_unknown_names():
     assert not owns("session.list")
     assert not owns("session.create")
     assert not owns("config.get")
+    assert not owns("bot_relay.roster.sync")
+    assert not owns("bot_relay.deliver")
     assert not owns("fork.unknown.deep")
     assert not owns("")
+
+
+def test_owns_with_capabilities():
+    from hermes_plus.adapter.capabilities import Capabilities
+
+    caps = Capabilities(
+        version="0.21.6",
+        methods={"session.list", "config.get", "bot_relay.roster.sync", "bot_relay.deliver"},
+        events=set(),
+        features={"bot_relay": True, "sessions": True},
+    )
+    assert not owns("bot_relay.roster.sync", capabilities=caps)
+    assert not owns("bot_relay.deliver", capabilities=caps)
+    assert not owns("session.list", capabilities=caps)
+    # Plus-owned handler still owned
+    assert owns("session.ask", capabilities=caps)
 
 
 async def test_dispatch_returns_response_objects(ctx):
