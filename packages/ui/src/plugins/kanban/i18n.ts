@@ -1,0 +1,2346 @@
+/**
+ * Plugin-scoped i18n for kanban — bundles shipped under the plugin id via
+ * ctx.i18n.register (#67303), never touching core en.ts. usePluginI18n('kanban')
+ * returns a stringly-typed t(key, …); `useKanban()` binds it to the message
+ * SHAPE so components keep typed `k.newTask` / `k.moveTo(label)` access.
+ */
+
+import { type PluginLocaleBundles, type PluginTranslate, usePluginI18n } from '@hermes/plugin-sdk'
+import { useMemo } from 'react'
+
+type KanbanMessages = {
+  nav: string
+  openBoard: string
+  /** Command label — shows in the ⌘K palette AND as the keybind panel row,
+   *  so it carries the "Kanban: " prefix the palette convention wants. */
+  newTaskCommand: string
+  countTip: (running: number, ready: number) => string
+  col: Record<
+    'archived' | 'blocked' | 'done' | 'ready' | 'review' | 'running' | 'scheduled' | 'todo' | 'triage',
+    { label: string; help: string }
+  >
+  locked: { review: string; running: string; scheduled: string }
+  arcRunning: string
+  arcStale: string
+  title: string
+  orchestrationSettings: string
+  newTask: string
+  filterCards: string
+  noMatch: string
+  noTasks: string
+  open: string
+  select: (modifier: string) => string
+  deselect: string
+  moveTo: (label: string) => string
+  delete: string
+  reviewChecking: string
+  attachedTip: (name: string) => string
+  orchestratorTip: (name: string) => string
+  autoAssignTip: (name: string) => string
+  wontRun: string
+  wontRunTip: string
+  noHeartbeat: string
+  expand: (label: string) => string
+  collapse: (label: string) => string
+  newTaskIn: (label: string) => string
+  empty: string
+  unassigned: string
+  filters: string
+  allProfiles: string
+  allTenants: string
+  showArchived: string
+  groupRunning: string
+  teamLanes: string
+  teamLaneEmpty: string
+  nSelected: (n: number) => string
+  moveToShort: string
+  assign: string
+  unassignAction: string
+  archive: string
+  clearSelection: string
+  refused: string
+  bulkFailed: (failed: number, total: number, err: string) => string
+  titlePlaceholderTriage: string
+  titlePlaceholder: string
+  descPlaceholder: string
+  priority: string
+  workspace: string
+  boardDefaultSuffix: string
+  workspaceOverride: string
+  model: string
+  modelInherit: string
+  modelClear: string
+  modelHint: string
+  workspaceInherit: string
+  workspaceInheritDir: (dir: string) => string
+  workspaceInheritGeneric: string
+  assignee: string
+  defaultOption: (name: string) => string
+  parkedOption: string
+  skills: string
+  skillsPlaceholder: string
+  parent: string
+  noParent: string
+  goalMode: string
+  creating: string
+  createTask: string
+  cancel: string
+  save: string
+  estimate: string
+  estimateEffort: string
+  estimating: string
+  reEstimate: string
+  makesModelCall: string
+  estimateTip: string
+  estimateTipLong: string
+  roughEstimate: string
+  tokUnit: string
+  couldNotEstimate: string
+  complexity: Record<'L' | 'M' | 'S', string>
+  introBody: string
+  introGotIt: string
+  // drawer — activity prose
+  evtCreated: (where: string, assignee: string) => string
+  evtMovedTo: (col: string) => string
+  evtParentReopened: (parent: string) => string
+  evtAssignedTo: (assignee: string) => string
+  evtUnassigned: string
+  evtCommentBy: (author: string) => string
+  evtClaimedReview: string
+  evtClaimedWorker: string
+  evtWorkerStarted: string
+  evtCompleted: string
+  evtBlocked: string
+  evtUnblocked: (col: string) => string
+  evtReclaimed: string
+  evtSpecified: string
+  evtPromoted: string
+  evtScheduled: string
+  evtArchived: string
+  evtReprioritized: (priority: string) => string
+  someone: string
+  // drawer — meta + sections
+  metaPriority: string
+  metaTenant: string
+  metaCreatedBy: string
+  metaCreated: string
+  metaWorkerPid: string
+  /** #124391 — blocked-card detail: why it blocked and what it cost. */
+  blockKindTip: (kind: string) => string
+  blockReason: string
+  blockRecurrences: string
+  blockRecurrencesTip: string
+  consecutiveFailures: string
+  lastFailureError: string
+  unblockedMessage: (id: string) => string
+  readyUnassignedTitle: string
+  readyUnassignedBody: string
+  diagnosticsN: (n: number) => string
+  commandCopied: string
+  description: string
+  editDescription: string
+  cancelEdit: string
+  noDescription: string
+  result: string
+  latestSummary: string
+  dependencies: string
+  blockedBy: string
+  blocks: string
+  comments: (n: number) => string
+  commentsHelpRunning: string
+  commentsHelp: string
+  send: string
+  comment: string
+  messageWorker: string
+  addComment: string
+  deliveredLive: string
+  requeueWithNote: string
+  notePosted: string
+  activity: (n: number) => string
+  runs: (n: number) => string
+  workerLog: string
+  workerLogTail: string
+  attachments: (n: number) => string
+  noAttachments: string
+  uploadAttachment: string
+  taskActions: string
+  copyTaskId: string
+  copyTitle: string
+  copiedId: (id: string) => string
+  copiedTitle: string
+  close: string
+  working: string
+  // board switcher
+  board: string
+  newBoard: string
+  /** Tooltip on the page-header trigger — names the ACTION, since the visible
+   *  text is the board's own name and reads as a static label otherwise. */
+  switchBoard: string
+  newBoardDots: string
+  // Menu labels are bare verbs — the board they act on is the one named in the
+  // switcher's trigger. The nouns come back for the native file-dialog and
+  // in-app dialog titles, which stand alone.
+  exportDots: string
+  importDots: string
+  renameDots: string
+  settingsDots: string
+  exportBoardTitle: string
+  importBoardTitle: string
+  boardExported: (path: string) => string
+  boardImported: (name: string) => string
+  boardImportedAs: (slug: string) => string
+  renameBoardTitle: string
+  deleteBoardTitle: (name: string) => string
+  deleteBoardConfirm: string
+  boardArchived: (path: string) => string
+  boardSettingsFor: (name: string) => string
+  name: string
+  boardNamePlaceholder: string
+  slug: (slug: string) => string
+  project: string
+  noProject: string
+  projectHintPre: string
+  projectHintCmd: string
+  createBoard: string
+  // orchestration
+  orchestratorProfile: string
+  defaultAssignee: string
+  defaultParen: string
+  autoDecompose: string
+  profileDescriptions: string
+  profileDescriptionsHint: string
+  profileGoodAt: string
+  auto: string
+  // native/toast notifications for terminal worker events (completion-notify)
+  notify: {
+    completedTitle: string
+    blockedTitle: string
+    blockLoopTitle: string
+    gaveUpTitle: string
+    /** Body for gave_up — the raw worker error rides in the toast `detail`. */
+    gaveUpBody: string
+    crashedTitle: string
+    timedOutTitle: string
+    openKanban: string
+    artifacts: (n: number) => string
+  }
+}
+
+export const en: KanbanMessages = {
+  nav: 'Kanban',
+  openBoard: 'Kanban: Open board',
+  newTaskCommand: 'Kanban: New task',
+  countTip: (running, ready) => `Kanban — ${running} running, ${ready} ready`,
+  col: {
+    triage: { label: 'Triage', help: 'Raw ideas — a specifier fleshes out the spec.' },
+    todo: { label: 'Todo', help: 'Waiting on dependencies, or unassigned.' },
+    scheduled: { label: 'Scheduled', help: 'Waiting for a scheduled time to arrive.' },
+    ready: { label: 'Ready', help: 'Dependencies satisfied — assign a profile and the dispatcher runs it.' },
+    running: { label: 'Running', help: 'Claimed by a worker — an agent is on it. Set by the dispatcher.' },
+    blocked: { label: 'Blocked', help: 'The worker asked for human input.' },
+    review: { label: 'Review', help: 'A review agent is checking the work. Set by the dispatcher.' },
+    done: { label: 'Done', help: 'Completed; dependent children become ready.' },
+    archived: { label: 'Archived', help: 'Hidden from the default board view.' }
+  },
+  locked: {
+    review: 'Review is entered by the dispatcher when a review agent takes the card.',
+    running: 'Running is set by the dispatcher when a worker claims the card.',
+    scheduled: 'Scheduled needs a wake-up time — agents set it; it can’t be dragged into.'
+  },
+  arcRunning: 'An agent is working on this now.',
+  arcStale: 'Claimed, but no worker heartbeat for 2+ minutes — the dispatcher will reclaim it.',
+  title: 'Kanban',
+  orchestrationSettings: 'Orchestration settings',
+  newTask: 'New task',
+  filterCards: 'Filter cards…',
+  noMatch: 'No tasks match the filters',
+  noTasks: 'No tasks on this board',
+  open: 'Open',
+  select: modifier => `Select (${modifier}-click)`,
+  deselect: 'Deselect',
+  moveTo: label => `Move to ${label}`,
+  delete: 'Delete',
+  reviewChecking: 'A review agent is checking the completed work.',
+  attachedTip: name => `${name} is attached — the dispatcher hands this over on its next tick (≤1m).`,
+  orchestratorTip: name => `${name} (the orchestrator) picks this up on the next tick and writes the spec.`,
+  autoAssignTip: name => `Auto-assigns to “${name}” (kanban.default_assignee) on the next dispatch tick.`,
+  wontRun: "won't run",
+  wontRunTip:
+    'Ready cards only run once a profile is assigned. Open the card and set an assignee, or configure a default assignee in orchestration settings.',
+  noHeartbeat: 'no heartbeat',
+  expand: label => `Expand ${label}`,
+  collapse: label => `Collapse ${label}`,
+  newTaskIn: label => `New task in ${label}`,
+  empty: 'Empty',
+  unassigned: 'unassigned',
+  filters: 'Filters',
+  allProfiles: 'All profiles',
+  allTenants: 'All tenants',
+  showArchived: 'Show archived',
+  groupRunning: 'Group Running by profile',
+  teamLanes: 'Team lanes',
+  teamLaneEmpty: 'Drop a card here to delegate',
+  nSelected: n => `${n} selected`,
+  moveToShort: 'Move to',
+  assign: 'Assign',
+  unassignAction: 'Unassign',
+  archive: 'Archive',
+  clearSelection: 'Clear selection (Esc)',
+  refused: 'refused',
+  bulkFailed: (failed, total, err) => `${failed} of ${total} failed — ${err}. Failed cards stay selected.`,
+  titlePlaceholderTriage: 'Rough idea — a specifier will flesh it out',
+  titlePlaceholder: 'Title',
+  descPlaceholder: 'Description (optional)',
+  priority: 'Priority',
+  workspace: 'Workspace',
+  boardDefaultSuffix: ' · board default',
+  workspaceOverride: 'Workspace path (optional override)',
+  model: 'Model',
+  modelInherit: 'Profile default',
+  modelClear: 'Clear model override',
+  modelHint: 'Runs this task on a specific model and thinking depth. Unset uses the assigned profile’s own.',
+  workspaceInherit: 'Inherits the board’s project directory',
+  workspaceInheritDir: dir => `Leave empty to inherit ${dir}`,
+  workspaceInheritGeneric: 'Leave empty to inherit the board’s project directory.',
+  assignee: 'Assignee',
+  defaultOption: name => `${name} (default)`,
+  parkedOption: "unassigned (parked — won't run)",
+  skills: 'Skills (comma-separated)',
+  skillsPlaceholder: 'translation, github',
+  parent: "Parent (blocks until it's done)",
+  noParent: '— no parent —',
+  goalMode: "Goal mode (worker loops until a judge agrees it's done)",
+  creating: 'Creating…',
+  createTask: 'Create task',
+  cancel: 'Cancel',
+  save: 'Save',
+  estimate: 'Estimate',
+  estimateEffort: 'Estimate effort',
+  estimating: 'Estimating…',
+  reEstimate: 'Re-estimate',
+  makesModelCall: 'makes a model call',
+  estimateTip: 'Rough token + complexity estimate from the auxiliary model — makes a model call.',
+  estimateTipLong: 'Runs a quick auxiliary-model call to estimate tokens + complexity. A rough guide, not a bill.',
+  roughEstimate: 'Rough estimate',
+  tokUnit: 'tok',
+  couldNotEstimate: 'Could not estimate',
+  complexity: { S: 'Small', M: 'Medium', L: 'Large' },
+  introBody:
+    'You don’t run the cards — agents do. Put a card in Ready with an assignee and an agent picks it up within a minute. No assignee, no run. Triage: an agent rewrites the idea into a proper task first. Todo: waiting on other cards. Scheduled: waiting on a timer. Running and Review: the agents’ lanes, hands off. Blocked: it’s waiting on you. Results come back on the card.',
+  introGotIt: 'Got it',
+  evtCreated: (where, assignee) =>
+    `created${where ? ` in ${where}` : ''}${assignee ? ` · assigned to ${assignee}` : ''}`,
+  evtMovedTo: col => `moved to ${col}`,
+  evtParentReopened: parent => `parent ${parent} reopened`,
+  evtAssignedTo: assignee => `assigned to ${assignee}`,
+  evtUnassigned: 'unassigned',
+  evtCommentBy: author => `comment by ${author}`,
+  evtClaimedReview: 'claimed by a review agent',
+  evtClaimedWorker: 'claimed by a worker',
+  evtWorkerStarted: 'worker started',
+  evtCompleted: 'completed',
+  evtBlocked: 'blocked — needs human input',
+  evtUnblocked: col => `unblocked${col ? ` → ${col}` : ' → Ready'}`,
+  evtReclaimed: 'reclaimed — returned to the queue',
+  evtSpecified: 'spec written by the triage agent',
+  evtPromoted: 'dependencies done — promoted to Ready',
+  evtScheduled: 'scheduled for later',
+  evtArchived: 'archived',
+  evtReprioritized: priority => `priority set to ${priority}`,
+  someone: 'someone',
+  metaPriority: 'Priority',
+  metaTenant: 'Tenant',
+  metaCreatedBy: 'Created by',
+  metaCreated: 'Created',
+  metaWorkerPid: 'Worker pid',
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? 'The worker asked for human input.'
+      : kind === 'capability'
+        ? 'The worker hit a capability wall it cannot get past.'
+        : kind === 'transient'
+          ? 'The worker failed on a transient error.'
+          : 'The worker reported a dependency it must wait on.',
+  blockReason: 'Block kind',
+  blockRecurrences: 'Block recurrences',
+  blockRecurrencesTip: 'Times this task re-blocked for the same reason after a human unblock.',
+  consecutiveFailures: 'Consecutive failures',
+  lastFailureError: 'Last failure',
+  unblockedMessage: id => `Unblocked ${id}. Task is ready for the next tick.`,
+  readyUnassignedTitle: 'Ready, but unassigned — this card will never run.',
+  readyUnassignedBody:
+    'The dispatcher only claims Ready cards that have an assignee. Pick a profile in the Assignee field above (or set a default assignee in the orchestration settings) and it runs within a minute.',
+  diagnosticsN: n => `Diagnostics · ${n}`,
+  commandCopied: 'Command copied',
+  description: 'Description',
+  editDescription: 'Edit description',
+  cancelEdit: 'Cancel edit',
+  noDescription: 'No description yet.',
+  result: 'Result',
+  latestSummary: 'Latest summary',
+  dependencies: 'Dependencies',
+  blockedBy: 'Blocked by',
+  blocks: 'Blocks',
+  comments: n => `Comments · ${n}`,
+  commentsHelpRunning:
+    'This task is running. Your note is folded into the worker’s current turn within a few seconds — no block/unblock dance. “Requeue with note” instead restarts the task from scratch with your note in context.',
+  commentsHelp:
+    'Comments are added to the task thread. When a worker picks the task up it reads them as part of its context.',
+  send: 'Send',
+  comment: 'Comment',
+  messageWorker: 'Message the running worker…',
+  addComment: 'Add a comment…',
+  deliveredLive: 'Delivered to the running worker within a few seconds.',
+  requeueWithNote: 'Requeue with note',
+  notePosted: 'Note posted — worker requeued',
+  activity: n => `Activity · ${n}`,
+  runs: n => `Runs · ${n}`,
+  workerLog: 'Worker log',
+  workerLogTail: 'Worker log · tail',
+  attachments: n => `Attachments · ${n}`,
+  noAttachments: 'No attachments yet.',
+  uploadAttachment: 'Upload attachment',
+  taskActions: 'Task actions',
+  copyTaskId: 'Copy task id',
+  copyTitle: 'Copy title',
+  copiedId: id => `Copied ${id}`,
+  copiedTitle: 'Copied title',
+  close: 'Close',
+  working: 'working',
+  board: 'Board',
+  newBoard: 'New board',
+  switchBoard: 'Switch board',
+  newBoardDots: 'New board…',
+  exportDots: 'Export…',
+  importDots: 'Import…',
+  renameDots: 'Rename…',
+  settingsDots: 'Settings…',
+  exportBoardTitle: 'Export board…',
+  importBoardTitle: 'Import board…',
+  boardExported: path => `Board exported to ${path}`,
+  boardImported: name => `Imported ${name}`,
+  boardImportedAs: slug => `That name was taken — imported as ${slug}`,
+  renameBoardTitle: 'Rename board',
+  deleteBoardTitle: name => `Delete "${name}"?`,
+  deleteBoardConfirm: 'The board is archived, not erased — its tasks and attachments stay on disk and can be restored.',
+  boardArchived: path => `Board archived to ${path}`,
+  boardSettingsFor: name => `Board settings — ${name}`,
+  name: 'Name',
+  boardNamePlaceholder: 'Board name',
+  slug: slug => `slug: ${slug}`,
+  project: 'Project',
+  noProject: 'No project (scratch sandboxes)',
+  projectHintPre:
+    'New tasks run in the project’s repo (a worktree per task); each task can still override its workspace at creation. Manage projects with ',
+  projectHintCmd: 'hermes project',
+  createBoard: 'Create board',
+  orchestratorProfile: 'Orchestrator profile',
+  defaultAssignee: 'Default assignee',
+  defaultParen: '(default)',
+  autoDecompose: 'Auto-decompose triage tasks',
+  profileDescriptions: 'Profile descriptions',
+  profileDescriptionsHint:
+    'Descriptions guide the decomposer’s routing. Auto-generate with the auxiliary model, or write your own.',
+  profileGoodAt: 'What is this profile good at?',
+  auto: 'Auto',
+  notify: {
+    completedTitle: 'Task completed',
+    blockedTitle: 'Task blocked — needs your input',
+    blockLoopTitle: 'Task routed to triage — needs a decision',
+    gaveUpTitle: 'Task stopped',
+    gaveUpBody: 'Hermes couldn’t finish this task. Open Kanban to see why and reassign it.',
+    crashedTitle: 'Task hit a problem — Hermes will retry it automatically',
+    timedOutTitle: 'Task took too long — Hermes will retry it automatically',
+    openKanban: 'Open Kanban',
+    artifacts: (n: number) => `${n} artifacts`
+  }
+}
+
+const ja: KanbanMessages = {
+  nav: 'カンバン',
+  openBoard: 'カンバン: ボードを開く',
+  newTaskCommand: 'カンバン: 新しいタスク',
+  countTip: (running, ready) => `カンバン — 実行中 ${running}、待機 ${ready}`,
+  col: {
+    triage: { label: 'トリアージ', help: '生のアイデア — スペシファイアが仕様に整えます。' },
+    todo: { label: 'Todo', help: '依存関係の待ち、または未割り当て。' },
+    scheduled: { label: 'スケジュール', help: '予定時刻を待っています。' },
+    ready: { label: 'Ready', help: '依存関係が解決済み — プロフィールを割り当てるとディスパッチャが実行します。' },
+    running: { label: '実行中', help: 'ワーカーが取得済み — エージェントが作業中。ディスパッチャが設定します。' },
+    blocked: { label: 'ブロック', help: 'ワーカーが人間の入力を求めています。' },
+    review: { label: 'レビュー', help: 'レビューエージェントが作業を確認中。ディスパッチャが設定します。' },
+    done: { label: '完了', help: '完了。依存する子タスクが Ready になります。' },
+    archived: { label: 'アーカイブ', help: 'デフォルトのボード表示から非表示。' }
+  },
+  locked: {
+    review: 'レビューは、レビューエージェントがカードを取得するとディスパッチャによって設定されます。',
+    running: '実行中は、ワーカーがカードを取得するとディスパッチャによって設定されます。',
+    scheduled: 'スケジュールには起動時刻が必要です — エージェントが設定します。ドラッグでは移動できません。'
+  },
+  arcRunning: 'エージェントが現在作業中です。',
+  arcStale: '取得済みですが、2分以上ワーカーのハートビートがありません — ディスパッチャが再取得します。',
+  title: 'カンバン',
+  orchestrationSettings: 'オーケストレーション設定',
+  newTask: '新しいタスク',
+  filterCards: 'カードを絞り込み…',
+  noMatch: 'フィルタに一致するタスクはありません',
+  noTasks: 'このボードにタスクはありません',
+  open: '開く',
+  select: modifier => `選択（${modifier}クリック）`,
+  deselect: '選択解除',
+  moveTo: label => `${label} へ移動`,
+  delete: '削除',
+  reviewChecking: 'レビューエージェントが完了した作業を確認中です。',
+  attachedTip: name => `${name} が担当 — ディスパッチャが次のティック（≤1分）で引き渡します。`,
+  orchestratorTip: name => `${name}（オーケストレーター）が次のティックでこれを取得し、仕様を書きます。`,
+  autoAssignTip: name => `次のディスパッチティックで「${name}」（kanban.default_assignee）に自動割り当てされます。`,
+  wontRun: '実行されません',
+  wontRunTip:
+    'Ready のカードはプロフィールが割り当てられて初めて実行されます。カードを開いて担当を設定するか、オーケストレーション設定でデフォルトの担当を設定してください。',
+  noHeartbeat: 'ハートビートなし',
+  expand: label => `${label} を展開`,
+  collapse: label => `${label} を折りたたむ`,
+  newTaskIn: label => `${label} に新しいタスク`,
+  empty: '空',
+  unassigned: '未割り当て',
+  filters: 'フィルタ',
+  allProfiles: 'すべてのプロフィール',
+  allTenants: 'すべてのテナント',
+  showArchived: 'アーカイブを表示',
+  groupRunning: '実行中をプロフィールでグループ化',
+  teamLanes: 'チームレーン',
+  teamLaneEmpty: 'ここにカードをドロップして委任',
+  nSelected: n => `${n} 件選択中`,
+  moveToShort: '移動',
+  assign: '割り当て',
+  unassignAction: '割り当て解除',
+  archive: 'アーカイブ',
+  clearSelection: '選択をクリア（Esc）',
+  refused: '拒否されました',
+  bulkFailed: (failed, total, err) => `${total} 件中 ${failed} 件が失敗 — ${err}。失敗したカードは選択されたままです。`,
+  titlePlaceholderTriage: '大まかなアイデア — スペシファイアが具体化します',
+  titlePlaceholder: 'タイトル',
+  descPlaceholder: '説明（任意）',
+  priority: '優先度',
+  workspace: 'ワークスペース',
+  boardDefaultSuffix: '・ボード既定',
+  workspaceOverride: 'ワークスペースパス（任意の上書き）',
+  model: 'モデル',
+  modelInherit: 'プロファイル既定',
+  modelClear: 'モデル指定を解除',
+  modelHint: 'このタスクを特定のモデルと思考深度で実行します。未設定なら担当プロファイルの設定を使用します。',
+  workspaceInherit: 'ボードのプロジェクトディレクトリを継承',
+  workspaceInheritDir: dir => `空欄にすると ${dir} を継承します`,
+  workspaceInheritGeneric: '空欄にするとボードのプロジェクトディレクトリを継承します。',
+  assignee: '担当',
+  defaultOption: name => `${name}（既定）`,
+  parkedOption: '未割り当て（保留 — 実行されません）',
+  skills: 'スキル（カンマ区切り）',
+  skillsPlaceholder: 'translation, github',
+  parent: '親（完了するまでブロック）',
+  noParent: '— 親なし —',
+  goalMode: 'ゴールモード（ジャッジが完了と認めるまでワーカーがループ）',
+  creating: '作成中…',
+  createTask: 'タスクを作成',
+  cancel: 'キャンセル',
+  save: '保存',
+  estimate: '見積もり',
+  estimateEffort: '工数を見積もり',
+  estimating: '見積もり中…',
+  reEstimate: '再見積もり',
+  makesModelCall: 'モデル呼び出しあり',
+  estimateTip: '補助モデルによるトークン数と複雑度の概算 — モデル呼び出しを行います。',
+  estimateTipLong: '補助モデルを呼び出してトークン数と複雑度を概算します。目安であり、請求ではありません。',
+  roughEstimate: '概算',
+  tokUnit: 'tok',
+  couldNotEstimate: '見積もりできませんでした',
+  complexity: { S: '小', M: '中', L: '大' },
+  introBody:
+    'カードはあなたではなくエージェントが実行します。担当を設定したカードを Ready に置くと、1分以内にエージェントが取得します。担当がなければ実行されません。トリアージ: エージェントがまずアイデアを適切なタスクに書き直します。Todo: 他のカード待ち。スケジュール: タイマー待ち。実行中とレビュー: エージェントのレーンなので手を出さないでください。ブロック: あなたの対応待ちです。結果はカードに戻ってきます。',
+  introGotIt: '了解',
+  evtCreated: (where, assignee) => `作成${where ? `（${where}）` : ''}${assignee ? `・${assignee} に割り当て` : ''}`,
+  evtMovedTo: col => `${col} へ移動`,
+  evtParentReopened: parent => `親 ${parent} が再オープン`,
+  evtAssignedTo: assignee => `${assignee} に割り当て`,
+  evtUnassigned: '割り当て解除',
+  evtCommentBy: author => `${author} のコメント`,
+  evtClaimedReview: 'レビューエージェントが取得',
+  evtClaimedWorker: 'ワーカーが取得',
+  evtWorkerStarted: 'ワーカー開始',
+  evtCompleted: '完了',
+  evtBlocked: 'ブロック — 人間の入力が必要',
+  evtUnblocked: col => `ブロック解除${col ? ` → ${col}` : ' → Ready'}`,
+  evtReclaimed: '再取得 — キューに戻しました',
+  evtSpecified: 'トリアージエージェントが仕様を作成',
+  evtPromoted: '依存関係が完了 — Ready に昇格',
+  evtScheduled: '後で実行するようスケジュール',
+  evtArchived: 'アーカイブ済み',
+  evtReprioritized: priority => `優先度を ${priority} に設定`,
+  someone: '誰か',
+  metaPriority: '優先度',
+  metaTenant: 'テナント',
+  metaCreatedBy: '作成者',
+  metaCreated: '作成',
+  metaWorkerPid: 'ワーカー PID',
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? 'ワーカーが人間の入力を求めています。'
+      : kind === 'capability'
+        ? 'ワーカーが越えられない能力の壁に当たりました。'
+        : kind === 'transient'
+          ? 'ワーカーが一時的なエラーで失敗しました。'
+          : 'ワーカーが待機すべき依存関係を報告しました。',
+  blockReason: 'ブロック種別',
+  blockRecurrences: 'ブロック回数',
+  blockRecurrencesTip: '人間がブロック解除した後、同じ理由で再ブロックされた回数。',
+  consecutiveFailures: '連続失敗',
+  lastFailureError: '直近の失敗',
+  unblockedMessage: id => `${id} をブロック解除しました。次のティックで実行できます。`,
+  readyUnassignedTitle: 'Ready ですが未割り当て — このカードは実行されません。',
+  readyUnassignedBody:
+    'ディスパッチャは担当のある Ready カードのみ取得します。上の担当フィールドでプロフィールを選ぶ（またはオーケストレーション設定でデフォルトの担当を設定する）と、1分以内に実行されます。',
+  diagnosticsN: n => `診断・${n}`,
+  commandCopied: 'コマンドをコピーしました',
+  description: '説明',
+  editDescription: '説明を編集',
+  cancelEdit: '編集をキャンセル',
+  noDescription: 'まだ説明はありません。',
+  result: '結果',
+  latestSummary: '最新のサマリー',
+  dependencies: '依存関係',
+  blockedBy: 'ブロック元',
+  blocks: 'ブロック先',
+  comments: n => `コメント・${n}`,
+  commentsHelpRunning:
+    'このタスクは実行中です。あなたのメモは数秒以内にワーカーの現在のターンに取り込まれます — ブロック/解除の操作は不要です。「メモを付けて再キュー」を選ぶと、メモを文脈に含めてタスクを最初からやり直します。',
+  commentsHelp:
+    'コメントはタスクのスレッドに追加されます。ワーカーがタスクを取得すると、文脈の一部として読み込みます。',
+  send: '送信',
+  comment: 'コメント',
+  messageWorker: '実行中のワーカーにメッセージ…',
+  addComment: 'コメントを追加…',
+  deliveredLive: '数秒以内に実行中のワーカーへ届きます。',
+  requeueWithNote: 'メモを付けて再キュー',
+  notePosted: 'メモを投稿しました — ワーカーを再キューしました',
+  activity: n => `アクティビティ・${n}`,
+  runs: n => `実行・${n}`,
+  workerLog: 'ワーカーログ',
+  workerLogTail: 'ワーカーログ・末尾',
+  attachments: n => `添付・${n}`,
+  noAttachments: 'まだ添付はありません。',
+  uploadAttachment: '添付をアップロード',
+  taskActions: 'タスクの操作',
+  copyTaskId: 'タスク ID をコピー',
+  copyTitle: 'タイトルをコピー',
+  copiedId: id => `${id} をコピーしました`,
+  copiedTitle: 'タイトルをコピーしました',
+  close: '閉じる',
+  working: '作業中',
+  board: 'ボード',
+  newBoard: '新しいボード',
+  switchBoard: 'ボードを切り替え',
+  newBoardDots: '新しいボード…',
+  exportDots: 'エクスポート…',
+  importDots: 'インポート…',
+  renameDots: '名前を変更…',
+  settingsDots: '設定…',
+  exportBoardTitle: 'ボードをエクスポート…',
+  importBoardTitle: 'ボードをインポート…',
+  boardExported: path => `ボードを ${path} にエクスポートしました`,
+  boardImported: name => `${name} をインポートしました`,
+  boardImportedAs: slug => `その名前は使用中のため ${slug} としてインポートしました`,
+  renameBoardTitle: 'ボード名を変更',
+  deleteBoardTitle: name => `「${name}」を削除しますか？`,
+  deleteBoardConfirm: 'ボードは消去されずアーカイブされます。タスクと添付ファイルはディスクに残り、復元できます。',
+  boardArchived: path => `ボードを ${path} にアーカイブしました`,
+  boardSettingsFor: name => `ボード設定 — ${name}`,
+  name: '名前',
+  boardNamePlaceholder: 'ボード名',
+  slug: slug => `slug: ${slug}`,
+  project: 'プロジェクト',
+  noProject: 'プロジェクトなし（スクラッチのサンドボックス）',
+  projectHintPre:
+    '新しいタスクはプロジェクトのリポジトリで実行されます（タスクごとに worktree）。各タスクは作成時にワークスペースを上書きできます。プロジェクトの管理は ',
+  projectHintCmd: 'hermes project',
+  createBoard: 'ボードを作成',
+  orchestratorProfile: 'オーケストレータープロフィール',
+  defaultAssignee: 'デフォルトの担当',
+  defaultParen: '（既定）',
+  autoDecompose: 'トリアージタスクを自動分解',
+  profileDescriptions: 'プロフィールの説明',
+  profileDescriptionsHint:
+    '説明はデコンポーザーのルーティングを導きます。補助モデルで自動生成するか、自分で書いてください。',
+  profileGoodAt: 'このプロフィールの得意分野は？',
+  auto: '自動',
+  notify: {
+    completedTitle: 'タスク完了',
+    blockedTitle: 'タスクがブロック中 — 入力が必要です',
+    blockLoopTitle: 'タスクをトリアージへ移動 — 判断が必要です',
+    gaveUpTitle: 'タスクが停止しました',
+    gaveUpBody: 'Hermes はこのタスクを完了できませんでした。かんばんを開いて原因を確認し、再割り当てしてください。',
+    crashedTitle: 'タスクで問題が発生 — Hermes が自動で再試行します',
+    timedOutTitle: 'タスクに時間がかかりすぎました — Hermes が自動で再試行します',
+    openKanban: 'かんばんを開く',
+    artifacts: (n: number) => `成果物 ${n} 件`
+  }
+}
+
+const zh: KanbanMessages = {
+  nav: '看板',
+  openBoard: '看板：打开面板',
+  newTaskCommand: '看板：新建任务',
+  countTip: (running, ready) => `看板 — 运行中 ${running}、就绪 ${ready}`,
+  col: {
+    triage: { label: '分诊', help: '原始想法 — 由细化代理整理出规格。' },
+    todo: { label: '待办', help: '等待依赖，或未分配。' },
+    scheduled: { label: '已排期', help: '等待预定时间到来。' },
+    ready: { label: '就绪', help: '依赖已满足 — 分配一个配置档，调度器即会运行它。' },
+    running: { label: '运行中', help: '已被工作单元领取 — 有代理在处理。由调度器设置。' },
+    blocked: { label: '受阻', help: '工作单元需要人工输入。' },
+    review: { label: '审查', help: '审查代理正在检查工作。由调度器设置。' },
+    done: { label: '完成', help: '已完成；依赖它的子任务变为就绪。' },
+    archived: { label: '已归档', help: '从默认面板视图中隐藏。' }
+  },
+  locked: {
+    review: '审查状态由调度器在审查代理领取卡片时设置。',
+    running: '运行中由调度器在工作单元领取卡片时设置。',
+    scheduled: '排期需要唤醒时间 — 由代理设置；无法拖入。'
+  },
+  arcRunning: '有代理正在处理它。',
+  arcStale: '已领取，但超过 2 分钟没有工作单元心跳 — 调度器将重新领取。',
+  title: '看板',
+  orchestrationSettings: '编排设置',
+  newTask: '新建任务',
+  filterCards: '筛选卡片…',
+  noMatch: '没有符合筛选条件的任务',
+  noTasks: '此面板暂无任务',
+  open: '打开',
+  select: modifier => `选择（${modifier}点击）`,
+  deselect: '取消选择',
+  moveTo: label => `移动到 ${label}`,
+  delete: '删除',
+  reviewChecking: '审查代理正在检查已完成的工作。',
+  attachedTip: name => `${name} 已接手 — 调度器将在下一个周期（≤1 分钟）移交。`,
+  orchestratorTip: name => `${name}（编排者）将在下一个周期领取并撰写规格。`,
+  autoAssignTip: name => `将在下一个调度周期自动分配给“${name}”（kanban.default_assignee）。`,
+  wontRun: '不会运行',
+  wontRunTip: '就绪卡片只有在分配了配置档后才会运行。打开卡片设置负责人，或在编排设置中配置默认负责人。',
+  noHeartbeat: '无心跳',
+  expand: label => `展开 ${label}`,
+  collapse: label => `折叠 ${label}`,
+  newTaskIn: label => `在 ${label} 新建任务`,
+  empty: '空',
+  unassigned: '未分配',
+  filters: '筛选',
+  allProfiles: '所有配置档',
+  allTenants: '所有租户',
+  showArchived: '显示已归档',
+  groupRunning: '按配置档分组运行中',
+  teamLanes: '团队泳道',
+  teamLaneEmpty: '将卡片拖到此处以委派',
+  nSelected: n => `已选择 ${n} 个`,
+  moveToShort: '移动到',
+  assign: '分配',
+  unassignAction: '取消分配',
+  archive: '归档',
+  clearSelection: '清除选择（Esc）',
+  refused: '被拒绝',
+  bulkFailed: (failed, total, err) => `${total} 个中有 ${failed} 个失败 — ${err}。失败的卡片仍保持选中。`,
+  titlePlaceholderTriage: '大致想法 — 细化代理会补全',
+  titlePlaceholder: '标题',
+  descPlaceholder: '描述（可选）',
+  priority: '优先级',
+  workspace: '工作区',
+  boardDefaultSuffix: '・面板默认',
+  workspaceOverride: '工作区路径（可选覆盖）',
+  model: '模型',
+  modelInherit: '配置文件默认',
+  modelClear: '清除模型覆盖',
+  modelHint: '让该任务使用指定的模型与思考深度。未设置时使用所指派配置文件自身的设置。',
+  workspaceInherit: '继承面板的项目目录',
+  workspaceInheritDir: dir => `留空则继承 ${dir}`,
+  workspaceInheritGeneric: '留空则继承面板的项目目录。',
+  assignee: '负责人',
+  defaultOption: name => `${name}（默认）`,
+  parkedOption: '未分配（搁置 — 不会运行）',
+  skills: '技能（逗号分隔）',
+  skillsPlaceholder: 'translation, github',
+  parent: '父任务（完成前会阻塞）',
+  noParent: '— 无父任务 —',
+  goalMode: '目标模式（工作单元循环直到评判代理认可完成）',
+  creating: '创建中…',
+  createTask: '创建任务',
+  cancel: '取消',
+  save: '保存',
+  estimate: '估算',
+  estimateEffort: '估算工作量',
+  estimating: '估算中…',
+  reEstimate: '重新估算',
+  makesModelCall: '会调用模型',
+  estimateTip: '由辅助模型对令牌数和复杂度的粗略估算 — 会调用模型。',
+  estimateTipLong: '快速调用辅助模型来估算令牌数和复杂度。仅供参考，并非账单。',
+  roughEstimate: '粗略估算',
+  tokUnit: 'tok',
+  couldNotEstimate: '无法估算',
+  complexity: { S: '小', M: '中', L: '大' },
+  introBody:
+    '卡片不由你运行，而是由代理运行。把带有负责人的卡片放入“就绪”，代理会在一分钟内领取。没有负责人就不会运行。分诊：代理先把想法改写成合适的任务。待办：等待其他卡片。已排期：等待计时器。运行中与审查：这是代理的通道，请勿插手。受阻：正在等你。结果会回到卡片上。',
+  introGotIt: '知道了',
+  evtCreated: (where, assignee) => `已创建${where ? `（${where}）` : ''}${assignee ? `・分配给 ${assignee}` : ''}`,
+  evtMovedTo: col => `移动到 ${col}`,
+  evtParentReopened: parent => `父任务 ${parent} 已重新打开`,
+  evtAssignedTo: assignee => `分配给 ${assignee}`,
+  evtUnassigned: '取消分配',
+  evtCommentBy: author => `${author} 的评论`,
+  evtClaimedReview: '被审查代理领取',
+  evtClaimedWorker: '被工作单元领取',
+  evtWorkerStarted: '工作单元已启动',
+  evtCompleted: '已完成',
+  evtBlocked: '受阻 — 需要人工输入',
+  evtUnblocked: col => `已解除阻塞${col ? ` → ${col}` : ' → 就绪'}`,
+  evtReclaimed: '已重新领取 — 已放回队列',
+  evtSpecified: '分诊代理已撰写规格',
+  evtPromoted: '依赖已完成 — 提升为就绪',
+  evtScheduled: '已排期稍后运行',
+  evtArchived: '已归档',
+  evtReprioritized: priority => `优先级设为 ${priority}`,
+  someone: '某人',
+  metaPriority: '优先级',
+  metaTenant: '租户',
+  metaCreatedBy: '创建者',
+  metaCreated: '创建于',
+  metaWorkerPid: '工作单元 PID',
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? '工作单元正在等待人工输入。'
+      : kind === 'capability'
+        ? '工作单元遇到了无法逾越的能力限制。'
+        : kind === 'transient'
+          ? '工作单元因临时性错误失败。'
+          : '工作单元报告了需要等待的依赖。',
+  blockReason: '阻塞类型',
+  blockRecurrences: '阻塞次数',
+  blockRecurrencesTip: '人工解除阻塞后，该任务因同一原因再次阻塞的次数。',
+  consecutiveFailures: '连续失败',
+  lastFailureError: '最近失败',
+  unblockedMessage: id => `已解除 ${id} 的阻塞。任务将在下一轮调度中就绪。`,
+  readyUnassignedTitle: '就绪但未分配 — 这张卡片永远不会运行。',
+  readyUnassignedBody:
+    '调度器只领取有负责人的就绪卡片。在上面的负责人字段选择一个配置档（或在编排设置中设置默认负责人），它会在一分钟内运行。',
+  diagnosticsN: n => `诊断・${n}`,
+  commandCopied: '命令已复制',
+  description: '描述',
+  editDescription: '编辑描述',
+  cancelEdit: '取消编辑',
+  noDescription: '暂无描述。',
+  result: '结果',
+  latestSummary: '最新摘要',
+  dependencies: '依赖关系',
+  blockedBy: '受阻于',
+  blocks: '阻塞',
+  comments: n => `评论・${n}`,
+  commentsHelpRunning:
+    '此任务正在运行。你的备注会在几秒内融入工作单元当前的回合 — 无需阻塞/解除操作。选择“附带备注重新入队”则会带着你的备注从头重跑任务。',
+  commentsHelp: '评论会添加到任务讨论串。工作单元领取任务时会将其作为上下文的一部分读取。',
+  send: '发送',
+  comment: '评论',
+  messageWorker: '给运行中的工作单元发消息…',
+  addComment: '添加评论…',
+  deliveredLive: '几秒内送达运行中的工作单元。',
+  requeueWithNote: '附带备注重新入队',
+  notePosted: '备注已发布 — 工作单元已重新入队',
+  activity: n => `活动・${n}`,
+  runs: n => `运行・${n}`,
+  workerLog: '工作单元日志',
+  workerLogTail: '工作单元日志・末尾',
+  attachments: n => `附件・${n}`,
+  noAttachments: '暂无附件。',
+  uploadAttachment: '上传附件',
+  taskActions: '任务操作',
+  copyTaskId: '复制任务 ID',
+  copyTitle: '复制标题',
+  copiedId: id => `已复制 ${id}`,
+  copiedTitle: '已复制标题',
+  close: '关闭',
+  working: '进行中',
+  board: '面板',
+  newBoard: '新建面板',
+  switchBoard: '切换面板',
+  newBoardDots: '新建面板…',
+  exportDots: '导出…',
+  importDots: '导入…',
+  renameDots: '重命名…',
+  settingsDots: '设置…',
+  exportBoardTitle: '导出面板…',
+  importBoardTitle: '导入面板…',
+  boardExported: path => `面板已导出至 ${path}`,
+  boardImported: name => `已导入 ${name}`,
+  boardImportedAs: slug => `该名称已被占用，已导入为 ${slug}`,
+  renameBoardTitle: '重命名面板',
+  deleteBoardTitle: name => `确定删除“${name}”？`,
+  deleteBoardConfirm: '面板会被归档而非清除，其任务和附件仍保留在磁盘上，可以恢复。',
+  boardArchived: path => `面板已归档至 ${path}`,
+  boardSettingsFor: name => `面板设置 — ${name}`,
+  name: '名称',
+  boardNamePlaceholder: '面板名称',
+  slug: slug => `slug: ${slug}`,
+  project: '项目',
+  noProject: '无项目（临时沙箱）',
+  projectHintPre:
+    '新任务将在项目的仓库中运行（每个任务一个 worktree）；每个任务在创建时仍可覆盖其工作区。管理项目请使用 ',
+  projectHintCmd: 'hermes project',
+  createBoard: '创建面板',
+  orchestratorProfile: '编排者配置档',
+  defaultAssignee: '默认负责人',
+  defaultParen: '（默认）',
+  autoDecompose: '自动分解分诊任务',
+  profileDescriptions: '配置档说明',
+  profileDescriptionsHint: '说明用于引导分解器的路由。可用辅助模型自动生成，或自行填写。',
+  profileGoodAt: '这个配置档擅长什么？',
+  auto: '自动',
+  notify: {
+    completedTitle: '任务已完成',
+    blockedTitle: '任务受阻 — 需要你的输入',
+    blockLoopTitle: '任务已转入分类 — 需要人工决定',
+    gaveUpTitle: '任务已停止',
+    gaveUpBody: 'Hermes 无法完成这个任务。打开看板查看原因并重新分配。',
+    crashedTitle: '任务遇到问题 — Hermes 将自动重试',
+    timedOutTitle: '任务耗时过长 — Hermes 将自动重试',
+    openKanban: '打开看板',
+    artifacts: (n: number) => `${n} 个产物`
+  }
+}
+
+const zhHant: KanbanMessages = {
+  nav: '看板',
+  openBoard: '看板：開啟面板',
+  newTaskCommand: '看板：新增任務',
+  countTip: (running, ready) => `看板 — 執行中 ${running}、就緒 ${ready}`,
+  col: {
+    triage: { label: '分類', help: '原始想法 — 由細化代理整理出規格。' },
+    todo: { label: '待辦', help: '等待相依項目，或未指派。' },
+    scheduled: { label: '已排程', help: '等待預定時間到來。' },
+    ready: { label: '就緒', help: '相依項目已滿足 — 指派一個設定檔，排程器便會執行它。' },
+    running: { label: '執行中', help: '已被工作單元領取 — 有代理在處理。由排程器設定。' },
+    blocked: { label: '受阻', help: '工作單元需要人工輸入。' },
+    review: { label: '審查', help: '審查代理正在檢查工作。由排程器設定。' },
+    done: { label: '完成', help: '已完成；相依它的子任務變為就緒。' },
+    archived: { label: '已封存', help: '從預設面板檢視中隱藏。' }
+  },
+  locked: {
+    review: '審查狀態由排程器在審查代理領取卡片時設定。',
+    running: '執行中由排程器在工作單元領取卡片時設定。',
+    scheduled: '排程需要喚醒時間 — 由代理設定；無法拖入。'
+  },
+  arcRunning: '有代理正在處理它。',
+  arcStale: '已領取，但超過 2 分鐘沒有工作單元心跳 — 排程器將重新領取。',
+  title: '看板',
+  orchestrationSettings: '編排設定',
+  newTask: '新增任務',
+  filterCards: '篩選卡片…',
+  noMatch: '沒有符合篩選條件的任務',
+  noTasks: '此面板尚無任務',
+  open: '開啟',
+  select: modifier => `選取（${modifier}點擊）`,
+  deselect: '取消選取',
+  moveTo: label => `移至 ${label}`,
+  delete: '刪除',
+  reviewChecking: '審查代理正在檢查已完成的工作。',
+  attachedTip: name => `${name} 已接手 — 排程器將在下一個週期（≤1 分鐘）移交。`,
+  orchestratorTip: name => `${name}（編排者）將在下一個週期領取並撰寫規格。`,
+  autoAssignTip: name => `將在下一個排程週期自動指派給「${name}」（kanban.default_assignee）。`,
+  wontRun: '不會執行',
+  wontRunTip: '就緒卡片只有在指派了設定檔後才會執行。開啟卡片設定負責人，或在編排設定中設定預設負責人。',
+  noHeartbeat: '無心跳',
+  expand: label => `展開 ${label}`,
+  collapse: label => `摺疊 ${label}`,
+  newTaskIn: label => `在 ${label} 新增任務`,
+  empty: '空',
+  unassigned: '未指派',
+  filters: '篩選',
+  allProfiles: '所有設定檔',
+  allTenants: '所有租戶',
+  showArchived: '顯示已封存',
+  groupRunning: '依設定檔分組執行中',
+  teamLanes: '團隊泳道',
+  teamLaneEmpty: '將卡片拖到此處以委派',
+  nSelected: n => `已選取 ${n} 個`,
+  moveToShort: '移至',
+  assign: '指派',
+  unassignAction: '取消指派',
+  archive: '封存',
+  clearSelection: '清除選取（Esc）',
+  refused: '被拒絕',
+  bulkFailed: (failed, total, err) => `${total} 個中有 ${failed} 個失敗 — ${err}。失敗的卡片仍保持選取。`,
+  titlePlaceholderTriage: '大致想法 — 細化代理會補全',
+  titlePlaceholder: '標題',
+  descPlaceholder: '描述（選填）',
+  priority: '優先順序',
+  workspace: '工作區',
+  boardDefaultSuffix: '・面板預設',
+  workspaceOverride: '工作區路徑（選填覆寫）',
+  model: '模型',
+  modelInherit: '設定檔預設',
+  modelClear: '清除模型覆寫',
+  modelHint: '讓此任務使用指定的模型與思考深度。未設定時使用所指派設定檔本身的設定。',
+  workspaceInherit: '繼承面板的專案目錄',
+  workspaceInheritDir: dir => `留空則繼承 ${dir}`,
+  workspaceInheritGeneric: '留空則繼承面板的專案目錄。',
+  assignee: '負責人',
+  defaultOption: name => `${name}（預設）`,
+  parkedOption: '未指派（擱置 — 不會執行）',
+  skills: '技能（以逗號分隔）',
+  skillsPlaceholder: 'translation, github',
+  parent: '父任務（完成前會阻擋）',
+  noParent: '— 無父任務 —',
+  goalMode: '目標模式（工作單元循環直到評判代理認可完成）',
+  creating: '建立中…',
+  createTask: '建立任務',
+  cancel: '取消',
+  save: '儲存',
+  estimate: '估算',
+  estimateEffort: '估算工作量',
+  estimating: '估算中…',
+  reEstimate: '重新估算',
+  makesModelCall: '會呼叫模型',
+  estimateTip: '由輔助模型對 token 數與複雜度的粗略估算 — 會呼叫模型。',
+  estimateTipLong: '快速呼叫輔助模型來估算 token 數與複雜度。僅供參考，並非帳單。',
+  roughEstimate: '粗略估算',
+  tokUnit: 'tok',
+  couldNotEstimate: '無法估算',
+  complexity: { S: '小', M: '中', L: '大' },
+  introBody:
+    '卡片不由你執行，而是由代理執行。把有負責人的卡片放入「就緒」，代理會在一分鐘內領取。沒有負責人就不會執行。分類：代理先把想法改寫成合適的任務。待辦：等待其他卡片。已排程：等待計時器。執行中與審查：這是代理的通道，請勿插手。受阻：正在等你。結果會回到卡片上。',
+  introGotIt: '知道了',
+  evtCreated: (where, assignee) => `已建立${where ? `（${where}）` : ''}${assignee ? `・指派給 ${assignee}` : ''}`,
+  evtMovedTo: col => `移至 ${col}`,
+  evtParentReopened: parent => `父任務 ${parent} 已重新開啟`,
+  evtAssignedTo: assignee => `指派給 ${assignee}`,
+  evtUnassigned: '取消指派',
+  evtCommentBy: author => `${author} 的留言`,
+  evtClaimedReview: '被審查代理領取',
+  evtClaimedWorker: '被工作單元領取',
+  evtWorkerStarted: '工作單元已啟動',
+  evtCompleted: '已完成',
+  evtBlocked: '受阻 — 需要人工輸入',
+  evtUnblocked: col => `已解除阻擋${col ? ` → ${col}` : ' → 就緒'}`,
+  evtReclaimed: '已重新領取 — 已放回佇列',
+  evtSpecified: '分類代理已撰寫規格',
+  evtPromoted: '相依項目已完成 — 提升為就緒',
+  evtScheduled: '已排程稍後執行',
+  evtArchived: '已封存',
+  evtReprioritized: priority => `優先順序設為 ${priority}`,
+  someone: '某人',
+  metaPriority: '優先順序',
+  metaTenant: '租戶',
+  metaCreatedBy: '建立者',
+  metaCreated: '建立於',
+  metaWorkerPid: '工作單元 PID',
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? '工作單元正在等待人工輸入。'
+      : kind === 'capability'
+        ? '工作單元遇到了無法跨越的能力限制。'
+        : kind === 'transient'
+          ? '工作單元因暫時性錯誤失敗。'
+          : '工作單元回報了需要等待的相依關係。',
+  blockReason: '封鎖類型',
+  blockRecurrences: '封鎖次數',
+  blockRecurrencesTip: '人工解除封鎖後，該任務因同一原因再次封鎖的次數。',
+  consecutiveFailures: '連續失敗',
+  lastFailureError: '最近失敗',
+  unblockedMessage: id => `已解除 ${id} 的封鎖。任務將在下一輪排程中就緒。`,
+  readyUnassignedTitle: '就緒但未指派 — 這張卡片永遠不會執行。',
+  readyUnassignedBody:
+    '排程器只領取有負責人的就緒卡片。在上方的負責人欄位選擇一個設定檔（或在編排設定中設定預設負責人），它會在一分鐘內執行。',
+  diagnosticsN: n => `診斷・${n}`,
+  commandCopied: '指令已複製',
+  description: '描述',
+  editDescription: '編輯描述',
+  cancelEdit: '取消編輯',
+  noDescription: '尚無描述。',
+  result: '結果',
+  latestSummary: '最新摘要',
+  dependencies: '相依關係',
+  blockedBy: '受阻於',
+  blocks: '阻擋',
+  comments: n => `留言・${n}`,
+  commentsHelpRunning:
+    '此任務正在執行。你的備註會在幾秒內融入工作單元目前的回合 — 無需阻擋/解除操作。選擇「附上備註重新排入佇列」則會帶著你的備註從頭重跑任務。',
+  commentsHelp: '留言會加入任務討論串。工作單元領取任務時會將其作為脈絡的一部分讀取。',
+  send: '傳送',
+  comment: '留言',
+  messageWorker: '傳訊給執行中的工作單元…',
+  addComment: '新增留言…',
+  deliveredLive: '幾秒內送達執行中的工作單元。',
+  requeueWithNote: '附上備註重新排入佇列',
+  notePosted: '備註已發布 — 工作單元已重新排入佇列',
+  activity: n => `活動・${n}`,
+  runs: n => `執行・${n}`,
+  workerLog: '工作單元日誌',
+  workerLogTail: '工作單元日誌・末尾',
+  attachments: n => `附件・${n}`,
+  noAttachments: '尚無附件。',
+  uploadAttachment: '上傳附件',
+  taskActions: '任務操作',
+  copyTaskId: '複製任務 ID',
+  copyTitle: '複製標題',
+  copiedId: id => `已複製 ${id}`,
+  copiedTitle: '已複製標題',
+  close: '關閉',
+  working: '進行中',
+  board: '面板',
+  newBoard: '新增面板',
+  switchBoard: '切換面板',
+  newBoardDots: '新增面板…',
+  exportDots: '匯出…',
+  importDots: '匯入…',
+  renameDots: '重新命名…',
+  settingsDots: '設定…',
+  exportBoardTitle: '匯出面板…',
+  importBoardTitle: '匯入面板…',
+  boardExported: path => `面板已匯出至 ${path}`,
+  boardImported: name => `已匯入 ${name}`,
+  boardImportedAs: slug => `該名稱已被使用，已匯入為 ${slug}`,
+  renameBoardTitle: '重新命名面板',
+  deleteBoardTitle: name => `確定刪除「${name}」？`,
+  deleteBoardConfirm: '面板會被封存而非清除，其任務和附件仍保留在磁碟上，可以還原。',
+  boardArchived: path => `面板已封存至 ${path}`,
+  boardSettingsFor: name => `面板設定 — ${name}`,
+  name: '名稱',
+  boardNamePlaceholder: '面板名稱',
+  slug: slug => `slug: ${slug}`,
+  project: '專案',
+  noProject: '無專案（暫存沙箱）',
+  projectHintPre:
+    '新任務將在專案的儲存庫中執行（每個任務一個 worktree）；每個任務在建立時仍可覆寫其工作區。管理專案請使用 ',
+  projectHintCmd: 'hermes project',
+  createBoard: '建立面板',
+  orchestratorProfile: '編排者設定檔',
+  defaultAssignee: '預設負責人',
+  defaultParen: '（預設）',
+  autoDecompose: '自動分解分類任務',
+  profileDescriptions: '設定檔說明',
+  profileDescriptionsHint: '說明用於引導分解器的路由。可用輔助模型自動產生，或自行填寫。',
+  profileGoodAt: '這個設定檔擅長什麼？',
+  auto: '自動',
+  notify: {
+    completedTitle: '任務已完成',
+    blockedTitle: '任務受阻 — 需要你的輸入',
+    blockLoopTitle: '任務已轉入分類 — 需要人工決定',
+    gaveUpTitle: '任務已停止',
+    gaveUpBody: 'Hermes 無法完成這個任務。開啟看板查看原因並重新指派。',
+    crashedTitle: '任務遇到問題 — Hermes 將自動重試',
+    timedOutTitle: '任務耗時過長 — Hermes 將自動重試',
+    openKanban: '開啟看板',
+    artifacts: (n: number) => `${n} 個產物`
+  }
+}
+
+const fr: KanbanMessages = {
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? 'Le worker a demandé une saisie humaine.'
+      : kind === 'capability'
+        ? "Le worker a atteint une limite de capacité qu'il ne peut pas franchir."
+        : kind === 'transient'
+          ? 'Le worker a échoué sur une erreur transitoire.'
+          : 'Le worker a signalé une dépendance à attendre.',
+  blockReason: 'Type de blocage',
+  blockRecurrences: 'Récurrences du blocage',
+  blockRecurrencesTip: 'Nombre de fois où cette tâche a été rebloquée pour la même raison après un déblocage humain.',
+  consecutiveFailures: 'Échecs consécutifs',
+  lastFailureError: 'Dernier échec',
+  unblockedMessage: id => `${id} débloquée. La tâche est prête pour le prochain tick.`,
+  nav: 'Kanban',
+  openBoard: 'Kanban : ouvrir le tableau',
+  newTaskCommand: 'Kanban : nouvelle tâche',
+  countTip: (running, ready) => `Kanban — ${running} en cours, ${ready} prêtes`,
+  col: {
+    triage: { label: 'Triage', help: 'Idées brutes — un spécificateur en rédige la spec.' },
+    todo: { label: 'À faire', help: 'En attente de dépendances ou non assignée.' },
+    scheduled: { label: 'Planifié', help: 'Attend l’heure planifiée.' },
+    ready: { label: 'Prêt', help: 'Dépendances satisfaites — assignez un profil et le dispatcher l’exécute.' },
+    running: { label: 'En cours', help: 'Réclamée par un worker — un agent est dessus. Défini par le dispatcher.' },
+    blocked: { label: 'Bloqué', help: 'Le worker demande une entrée humaine.' },
+    review: { label: 'Revue', help: 'Un agent de revue vérifie le travail. Défini par le dispatcher.' },
+    done: { label: 'Terminé', help: 'Terminée ; les enfants dépendants deviennent prêts.' },
+    archived: { label: 'Archivé', help: 'Masquée de la vue par défaut du tableau.' }
+  },
+  locked: {
+    review: 'La revue est définie par le dispatcher quand un agent de revue prend la carte.',
+    running: 'En cours est défini par le dispatcher quand un worker réclame la carte.',
+    scheduled: 'Planifié exige une heure de réveil — définie par les agents ; impossible d’y glisser une carte.'
+  },
+  arcRunning: 'Un agent y travaille en ce moment.',
+  arcStale: 'Réclamée, mais aucun heartbeat du worker depuis plus de 2 minutes — le dispatcher la reprendra.',
+  title: 'Kanban',
+  orchestrationSettings: 'Paramètres d’orchestration',
+  newTask: 'Nouvelle tâche',
+  filterCards: 'Filtrer les cartes…',
+  noMatch: 'Aucune tâche ne correspond aux filtres',
+  noTasks: 'Aucune tâche sur ce tableau',
+  open: 'Ouvrir',
+  select: modifier => `Sélectionner (${modifier}+clic)`,
+  deselect: 'Désélectionner',
+  moveTo: label => `Déplacer vers ${label}`,
+  delete: 'Supprimer',
+  reviewChecking: 'Un agent de revue vérifie le travail terminé.',
+  attachedTip: name => `${name} est attaché — le dispatcher la lui confie au prochain tick (≤1 min).`,
+  orchestratorTip: name => `${name} (l’orchestrateur) la prend au prochain tick et rédige la spec.`,
+  autoAssignTip: name => `Assignée automatiquement à « ${name} » (kanban.default_assignee) au prochain tick.`,
+  wontRun: 'ne s’exécutera pas',
+  wontRunTip:
+    'Les cartes prêtes ne s’exécutent qu’avec un profil assigné. Ouvrez la carte et définissez un assigné, ou configurez un assigné par défaut dans les paramètres d’orchestration.',
+  noHeartbeat: 'pas de heartbeat',
+  expand: label => `Déplier ${label}`,
+  collapse: label => `Replier ${label}`,
+  newTaskIn: label => `Nouvelle tâche dans ${label}`,
+  empty: 'Vide',
+  unassigned: 'non assignée',
+  filters: 'Filtres',
+  allProfiles: 'Tous les profils',
+  allTenants: 'Tous les tenants',
+  showArchived: 'Afficher les archives',
+  groupRunning: 'Grouper En cours par profil',
+  teamLanes: 'Couloirs par agent',
+  teamLaneEmpty: 'Déposez une carte ici pour la déléguer',
+  nSelected: n => `${n} sélectionnée(s)`,
+  moveToShort: 'Déplacer vers',
+  assign: 'Assigner',
+  unassignAction: 'Désassigner',
+  archive: 'Archiver',
+  clearSelection: 'Effacer la sélection (Échap)',
+  refused: 'refusée',
+  bulkFailed: (failed, total, err) =>
+    `${failed} sur ${total} ont échoué — ${err}. Les cartes en échec restent sélectionnées.`,
+  titlePlaceholderTriage: 'Idée brute — un spécificateur la précisera',
+  titlePlaceholder: 'Titre',
+  descPlaceholder: 'Description (facultative)',
+  priority: 'Priorité',
+  workspace: 'Espace de travail',
+  boardDefaultSuffix: ' · défaut du tableau',
+  workspaceOverride: 'Chemin de l’espace de travail (surcharge facultative)',
+  model: 'Modèle',
+  modelInherit: 'Défaut du profil',
+  modelClear: 'Effacer la surcharge de modèle',
+  modelHint:
+    'Exécute cette tâche sur un modèle et une profondeur de pensée précis. Non défini : ceux du profil assigné.',
+  workspaceInherit: 'Hérite du répertoire de projet du tableau',
+  workspaceInheritDir: dir => `Laisser vide pour hériter de ${dir}`,
+  workspaceInheritGeneric: 'Laisser vide pour hériter du répertoire de projet du tableau.',
+  assignee: 'Assigné',
+  defaultOption: name => `${name} (défaut)`,
+  parkedOption: 'non assignée (en attente — ne s’exécutera pas)',
+  skills: 'Compétences (séparées par des virgules)',
+  skillsPlaceholder: 'translation, github',
+  parent: 'Parent (bloque jusqu’à sa fin)',
+  noParent: '— pas de parent —',
+  goalMode: 'Mode objectif (le worker boucle jusqu’à ce qu’un juge valide)',
+  creating: 'Création…',
+  createTask: 'Créer la tâche',
+  cancel: 'Annuler',
+  save: 'Enregistrer',
+  estimate: 'Estimer',
+  estimateEffort: 'Estimer l’effort',
+  estimating: 'Estimation…',
+  reEstimate: 'Réestimer',
+  makesModelCall: 'appelle un modèle',
+  estimateTip: 'Estimation approximative de tokens et de complexité par le modèle auxiliaire — appelle un modèle.',
+  estimateTipLong:
+    'Lance un appel rapide au modèle auxiliaire pour estimer tokens et complexité. Indicatif, pas une facture.',
+  roughEstimate: 'Estimation approximative',
+  tokUnit: 'tok',
+  couldNotEstimate: 'Estimation impossible',
+  complexity: { S: 'Petite', M: 'Moyenne', L: 'Grande' },
+  introBody:
+    'Vous n’exécutez pas les cartes — les agents le font. Mettez une carte avec un assigné dans Prêt et un agent la prend en moins d’une minute. Pas d’assigné, pas d’exécution. Triage : un agent transforme d’abord l’idée en vraie tâche. À faire : attend d’autres cartes. Planifié : attend un minuteur. En cours et Revue : les voies des agents, n’y touchez pas. Bloqué : elle attend votre réponse. Les résultats reviennent sur la carte.',
+  introGotIt: 'Compris',
+  evtCreated: (where, assignee) =>
+    `créée${where ? ` dans ${where}` : ''}${assignee ? ` · assignée à ${assignee}` : ''}`,
+  evtMovedTo: col => `déplacée vers ${col}`,
+  evtParentReopened: parent => `parent ${parent} rouvert`,
+  evtAssignedTo: assignee => `assignée à ${assignee}`,
+  evtUnassigned: 'désassignée',
+  evtCommentBy: author => `commentaire de ${author}`,
+  evtClaimedReview: 'réclamée par un agent de revue',
+  evtClaimedWorker: 'réclamée par un worker',
+  evtWorkerStarted: 'worker démarré',
+  evtCompleted: 'terminée',
+  evtBlocked: 'bloquée — entrée humaine requise',
+  evtUnblocked: col => `débloquée${col ? ` → ${col}` : ' → Prêt'}`,
+  evtReclaimed: 'reprise — remise dans la file',
+  evtSpecified: 'spec rédigée par l’agent de triage',
+  evtPromoted: 'dépendances terminées — promue en Prêt',
+  evtScheduled: 'planifiée pour plus tard',
+  evtArchived: 'archivée',
+  evtReprioritized: priority => `priorité définie sur ${priority}`,
+  someone: 'quelqu’un',
+  metaPriority: 'Priorité',
+  metaTenant: 'Tenant',
+  metaCreatedBy: 'Créée par',
+  metaCreated: 'Créée le',
+  metaWorkerPid: 'PID du worker',
+  readyUnassignedTitle: 'Prête mais non assignée — cette carte ne s’exécutera jamais.',
+  readyUnassignedBody:
+    'Le dispatcher ne réclame que les cartes prêtes qui ont un assigné. Choisissez un profil dans le champ Assigné ci-dessus (ou définissez un assigné par défaut dans les paramètres d’orchestration) et elle s’exécute en moins d’une minute.',
+  diagnosticsN: n => `Diagnostics · ${n}`,
+  commandCopied: 'Commande copiée',
+  description: 'Description',
+  editDescription: 'Modifier la description',
+  cancelEdit: 'Annuler la modification',
+  noDescription: 'Pas encore de description.',
+  result: 'Résultat',
+  latestSummary: 'Dernier résumé',
+  dependencies: 'Dépendances',
+  blockedBy: 'Bloquée par',
+  blocks: 'Bloque',
+  comments: n => `Commentaires · ${n}`,
+  commentsHelpRunning:
+    'Cette tâche est en cours. Votre note est intégrée au tour actuel du worker en quelques secondes — pas de blocage/déblocage. « Remettre en file avec note » relance la tâche de zéro avec votre note en contexte.',
+  commentsHelp:
+    'Les commentaires s’ajoutent au fil de la tâche. Quand un worker la prend, il les lit comme partie de son contexte.',
+  send: 'Envoyer',
+  comment: 'Commentaire',
+  messageWorker: 'Message au worker en cours…',
+  addComment: 'Ajouter un commentaire…',
+  deliveredLive: 'Livrée au worker en cours en quelques secondes.',
+  requeueWithNote: 'Remettre en file avec note',
+  notePosted: 'Note publiée — worker remis en file',
+  activity: n => `Activité · ${n}`,
+  runs: n => `Exécutions · ${n}`,
+  workerLog: 'Journal du worker',
+  workerLogTail: 'Journal du worker · fin',
+  attachments: n => `Pièces jointes · ${n}`,
+  noAttachments: 'Pas encore de pièce jointe.',
+  uploadAttachment: 'Joindre un fichier',
+  taskActions: 'Actions de la tâche',
+  copyTaskId: 'Copier l’id de la tâche',
+  copyTitle: 'Copier le titre',
+  copiedId: id => `${id} copié`,
+  copiedTitle: 'Titre copié',
+  close: 'Fermer',
+  working: 'en cours',
+  board: 'Tableau',
+  newBoard: 'Nouveau tableau',
+  switchBoard: 'Changer de tableau',
+  newBoardDots: 'Nouveau tableau…',
+  exportDots: 'Exporter…',
+  importDots: 'Importer…',
+  renameDots: 'Renommer…',
+  settingsDots: 'Paramètres…',
+  exportBoardTitle: 'Exporter le tableau…',
+  importBoardTitle: 'Importer un tableau…',
+  boardExported: path => `Tableau exporté vers ${path}`,
+  boardImported: name => `${name} importé`,
+  boardImportedAs: slug => `Ce nom était pris — importé en tant que ${slug}`,
+  renameBoardTitle: 'Renommer le tableau',
+  deleteBoardTitle: name => `Supprimer « ${name} » ?`,
+  deleteBoardConfirm:
+    'Le tableau est archivé, pas effacé — ses tâches et pièces jointes restent sur le disque et peuvent être restaurées.',
+  boardArchived: path => `Tableau archivé vers ${path}`,
+  boardSettingsFor: name => `Paramètres du tableau — ${name}`,
+  name: 'Nom',
+  boardNamePlaceholder: 'Nom du tableau',
+  slug: slug => `slug : ${slug}`,
+  project: 'Projet',
+  noProject: 'Aucun projet (bacs à sable)',
+  projectHintPre:
+    'Les nouvelles tâches s’exécutent dans le dépôt du projet (un worktree par tâche) ; chaque tâche peut toujours surcharger son espace de travail à la création. Gérez les projets avec ',
+  projectHintCmd: 'hermes project',
+  createBoard: 'Créer le tableau',
+  orchestratorProfile: 'Profil orchestrateur',
+  defaultAssignee: 'Assigné par défaut',
+  defaultParen: '(défaut)',
+  autoDecompose: 'Décomposer automatiquement les tâches de triage',
+  profileDescriptions: 'Descriptions des profils',
+  profileDescriptionsHint:
+    'Les descriptions guident le routage du décomposeur. Générez-les avec le modèle auxiliaire ou écrivez-les vous-même.',
+  profileGoodAt: 'En quoi ce profil excelle-t-il ?',
+  auto: 'Auto',
+  notify: {
+    completedTitle: 'Tâche terminée',
+    blockedTitle: 'Tâche bloquée — votre entrée est requise',
+    blockLoopTitle: 'Tâche renvoyée en triage — une décision est requise',
+    gaveUpTitle: 'Tâche arrêtée',
+    gaveUpBody: 'Hermes n’a pas pu terminer cette tâche. Ouvrez Kanban pour voir pourquoi et la réassigner.',
+    crashedTitle: 'La tâche a rencontré un problème — Hermes la réessaiera automatiquement',
+    timedOutTitle: 'La tâche a pris trop de temps — Hermes la réessaiera automatiquement',
+    openKanban: 'Ouvrir Kanban',
+    artifacts: (n: number) => `${n} artefacts`
+  }
+}
+
+const de: KanbanMessages = {
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? 'Der Worker hat menschliche Eingabe angefordert.'
+      : kind === 'capability'
+        ? 'Der Worker ist an eine Fähigkeitsgrenze gestoßen, die er nicht überwinden kann.'
+        : kind === 'transient'
+          ? 'Der Worker ist an einem vorübergehenden Fehler gescheitert.'
+          : 'Der Worker hat eine Abhängigkeit gemeldet, auf die er warten muss.',
+  blockReason: 'Blockierungsart',
+  blockRecurrences: 'Wiederholte Blockierungen',
+  blockRecurrencesTip:
+    'Wie oft diese Aufgabe nach einer manuellen Freigabe aus demselben Grund erneut blockiert wurde.',
+  consecutiveFailures: 'Aufeinanderfolgende Fehler',
+  lastFailureError: 'Letzter Fehler',
+  unblockedMessage: id => `${id} freigegeben. Die Aufgabe ist für den nächsten Tick bereit.`,
+  nav: 'Kanban',
+  openBoard: 'Kanban: Board öffnen',
+  newTaskCommand: 'Kanban: Neue Aufgabe',
+  countTip: (running, ready) => `Kanban — ${running} laufend, ${ready} bereit`,
+  col: {
+    triage: { label: 'Triage', help: 'Rohe Ideen — ein Spezifizierer formt die Spec.' },
+    todo: { label: 'Todo', help: 'Wartet auf Abhängigkeiten oder unzugewiesen.' },
+    scheduled: { label: 'Geplant', help: 'Wartet auf den geplanten Zeitpunkt.' },
+    ready: { label: 'Bereit', help: 'Abhängigkeiten erfüllt — Profil zuweisen und der Dispatcher führt sie aus.' },
+    running: {
+      label: 'Läuft',
+      help: 'Von einem Worker übernommen — ein Agent arbeitet daran. Vom Dispatcher gesetzt.'
+    },
+    blocked: { label: 'Blockiert', help: 'Der Worker braucht menschliche Eingabe.' },
+    review: { label: 'Review', help: 'Ein Review-Agent prüft die Arbeit. Vom Dispatcher gesetzt.' },
+    done: { label: 'Fertig', help: 'Abgeschlossen; abhängige Kinder werden bereit.' },
+    archived: { label: 'Archiviert', help: 'Aus der Standard-Boardansicht ausgeblendet.' }
+  },
+  locked: {
+    review: 'Review wird vom Dispatcher gesetzt, wenn ein Review-Agent die Karte übernimmt.',
+    running: 'Läuft wird vom Dispatcher gesetzt, wenn ein Worker die Karte übernimmt.',
+    scheduled: 'Geplant braucht eine Aufweckzeit — wird von Agenten gesetzt; per Drag & Drop nicht erreichbar.'
+  },
+  arcRunning: 'Ein Agent arbeitet gerade daran.',
+  arcStale: 'Übernommen, aber seit über 2 Minuten kein Worker-Heartbeat — der Dispatcher holt sie zurück.',
+  title: 'Kanban',
+  orchestrationSettings: 'Orchestrierungseinstellungen',
+  newTask: 'Neue Aufgabe',
+  filterCards: 'Karten filtern…',
+  noMatch: 'Keine Aufgaben passen zu den Filtern',
+  noTasks: 'Keine Aufgaben auf diesem Board',
+  open: 'Öffnen',
+  select: modifier => `Auswählen (${modifier}-Klick)`,
+  deselect: 'Auswahl aufheben',
+  moveTo: label => `Verschieben nach ${label}`,
+  delete: 'Löschen',
+  reviewChecking: 'Ein Review-Agent prüft die fertige Arbeit.',
+  attachedTip: name => `${name} ist zugeordnet — der Dispatcher übergibt beim nächsten Tick (≤1 Min.).`,
+  orchestratorTip: name => `${name} (der Orchestrator) nimmt sie beim nächsten Tick und schreibt die Spec.`,
+  autoAssignTip: name => `Wird beim nächsten Dispatch-Tick automatisch „${name}“ zugewiesen (kanban.default_assignee).`,
+  wontRun: 'läuft nicht',
+  wontRunTip:
+    'Bereite Karten laufen nur mit zugewiesenem Profil. Öffne die Karte und setze einen Bearbeiter, oder konfiguriere einen Standard-Bearbeiter in den Orchestrierungseinstellungen.',
+  noHeartbeat: 'kein Heartbeat',
+  expand: label => `${label} aufklappen`,
+  collapse: label => `${label} zuklappen`,
+  newTaskIn: label => `Neue Aufgabe in ${label}`,
+  empty: 'Leer',
+  unassigned: 'unzugewiesen',
+  filters: 'Filter',
+  allProfiles: 'Alle Profile',
+  allTenants: 'Alle Tenants',
+  showArchived: 'Archivierte anzeigen',
+  groupRunning: 'Läuft nach Profil gruppieren',
+  teamLanes: 'Team-Lanes',
+  teamLaneEmpty: 'Karte hier ablegen, um zu delegieren',
+  nSelected: n => `${n} ausgewählt`,
+  moveToShort: 'Verschieben nach',
+  assign: 'Zuweisen',
+  unassignAction: 'Zuweisung aufheben',
+  archive: 'Archivieren',
+  clearSelection: 'Auswahl löschen (Esc)',
+  refused: 'abgelehnt',
+  bulkFailed: (failed, total, err) =>
+    `${failed} von ${total} fehlgeschlagen — ${err}. Fehlgeschlagene Karten bleiben ausgewählt.`,
+  titlePlaceholderTriage: 'Grobe Idee — ein Spezifizierer arbeitet sie aus',
+  titlePlaceholder: 'Titel',
+  descPlaceholder: 'Beschreibung (optional)',
+  priority: 'Priorität',
+  workspace: 'Arbeitsbereich',
+  boardDefaultSuffix: ' · Board-Standard',
+  workspaceOverride: 'Arbeitsbereich-Pfad (optionale Überschreibung)',
+  model: 'Modell',
+  modelInherit: 'Profil-Standard',
+  modelClear: 'Modell-Überschreibung entfernen',
+  modelHint:
+    'Führt diese Aufgabe auf einem bestimmten Modell mit bestimmter Denktiefe aus. Leer = Einstellung des zugewiesenen Profils.',
+  workspaceInherit: 'Erbt das Projektverzeichnis des Boards',
+  workspaceInheritDir: dir => `Leer lassen, um ${dir} zu erben`,
+  workspaceInheritGeneric: 'Leer lassen, um das Projektverzeichnis des Boards zu erben.',
+  assignee: 'Bearbeiter',
+  defaultOption: name => `${name} (Standard)`,
+  parkedOption: 'unzugewiesen (geparkt — läuft nicht)',
+  skills: 'Skills (kommagetrennt)',
+  skillsPlaceholder: 'translation, github',
+  parent: 'Elternteil (blockiert bis zu dessen Ende)',
+  noParent: '— kein Elternteil —',
+  goalMode: 'Zielmodus (Worker läuft im Loop, bis ein Judge zustimmt)',
+  creating: 'Wird erstellt…',
+  createTask: 'Aufgabe erstellen',
+  cancel: 'Abbrechen',
+  save: 'Speichern',
+  estimate: 'Schätzen',
+  estimateEffort: 'Aufwand schätzen',
+  estimating: 'Schätzung läuft…',
+  reEstimate: 'Neu schätzen',
+  makesModelCall: 'ruft ein Modell auf',
+  estimateTip: 'Grobe Token- und Komplexitätsschätzung vom Hilfsmodell — ruft ein Modell auf.',
+  estimateTipLong:
+    'Ruft kurz das Hilfsmodell auf, um Tokens und Komplexität zu schätzen. Ein Anhaltspunkt, keine Rechnung.',
+  roughEstimate: 'Grobe Schätzung',
+  tokUnit: 'tok',
+  couldNotEstimate: 'Schätzung nicht möglich',
+  complexity: { S: 'Klein', M: 'Mittel', L: 'Groß' },
+  introBody:
+    'Du führst die Karten nicht aus — Agenten tun es. Lege eine Karte mit Bearbeiter in Bereit und ein Agent übernimmt sie binnen einer Minute. Kein Bearbeiter, kein Lauf. Triage: ein Agent formt die Idee zuerst zur echten Aufgabe. Todo: wartet auf andere Karten. Geplant: wartet auf einen Timer. Läuft und Review: die Spuren der Agenten — Finger weg. Blockiert: wartet auf dich. Ergebnisse kommen auf die Karte zurück.',
+  introGotIt: 'Verstanden',
+  evtCreated: (where, assignee) =>
+    `erstellt${where ? ` in ${where}` : ''}${assignee ? ` · ${assignee} zugewiesen` : ''}`,
+  evtMovedTo: col => `verschoben nach ${col}`,
+  evtParentReopened: parent => `Elternteil ${parent} wieder geöffnet`,
+  evtAssignedTo: assignee => `${assignee} zugewiesen`,
+  evtUnassigned: 'Zuweisung aufgehoben',
+  evtCommentBy: author => `Kommentar von ${author}`,
+  evtClaimedReview: 'von einem Review-Agent übernommen',
+  evtClaimedWorker: 'von einem Worker übernommen',
+  evtWorkerStarted: 'Worker gestartet',
+  evtCompleted: 'abgeschlossen',
+  evtBlocked: 'blockiert — menschliche Eingabe nötig',
+  evtUnblocked: col => `entblockt${col ? ` → ${col}` : ' → Bereit'}`,
+  evtReclaimed: 'zurückgeholt — wieder in der Warteschlange',
+  evtSpecified: 'Spec vom Triage-Agent geschrieben',
+  evtPromoted: 'Abhängigkeiten fertig — nach Bereit befördert',
+  evtScheduled: 'für später geplant',
+  evtArchived: 'archiviert',
+  evtReprioritized: priority => `Priorität auf ${priority} gesetzt`,
+  someone: 'jemand',
+  metaPriority: 'Priorität',
+  metaTenant: 'Tenant',
+  metaCreatedBy: 'Erstellt von',
+  metaCreated: 'Erstellt',
+  metaWorkerPid: 'Worker-PID',
+  readyUnassignedTitle: 'Bereit, aber unzugewiesen — diese Karte läuft nie.',
+  readyUnassignedBody:
+    'Der Dispatcher übernimmt nur bereite Karten mit Bearbeiter. Wähle oben im Feld Bearbeiter ein Profil (oder setze einen Standard-Bearbeiter in den Orchestrierungseinstellungen) und sie läuft binnen einer Minute.',
+  diagnosticsN: n => `Diagnosen · ${n}`,
+  commandCopied: 'Befehl kopiert',
+  description: 'Beschreibung',
+  editDescription: 'Beschreibung bearbeiten',
+  cancelEdit: 'Bearbeiten abbrechen',
+  noDescription: 'Noch keine Beschreibung.',
+  result: 'Ergebnis',
+  latestSummary: 'Neueste Zusammenfassung',
+  dependencies: 'Abhängigkeiten',
+  blockedBy: 'Blockiert von',
+  blocks: 'Blockiert',
+  comments: n => `Kommentare · ${n}`,
+  commentsHelpRunning:
+    'Diese Aufgabe läuft. Deine Notiz wird binnen Sekunden in den aktuellen Turn des Workers gefaltet — ohne Blockieren/Entblocken. „Mit Notiz neu einreihen“ startet die Aufgabe von vorn, mit deiner Notiz im Kontext.',
+  commentsHelp:
+    'Kommentare werden dem Aufgaben-Thread hinzugefügt. Wenn ein Worker die Aufgabe übernimmt, liest er sie als Teil seines Kontexts.',
+  send: 'Senden',
+  comment: 'Kommentar',
+  messageWorker: 'Nachricht an den laufenden Worker…',
+  addComment: 'Kommentar hinzufügen…',
+  deliveredLive: 'Binnen Sekunden beim laufenden Worker.',
+  requeueWithNote: 'Mit Notiz neu einreihen',
+  notePosted: 'Notiz gespeichert — Worker neu eingereiht',
+  activity: n => `Aktivität · ${n}`,
+  runs: n => `Läufe · ${n}`,
+  workerLog: 'Worker-Log',
+  workerLogTail: 'Worker-Log · Ende',
+  attachments: n => `Anhänge · ${n}`,
+  noAttachments: 'Noch keine Anhänge.',
+  uploadAttachment: 'Anhang hochladen',
+  taskActions: 'Aufgabenaktionen',
+  copyTaskId: 'Aufgaben-ID kopieren',
+  copyTitle: 'Titel kopieren',
+  copiedId: id => `${id} kopiert`,
+  copiedTitle: 'Titel kopiert',
+  close: 'Schließen',
+  working: 'in Arbeit',
+  board: 'Board',
+  newBoard: 'Neues Board',
+  switchBoard: 'Board wechseln',
+  newBoardDots: 'Neues Board…',
+  exportDots: 'Exportieren…',
+  importDots: 'Importieren…',
+  renameDots: 'Umbenennen…',
+  settingsDots: 'Einstellungen…',
+  exportBoardTitle: 'Board exportieren…',
+  importBoardTitle: 'Board importieren…',
+  boardExported: path => `Board nach ${path} exportiert`,
+  boardImported: name => `${name} importiert`,
+  boardImportedAs: slug => `Name vergeben — als ${slug} importiert`,
+  renameBoardTitle: 'Board umbenennen',
+  deleteBoardTitle: name => `„${name}“ löschen?`,
+  deleteBoardConfirm:
+    'Das Board wird archiviert, nicht gelöscht — Aufgaben und Anhänge bleiben auf der Festplatte und lassen sich wiederherstellen.',
+  boardArchived: path => `Board nach ${path} archiviert`,
+  boardSettingsFor: name => `Board-Einstellungen — ${name}`,
+  name: 'Name',
+  boardNamePlaceholder: 'Board-Name',
+  slug: slug => `Slug: ${slug}`,
+  project: 'Projekt',
+  noProject: 'Kein Projekt (Scratch-Sandboxes)',
+  projectHintPre:
+    'Neue Aufgaben laufen im Repo des Projekts (ein Worktree pro Aufgabe); jede Aufgabe kann ihren Arbeitsbereich beim Erstellen überschreiben. Projekte verwalten mit ',
+  projectHintCmd: 'hermes project',
+  createBoard: 'Board erstellen',
+  orchestratorProfile: 'Orchestrator-Profil',
+  defaultAssignee: 'Standard-Bearbeiter',
+  defaultParen: '(Standard)',
+  autoDecompose: 'Triage-Aufgaben automatisch zerlegen',
+  profileDescriptions: 'Profilbeschreibungen',
+  profileDescriptionsHint:
+    'Beschreibungen steuern das Routing des Zerlegers. Mit dem Hilfsmodell generieren oder selbst schreiben.',
+  profileGoodAt: 'Woran ist dieses Profil gut?',
+  auto: 'Auto',
+  notify: {
+    completedTitle: 'Aufgabe abgeschlossen',
+    blockedTitle: 'Aufgabe blockiert — deine Eingabe nötig',
+    blockLoopTitle: 'Aufgabe in Triage geroutet — Entscheidung nötig',
+    gaveUpTitle: 'Aufgabe gestoppt',
+    gaveUpBody:
+      'Hermes konnte diese Aufgabe nicht abschließen. Öffne Kanban, um den Grund zu sehen und sie neu zuzuweisen.',
+    crashedTitle: 'Aufgabe hatte ein Problem — Hermes versucht es automatisch erneut',
+    timedOutTitle: 'Aufgabe dauerte zu lange — Hermes versucht es automatisch erneut',
+    openKanban: 'Kanban öffnen',
+    artifacts: (n: number) => `${n} Artefakte`
+  }
+}
+
+const es: KanbanMessages = {
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? 'El worker pidió intervención humana.'
+      : kind === 'capability'
+        ? 'El worker chocó con un límite de capacidad que no puede superar.'
+        : kind === 'transient'
+          ? 'El worker falló por un error transitorio.'
+          : 'El worker informó de una dependencia que debe esperar.',
+  blockReason: 'Tipo de bloqueo',
+  blockRecurrences: 'Reincidencias del bloqueo',
+  blockRecurrencesTip: 'Veces que esta tarea volvió a bloquearse por el mismo motivo tras un desbloqueo manual.',
+  consecutiveFailures: 'Fallos consecutivos',
+  lastFailureError: 'Último fallo',
+  unblockedMessage: id => `${id} desbloqueada. La tarea está lista para el siguiente tick.`,
+  nav: 'Kanban',
+  openBoard: 'Kanban: abrir el tablero',
+  newTaskCommand: 'Kanban: nueva tarea',
+  countTip: (running, ready) => `Kanban — ${running} en curso, ${ready} listas`,
+  col: {
+    triage: { label: 'Triaje', help: 'Ideas en bruto — un especificador redacta la spec.' },
+    todo: { label: 'Pendiente', help: 'Esperando dependencias o sin asignar.' },
+    scheduled: { label: 'Programada', help: 'Esperando a que llegue la hora programada.' },
+    ready: { label: 'Lista', help: 'Dependencias resueltas — asigna un perfil y el despachador la ejecuta.' },
+    running: { label: 'En curso', help: 'Reclamada por un worker — un agente está en ello. Lo fija el despachador.' },
+    blocked: { label: 'Bloqueada', help: 'El worker pidió intervención humana.' },
+    review: { label: 'Revisión', help: 'Un agente de revisión comprueba el trabajo. Lo fija el despachador.' },
+    done: { label: 'Hecha', help: 'Completada; los hijos dependientes pasan a listas.' },
+    archived: { label: 'Archivada', help: 'Oculta de la vista por defecto del tablero.' }
+  },
+  locked: {
+    review: 'Revisión la fija el despachador cuando un agente de revisión toma la tarjeta.',
+    running: 'En curso lo fija el despachador cuando un worker reclama la tarjeta.',
+    scheduled: 'Programada necesita una hora de activación — la fijan los agentes; no se puede arrastrar.'
+  },
+  arcRunning: 'Un agente está trabajando en esto ahora.',
+  arcStale:
+    'Reclamada, pero sin heartbeat del worker desde hace más de 2 minutos — el despachador la reclamará de nuevo.',
+  title: 'Kanban',
+  orchestrationSettings: 'Configuración de orquestación',
+  newTask: 'Nueva tarea',
+  filterCards: 'Filtrar tarjetas…',
+  noMatch: 'Ninguna tarea coincide con los filtros',
+  noTasks: 'No hay tareas en este tablero',
+  open: 'Abrir',
+  select: modifier => `Seleccionar (${modifier}+clic)`,
+  deselect: 'Deseleccionar',
+  moveTo: label => `Mover a ${label}`,
+  delete: 'Eliminar',
+  reviewChecking: 'Un agente de revisión está comprobando el trabajo terminado.',
+  attachedTip: name => `${name} está asignado — el despachador se la entrega en el próximo tick (≤1 min).`,
+  orchestratorTip: name => `${name} (el orquestador) la toma en el próximo tick y escribe la spec.`,
+  autoAssignTip: name => `Se asigna automáticamente a «${name}» (kanban.default_assignee) en el próximo tick.`,
+  wontRun: 'no se ejecutará',
+  wontRunTip:
+    'Las tarjetas listas solo se ejecutan con un perfil asignado. Abre la tarjeta y define un asignado, o configura un asignado por defecto en la orquestación.',
+  noHeartbeat: 'sin heartbeat',
+  expand: label => `Expandir ${label}`,
+  collapse: label => `Contraer ${label}`,
+  newTaskIn: label => `Nueva tarea en ${label}`,
+  empty: 'Vacío',
+  unassigned: 'sin asignar',
+  filters: 'Filtros',
+  allProfiles: 'Todos los perfiles',
+  allTenants: 'Todos los tenants',
+  showArchived: 'Mostrar archivadas',
+  groupRunning: 'Agrupar En curso por perfil',
+  teamLanes: 'Carriles por agente',
+  teamLaneEmpty: 'Suelta una tarjeta aquí para delegarla',
+  nSelected: n => `${n} seleccionadas`,
+  moveToShort: 'Mover a',
+  assign: 'Asignar',
+  unassignAction: 'Desasignar',
+  archive: 'Archivar',
+  clearSelection: 'Limpiar selección (Esc)',
+  refused: 'rechazada',
+  bulkFailed: (failed, total, err) =>
+    `${failed} de ${total} fallaron — ${err}. Las tarjetas fallidas siguen seleccionadas.`,
+  titlePlaceholderTriage: 'Idea aproximada — un especificador la concretará',
+  titlePlaceholder: 'Título',
+  descPlaceholder: 'Descripción (opcional)',
+  priority: 'Prioridad',
+  workspace: 'Espacio de trabajo',
+  boardDefaultSuffix: ' · predeterminado del tablero',
+  workspaceOverride: 'Ruta del espacio de trabajo (anulación opcional)',
+  model: 'Modelo',
+  modelInherit: 'Predeterminado del perfil',
+  modelClear: 'Quitar anulación de modelo',
+  modelHint:
+    'Ejecuta esta tarea con un modelo y una profundidad de pensamiento concretos. Vacío usa los del perfil asignado.',
+  workspaceInherit: 'Hereda el directorio de proyecto del tablero',
+  workspaceInheritDir: dir => `Deja vacío para heredar ${dir}`,
+  workspaceInheritGeneric: 'Deja vacío para heredar el directorio de proyecto del tablero.',
+  assignee: 'Asignado',
+  defaultOption: name => `${name} (predeterminado)`,
+  parkedOption: 'sin asignar (aparcada — no se ejecutará)',
+  skills: 'Skills (separadas por comas)',
+  skillsPlaceholder: 'translation, github',
+  parent: 'Padre (bloquea hasta que termine)',
+  noParent: '— sin padre —',
+  goalMode: 'Modo objetivo (el worker itera hasta que un juez lo valide)',
+  creating: 'Creando…',
+  createTask: 'Crear tarea',
+  cancel: 'Cancelar',
+  save: 'Guardar',
+  estimate: 'Estimar',
+  estimateEffort: 'Estimar esfuerzo',
+  estimating: 'Estimando…',
+  reEstimate: 'Reestimar',
+  makesModelCall: 'hace una llamada al modelo',
+  estimateTip: 'Estimación aproximada de tokens y complejidad del modelo auxiliar — hace una llamada al modelo.',
+  estimateTipLong:
+    'Hace una llamada rápida al modelo auxiliar para estimar tokens y complejidad. Orientativo, no una factura.',
+  roughEstimate: 'Estimación aproximada',
+  tokUnit: 'tok',
+  couldNotEstimate: 'No se pudo estimar',
+  complexity: { S: 'Pequeña', M: 'Mediana', L: 'Grande' },
+  introBody:
+    'No ejecutas las tarjetas tú — lo hacen los agentes. Pon una tarjeta con asignado en Lista y un agente la tomará en un minuto. Sin asignado, no hay ejecución. Triaje: un agente convierte la idea en una tarea de verdad. Pendiente: espera otras tarjetas. Programada: espera un temporizador. En curso y Revisión: los carriles de los agentes, no intervengas. Bloqueada: te espera a ti. Los resultados vuelven a la tarjeta.',
+  introGotIt: 'Entendido',
+  evtCreated: (where, assignee) => `creada${where ? ` en ${where}` : ''}${assignee ? ` · asignada a ${assignee}` : ''}`,
+  evtMovedTo: col => `movida a ${col}`,
+  evtParentReopened: parent => `padre ${parent} reabierto`,
+  evtAssignedTo: assignee => `asignada a ${assignee}`,
+  evtUnassigned: 'desasignada',
+  evtCommentBy: author => `comentario de ${author}`,
+  evtClaimedReview: 'reclamada por un agente de revisión',
+  evtClaimedWorker: 'reclamada por un worker',
+  evtWorkerStarted: 'worker iniciado',
+  evtCompleted: 'completada',
+  evtBlocked: 'bloqueada — requiere intervención humana',
+  evtUnblocked: col => `desbloqueada${col ? ` → ${col}` : ' → Lista'}`,
+  evtReclaimed: 'reclamada de nuevo — devuelta a la cola',
+  evtSpecified: 'spec escrita por el agente de triaje',
+  evtPromoted: 'dependencias listas — promovida a Lista',
+  evtScheduled: 'programada para más tarde',
+  evtArchived: 'archivada',
+  evtReprioritized: priority => `prioridad fijada en ${priority}`,
+  someone: 'alguien',
+  metaPriority: 'Prioridad',
+  metaTenant: 'Tenant',
+  metaCreatedBy: 'Creada por',
+  metaCreated: 'Creada',
+  metaWorkerPid: 'PID del worker',
+  readyUnassignedTitle: 'Lista pero sin asignar — esta tarjeta nunca se ejecutará.',
+  readyUnassignedBody:
+    'El despachador solo reclama tarjetas listas que tienen asignado. Elige un perfil en el campo Asignado de arriba (o define un asignado por defecto en la orquestación) y se ejecuta en un minuto.',
+  diagnosticsN: n => `Diagnósticos · ${n}`,
+  commandCopied: 'Comando copiado',
+  description: 'Descripción',
+  editDescription: 'Editar descripción',
+  cancelEdit: 'Cancelar edición',
+  noDescription: 'Aún sin descripción.',
+  result: 'Resultado',
+  latestSummary: 'Último resumen',
+  dependencies: 'Dependencias',
+  blockedBy: 'Bloqueada por',
+  blocks: 'Bloquea',
+  comments: n => `Comentarios · ${n}`,
+  commentsHelpRunning:
+    'Esta tarea está en curso. Tu nota se integra al turno actual del worker en unos segundos — sin bloquear/desbloquear. «Recolar con nota» reinicia la tarea desde cero con tu nota en contexto.',
+  commentsHelp:
+    'Los comentarios se añaden al hilo de la tarea. Cuando un worker la toma, los lee como parte de su contexto.',
+  send: 'Enviar',
+  comment: 'Comentario',
+  messageWorker: 'Mensaje al worker en curso…',
+  addComment: 'Añadir un comentario…',
+  deliveredLive: 'Entregada al worker en curso en unos segundos.',
+  requeueWithNote: 'Recolar con nota',
+  notePosted: 'Nota publicada — worker recolado',
+  activity: n => `Actividad · ${n}`,
+  runs: n => `Ejecuciones · ${n}`,
+  workerLog: 'Registro del worker',
+  workerLogTail: 'Registro del worker · final',
+  attachments: n => `Adjuntos · ${n}`,
+  noAttachments: 'Aún sin adjuntos.',
+  uploadAttachment: 'Subir adjunto',
+  taskActions: 'Acciones de la tarea',
+  copyTaskId: 'Copiar id de la tarea',
+  copyTitle: 'Copiar título',
+  copiedId: id => `${id} copiado`,
+  copiedTitle: 'Título copiado',
+  close: 'Cerrar',
+  working: 'en curso',
+  board: 'Tablero',
+  newBoard: 'Nuevo tablero',
+  switchBoard: 'Cambiar de tablero',
+  newBoardDots: 'Nuevo tablero…',
+  exportDots: 'Exportar…',
+  importDots: 'Importar…',
+  renameDots: 'Renombrar…',
+  settingsDots: 'Configuración…',
+  exportBoardTitle: 'Exportar tablero…',
+  importBoardTitle: 'Importar tablero…',
+  boardExported: path => `Tablero exportado a ${path}`,
+  boardImported: name => `${name} importado`,
+  boardImportedAs: slug => `Ese nombre estaba ocupado — importado como ${slug}`,
+  renameBoardTitle: 'Renombrar tablero',
+  deleteBoardTitle: name => `¿Eliminar «${name}»?`,
+  deleteBoardConfirm:
+    'El tablero se archiva, no se borra — sus tareas y adjuntos quedan en disco y se pueden restaurar.',
+  boardArchived: path => `Tablero archivado en ${path}`,
+  boardSettingsFor: name => `Configuración del tablero — ${name}`,
+  name: 'Nombre',
+  boardNamePlaceholder: 'Nombre del tablero',
+  slug: slug => `slug: ${slug}`,
+  project: 'Proyecto',
+  noProject: 'Sin proyecto (sandboxes temporales)',
+  projectHintPre:
+    'Las tareas nuevas se ejecutan en el repo del proyecto (un worktree por tarea); cada tarea puede anular su espacio de trabajo al crearse. Gestiona proyectos con ',
+  projectHintCmd: 'hermes project',
+  createBoard: 'Crear tablero',
+  orchestratorProfile: 'Perfil orquestador',
+  defaultAssignee: 'Asignado por defecto',
+  defaultParen: '(predeterminado)',
+  autoDecompose: 'Descomponer tareas de triaje automáticamente',
+  profileDescriptions: 'Descripciones de perfiles',
+  profileDescriptionsHint:
+    'Las descripciones guían el enrutado del descomponedor. Genéralas con el modelo auxiliar o escríbelas tú.',
+  profileGoodAt: '¿En qué es bueno este perfil?',
+  auto: 'Auto',
+  notify: {
+    completedTitle: 'Tarea completada',
+    blockedTitle: 'Tarea bloqueada — necesita tu intervención',
+    blockLoopTitle: 'Tarea enviada a triaje — se necesita una decisión',
+    gaveUpTitle: 'Tarea detenida',
+    gaveUpBody: 'Hermes no pudo terminar esta tarea. Abre Kanban para ver por qué y reasignarla.',
+    crashedTitle: 'La tarea tuvo un problema — Hermes la reintentará automáticamente',
+    timedOutTitle: 'La tarea tardó demasiado — Hermes la reintentará automáticamente',
+    openKanban: 'Abrir Kanban',
+    artifacts: (n: number) => `${n} artefactos`
+  }
+}
+
+const ru: KanbanMessages = {
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? 'Исполнитель запросил ввод от человека.'
+      : kind === 'capability'
+        ? 'Исполнитель упёрся в ограничение возможностей, которое не может преодолеть.'
+        : kind === 'transient'
+          ? 'Исполнитель завершился с временной ошибкой.'
+          : 'Исполнитель сообщил о зависимости, которую нужно дождаться.',
+  blockReason: 'Тип блокировки',
+  blockRecurrences: 'Повторные блокировки',
+  blockRecurrencesTip: 'Сколько раз задача снова блокировалась по той же причине после ручной разблокировки.',
+  consecutiveFailures: 'Подряд неудач',
+  lastFailureError: 'Последний сбой',
+  unblockedMessage: id => `${id} разблокирована. Задача готова к следующему тику.`,
+  nav: 'Канбан',
+  openBoard: 'Канбан: открыть доску',
+  newTaskCommand: 'Канбан: новая задача',
+  countTip: (running, ready) => `Канбан — выполняется ${running}, готово ${ready}`,
+  col: {
+    triage: { label: 'Триаж', help: 'Сырые идеи — спецификатор оформляет спецификацию.' },
+    todo: { label: 'Сделать', help: 'Ждёт зависимости или без исполнителя.' },
+    scheduled: { label: 'Запланировано', help: 'Ждёт назначенного времени.' },
+    ready: { label: 'Готово', help: 'Зависимости выполнены — назначьте профиль, и диспетчер запустит.' },
+    running: { label: 'Выполняется', help: 'Забрана воркером — агент работает. Ставит диспетчер.' },
+    blocked: { label: 'Заблокировано', help: 'Воркер ждёт ответа человека.' },
+    review: { label: 'Ревью', help: 'Агент-ревьюер проверяет работу. Ставит диспетчер.' },
+    done: { label: 'Готово', help: 'Завершена; зависимые дочерние задачи становятся готовыми.' },
+    archived: { label: 'Архив', help: 'Скрыта из вида доски по умолчанию.' }
+  },
+  locked: {
+    review: 'Ревью ставит диспетчер, когда агент-ревьюер берёт карточку.',
+    running: 'Выполняется ставит диспетчер, когда воркер берёт карточку.',
+    scheduled: 'Запланировано требует время пробуждения — ставят агенты; перетащить нельзя.'
+  },
+  arcRunning: 'Агент работает над этим прямо сейчас.',
+  arcStale: 'Забрана, но heartbeat воркера не было уже 2+ минуты — диспетчер заберёт её обратно.',
+  title: 'Канбан',
+  orchestrationSettings: 'Настройки оркестрации',
+  newTask: 'Новая задача',
+  filterCards: 'Фильтр карточек…',
+  noMatch: 'Нет задач, подходящих под фильтры',
+  noTasks: 'На этой доске нет задач',
+  open: 'Открыть',
+  select: modifier => `Выбрать (${modifier}-клик)`,
+  deselect: 'Снять выбор',
+  moveTo: label => `Переместить в ${label}`,
+  delete: 'Удалить',
+  reviewChecking: 'Агент-ревьюер проверяет завершённую работу.',
+  attachedTip: name => `${name} назначен — диспетчер передаст задачу на следующем тике (≤1 мин).`,
+  orchestratorTip: name => `${name} (оркестратор) возьмёт её на следующем тике и напишет спецификацию.`,
+  autoAssignTip: name => `Автоматически назначается «${name}» (kanban.default_assignee) на следующем тике.`,
+  wontRun: 'не запустится',
+  wontRunTip:
+    'Готовые карточки запускаются только с назначенным профилем. Откройте карточку и задайте исполнителя или настройте исполнителя по умолчанию в настройках оркестрации.',
+  noHeartbeat: 'нет heartbeat',
+  expand: label => `Развернуть ${label}`,
+  collapse: label => `Свернуть ${label}`,
+  newTaskIn: label => `Новая задача в ${label}`,
+  empty: 'Пусто',
+  unassigned: 'без исполнителя',
+  filters: 'Фильтры',
+  allProfiles: 'Все профили',
+  allTenants: 'Все тенанты',
+  showArchived: 'Показать архив',
+  groupRunning: 'Группировать «Выполняется» по профилям',
+  teamLanes: 'Дорожки по агентам',
+  teamLaneEmpty: 'Перетащите карточку сюда, чтобы делегировать',
+  nSelected: n => `Выбрано: ${n}`,
+  moveToShort: 'Переместить в',
+  assign: 'Назначить',
+  unassignAction: 'Снять назначение',
+  archive: 'В архив',
+  clearSelection: 'Снять выделение (Esc)',
+  refused: 'отклонено',
+  bulkFailed: (failed, total, err) =>
+    `Ошибок: ${failed} из ${total} — ${err}. Карточки с ошибками остаются выбранными.`,
+  titlePlaceholderTriage: 'Черновая идея — спецификатор доработает',
+  titlePlaceholder: 'Заголовок',
+  descPlaceholder: 'Описание (необязательно)',
+  priority: 'Приоритет',
+  workspace: 'Рабочая папка',
+  boardDefaultSuffix: ' · по умолчанию для доски',
+  workspaceOverride: 'Путь рабочей папки (необязательное переопределение)',
+  model: 'Модель',
+  modelInherit: 'По умолчанию из профиля',
+  modelClear: 'Снять переопределение модели',
+  modelHint: 'Запускает задачу на конкретной модели и глубине размышлений. Пусто — настройки назначенного профиля.',
+  workspaceInherit: 'Наследует каталог проекта доски',
+  workspaceInheritDir: dir => `Оставьте пустым, чтобы наследовать ${dir}`,
+  workspaceInheritGeneric: 'Оставьте пустым, чтобы наследовать каталог проекта доски.',
+  assignee: 'Исполнитель',
+  defaultOption: name => `${name} (по умолчанию)`,
+  parkedOption: 'без исполнителя (припаркована — не запустится)',
+  skills: 'Навыки (через запятую)',
+  skillsPlaceholder: 'translation, github',
+  parent: 'Родитель (блокирует до его завершения)',
+  noParent: '— без родителя —',
+  goalMode: 'Режим цели (воркер крутится, пока судья не подтвердит готовность)',
+  creating: 'Создание…',
+  createTask: 'Создать задачу',
+  cancel: 'Отмена',
+  save: 'Сохранить',
+  estimate: 'Оценить',
+  estimateEffort: 'Оценить трудоёмкость',
+  estimating: 'Оценка…',
+  reEstimate: 'Переоценить',
+  makesModelCall: 'вызывает модель',
+  estimateTip: 'Грубая оценка токенов и сложности от вспомогательной модели — вызывает модель.',
+  estimateTipLong: 'Быстрый вызов вспомогательной модели для оценки токенов и сложности. Ориентир, а не счёт.',
+  roughEstimate: 'Грубая оценка',
+  tokUnit: 'ток',
+  couldNotEstimate: 'Не удалось оценить',
+  complexity: { S: 'Малая', M: 'Средняя', L: 'Большая' },
+  introBody:
+    'Карточки выполняете не вы — агенты. Поставьте карточку с исполнителем в «Готово», и агент возьмёт её в течение минуты. Нет исполнителя — нет запуска. Триаж: агент сначала превращает идею в полноценную задачу. Сделать: ждёт других карточек. Запланировано: ждёт таймера. Выполняется и Ревью: полосы агентов — не трогайте. Заблокировано: ждёт вас. Результаты возвращаются на карточку.',
+  introGotIt: 'Понятно',
+  evtCreated: (where, assignee) => `создана${where ? ` в ${where}` : ''}${assignee ? ` · назначена ${assignee}` : ''}`,
+  evtMovedTo: col => `перемещена в ${col}`,
+  evtParentReopened: parent => `родитель ${parent} переоткрыт`,
+  evtAssignedTo: assignee => `назначена ${assignee}`,
+  evtUnassigned: 'назначение снято',
+  evtCommentBy: author => `комментарий от ${author}`,
+  evtClaimedReview: 'взята агентом-ревьюером',
+  evtClaimedWorker: 'взята воркером',
+  evtWorkerStarted: 'воркер запущен',
+  evtCompleted: 'завершена',
+  evtBlocked: 'заблокирована — нужен ответ человека',
+  evtUnblocked: col => `разблокирована${col ? ` → ${col}` : ' → Готово'}`,
+  evtReclaimed: 'возвращена — снова в очереди',
+  evtSpecified: 'спецификация написана агентом триажа',
+  evtPromoted: 'зависимости выполнены — переведена в «Готово»',
+  evtScheduled: 'запланирована на потом',
+  evtArchived: 'в архиве',
+  evtReprioritized: priority => `приоритет установлен: ${priority}`,
+  someone: 'кто-то',
+  metaPriority: 'Приоритет',
+  metaTenant: 'Тенант',
+  metaCreatedBy: 'Кем создана',
+  metaCreated: 'Создана',
+  metaWorkerPid: 'PID воркера',
+  readyUnassignedTitle: 'Готова, но без исполнителя — эта карточка никогда не запустится.',
+  readyUnassignedBody:
+    'Диспетчер забирает только готовые карточки с исполнителем. Выберите профиль в поле «Исполнитель» выше (или задайте исполнителя по умолчанию в настройках оркестрации) — и она запустится в течение минуты.',
+  diagnosticsN: n => `Диагностика · ${n}`,
+  commandCopied: 'Команда скопирована',
+  description: 'Описание',
+  editDescription: 'Редактировать описание',
+  cancelEdit: 'Отменить редактирование',
+  noDescription: 'Описания пока нет.',
+  result: 'Результат',
+  latestSummary: 'Последняя сводка',
+  dependencies: 'Зависимости',
+  blockedBy: 'Заблокирована задачей',
+  blocks: 'Блокирует',
+  comments: n => `Комментарии · ${n}`,
+  commentsHelpRunning:
+    'Задача выполняется. Ваша заметка попадёт в текущий ход воркера через несколько секунд — без блокировки/разблокировки. «Вернуть в очередь с заметкой» перезапускает задачу с нуля, с вашей заметкой в контексте.',
+  commentsHelp: 'Комментарии добавляются в тред задачи. Воркер, берущий задачу, читает их как часть контекста.',
+  send: 'Отправить',
+  comment: 'Комментарий',
+  messageWorker: 'Сообщение работающему воркеру…',
+  addComment: 'Добавить комментарий…',
+  deliveredLive: 'Дойдёт до работающего воркера за несколько секунд.',
+  requeueWithNote: 'Вернуть в очередь с заметкой',
+  notePosted: 'Заметка отправлена — воркер снова в очереди',
+  activity: n => `Активность · ${n}`,
+  runs: n => `Запуски · ${n}`,
+  workerLog: 'Лог воркера',
+  workerLogTail: 'Лог воркера · конец',
+  attachments: n => `Вложения · ${n}`,
+  noAttachments: 'Вложений пока нет.',
+  uploadAttachment: 'Загрузить вложение',
+  taskActions: 'Действия с задачей',
+  copyTaskId: 'Скопировать id задачи',
+  copyTitle: 'Скопировать заголовок',
+  copiedId: id => `Скопировано ${id}`,
+  copiedTitle: 'Заголовок скопирован',
+  close: 'Закрыть',
+  working: 'в работе',
+  board: 'Доска',
+  newBoard: 'Новая доска',
+  switchBoard: 'Сменить доску',
+  newBoardDots: 'Новая доска…',
+  exportDots: 'Экспорт…',
+  importDots: 'Импорт…',
+  renameDots: 'Переименовать…',
+  settingsDots: 'Настройки…',
+  exportBoardTitle: 'Экспорт доски…',
+  importBoardTitle: 'Импорт доски…',
+  boardExported: path => `Доска экспортирована в ${path}`,
+  boardImported: name => `Импортирована ${name}`,
+  boardImportedAs: slug => `Имя занято — импортировано как ${slug}`,
+  renameBoardTitle: 'Переименовать доску',
+  deleteBoardTitle: name => `Удалить «${name}»?`,
+  deleteBoardConfirm:
+    'Доска архивируется, а не стирается — её задачи и вложения остаются на диске и могут быть восстановлены.',
+  boardArchived: path => `Доска заархивирована в ${path}`,
+  boardSettingsFor: name => `Настройки доски — ${name}`,
+  name: 'Имя',
+  boardNamePlaceholder: 'Имя доски',
+  slug: slug => `slug: ${slug}`,
+  project: 'Проект',
+  noProject: 'Без проекта (временные песочницы)',
+  projectHintPre:
+    'Новые задачи запускаются в репозитории проекта (по воркtree на задачу); каждая задача может переопределить свою рабочую папку при создании. Управление проектами — ',
+  projectHintCmd: 'hermes project',
+  createBoard: 'Создать доску',
+  orchestratorProfile: 'Профиль оркестратора',
+  defaultAssignee: 'Исполнитель по умолчанию',
+  defaultParen: '(по умолчанию)',
+  autoDecompose: 'Авторазложение задач триажа',
+  profileDescriptions: 'Описания профилей',
+  profileDescriptionsHint:
+    'Описания направляют маршрутизацию декомпозитора. Сгенерируйте вспомогательной моделью или напишите сами.',
+  profileGoodAt: 'В чём силён этот профиль?',
+  auto: 'Авто',
+  notify: {
+    completedTitle: 'Задача завершена',
+    blockedTitle: 'Задача заблокирована — нужен ваш ответ',
+    blockLoopTitle: 'Задача отправлена в триаж — нужно решение',
+    gaveUpTitle: 'Задача остановлена',
+    gaveUpBody: 'Hermes не смог завершить эту задачу. Откройте «Канбан», чтобы увидеть причину и переназначить её.',
+    crashedTitle: 'В задаче произошла ошибка — Hermes повторит её автоматически',
+    timedOutTitle: 'Задача заняла слишком много времени — Hermes повторит её автоматически',
+    openKanban: 'Открыть Канбан',
+    artifacts: (n: number) => `Артефакты: ${n}`
+  }
+}
+
+const ar: KanbanMessages = {
+  blockKindTip: kind =>
+    kind === 'needs_input'
+      ? 'طلب العامل مدخلات بشرية.'
+      : kind === 'capability'
+        ? 'اصطدم العامل بحدّ قدرات لا يستطيع تجاوزه.'
+        : kind === 'transient'
+          ? 'فشل العامل بسبب خطأ عابر.'
+          : 'أبلغ العامل عن تبعية عليه انتظارها.',
+  blockReason: 'نوع الحظر',
+  blockRecurrences: 'تكرارات الحظر',
+  blockRecurrencesTip: 'عدد مرات إعادة حظر هذه المهمة للسبب نفسه بعد فك الحظر يدويًا.',
+  consecutiveFailures: 'إخفاقات متتالية',
+  lastFailureError: 'آخر إخفاق',
+  unblockedMessage: id => `تم فك حظر ${id}. المهمة جاهزة للدورة التالية.`,
+  nav: 'كانبان',
+  openBoard: 'كانبان: فتح اللوحة',
+  newTaskCommand: 'كانبان: مهمة جديدة',
+  countTip: (running, ready) => `كانبان — ${running} قيد التشغيل، ${ready} جاهزة`,
+  col: {
+    triage: { label: 'فرز', help: 'أفكار خام — وكيل التخصيص يصوغ المواصفة.' },
+    todo: { label: 'للتنفيذ', help: 'بانتظار التبعيات أو غير معيّنة.' },
+    scheduled: { label: 'مجدولة', help: 'بانتظار حلول الوقت المجدول.' },
+    ready: { label: 'جاهزة', help: 'التبعيات مستوفاة — عيّن ملفًا شخصيًا ويقوم المُرسِل بتشغيلها.' },
+    running: { label: 'قيد التشغيل', help: 'استلمها عامل — وكيل يعمل عليها. يضبطها المُرسِل.' },
+    blocked: { label: 'محظورة', help: 'العامل طلب تدخلًا بشريًا.' },
+    review: { label: 'مراجعة', help: 'وكيل مراجعة يفحص العمل. يضبطها المُرسِل.' },
+    done: { label: 'منجزة', help: 'اكتملت؛ تصبح المهام التابعة جاهزة.' },
+    archived: { label: 'مؤرشفة', help: 'مخفية عن عرض اللوحة الافتراضي.' }
+  },
+  locked: {
+    review: 'تُضبط المراجعة من المُرسِل عندما يستلم وكيل المراجعة البطاقة.',
+    running: 'تُضبط «قيد التشغيل» من المُرسِل عندما يستلم عامل البطاقة.',
+    scheduled: 'المجدولة تحتاج وقت إيقاظ — يضبطها الوكلاء؛ لا يمكن السحب إليها.'
+  },
+  arcRunning: 'وكيل يعمل عليها الآن.',
+  arcStale: 'مستلَمة، لكن لا نبضة من العامل منذ دقيقتين فأكثر — سيستردها المُرسِل.',
+  title: 'كانبان',
+  orchestrationSettings: 'إعدادات التنسيق',
+  newTask: 'مهمة جديدة',
+  filterCards: 'تصفية البطاقات…',
+  noMatch: 'لا مهام تطابق عوامل التصفية',
+  noTasks: 'لا مهام على هذه اللوحة',
+  open: 'فتح',
+  select: modifier => `تحديد (${modifier}+نقر)`,
+  deselect: 'إلغاء التحديد',
+  moveTo: label => `نقل إلى ${label}`,
+  delete: 'حذف',
+  reviewChecking: 'وكيل مراجعة يفحص العمل المكتمل.',
+  attachedTip: name => `${name} معيّن — يسلّمها المُرسِل في التيك التالي (≤1 د).`,
+  orchestratorTip: name => `${name} (المنسّق) يلتقطها في التيك التالي ويكتب المواصفة.`,
+  autoAssignTip: name => `تُسنَد تلقائيًا إلى «${name}» (kanban.default_assignee) في التيك التالي.`,
+  wontRun: 'لن تُشغَّل',
+  wontRunTip:
+    'البطاقات الجاهزة لا تعمل إلا بعد تعيين ملف شخصي. افتح البطاقة وحدّد المعيّن، أو اضبط معيّنًا افتراضيًا في إعدادات التنسيق.',
+  noHeartbeat: 'لا نبضة',
+  expand: label => `توسيع ${label}`,
+  collapse: label => `طيّ ${label}`,
+  newTaskIn: label => `مهمة جديدة في ${label}`,
+  empty: 'فارغ',
+  unassigned: 'غير معيّنة',
+  filters: 'عوامل التصفية',
+  allProfiles: 'كل الملفات الشخصية',
+  allTenants: 'كل المستأجرين',
+  showArchived: 'إظهار المؤرشفة',
+  groupRunning: 'تجميع «قيد التشغيل» حسب الملف',
+  teamLanes: 'مسارات الفريق',
+  teamLaneEmpty: 'أفلت بطاقة هنا لتفويضها',
+  nSelected: n => `${n} محددة`,
+  moveToShort: 'نقل إلى',
+  assign: 'إسناد',
+  unassignAction: 'إلغاء الإسناد',
+  archive: 'أرشفة',
+  clearSelection: 'مسح التحديد (Esc)',
+  refused: 'مرفوضة',
+  bulkFailed: (failed, total, err) => `فشل ${failed} من ${total} — ${err}. تبقى البطاقات الفاشلة محددة.`,
+  titlePlaceholderTriage: 'فكرة تقريبية — سيصوغها وكيل التخصيص',
+  titlePlaceholder: 'العنوان',
+  descPlaceholder: 'الوصف (اختياري)',
+  priority: 'الأولوية',
+  workspace: 'مساحة العمل',
+  boardDefaultSuffix: ' · افتراضي اللوحة',
+  workspaceOverride: 'مسار مساحة العمل (تجاوز اختياري)',
+  model: 'النموذج',
+  modelInherit: 'افتراضي الملف الشخصي',
+  modelClear: 'إزالة تجاوز النموذج',
+  modelHint: 'يشغّل هذه المهمة على نموذج وعمق تفكير محددين. إن تُركت فارغة تُستخدم إعدادات الملف المعيّن.',
+  workspaceInherit: 'يرث دليل مشروع اللوحة',
+  workspaceInheritDir: dir => `اتركه فارغًا ليرث ${dir}`,
+  workspaceInheritGeneric: 'اتركه فارغًا ليرث دليل مشروع اللوحة.',
+  assignee: 'المعيّن',
+  defaultOption: name => `${name} (افتراضي)`,
+  parkedOption: 'غير معيّنة (متوقفة — لن تُشغَّل)',
+  skills: 'المهارات (مفصولة بفواصل)',
+  skillsPlaceholder: 'translation, github',
+  parent: 'الأصل (يحظر حتى اكتماله)',
+  noParent: '— بلا أصل —',
+  goalMode: 'وضع الهدف (يكرر العامل حتى يقرّ الحكم الاكتمال)',
+  creating: 'جارٍ الإنشاء…',
+  createTask: 'إنشاء المهمة',
+  cancel: 'إلغاء',
+  save: 'حفظ',
+  estimate: 'تقدير',
+  estimateEffort: 'تقدير الجهد',
+  estimating: 'جارٍ التقدير…',
+  reEstimate: 'إعادة التقدير',
+  makesModelCall: 'يستدعي نموذجًا',
+  estimateTip: 'تقدير تقريبي للرموز والتعقيد من النموذج المساعد — يستدعي نموذجًا.',
+  estimateTipLong: 'يستدعي النموذج المساعد سريعًا لتقدير الرموز والتعقيد. مؤشر تقريبي وليس فاتورة.',
+  roughEstimate: 'تقدير تقريبي',
+  tokUnit: 'رمز',
+  couldNotEstimate: 'تعذّر التقدير',
+  complexity: { S: 'صغيرة', M: 'متوسطة', L: 'كبيرة' },
+  introBody:
+    'لست أنت من يشغّل البطاقات — بل الوكلاء. ضع بطاقة لها معيّن في «جاهزة» وسيلتقطها وكيل خلال دقيقة. بلا معيّن، لا تشغيل. الفرز: وكيل يحوّل الفكرة أولًا إلى مهمة حقيقية. للتنفيذ: تنتظر بطاقات أخرى. المجدولة: تنتظر مؤقتًا. قيد التشغيل والمراجعة: مسارات الوكلاء — لا تتدخل. المحظورة: تنتظرك أنت. تعود النتائج إلى البطاقة.',
+  introGotIt: 'فهمت',
+  evtCreated: (where, assignee) => `أُنشئت${where ? ` في ${where}` : ''}${assignee ? ` · أُسندت إلى ${assignee}` : ''}`,
+  evtMovedTo: col => `نُقلت إلى ${col}`,
+  evtParentReopened: parent => `أُعيد فتح الأصل ${parent}`,
+  evtAssignedTo: assignee => `أُسندت إلى ${assignee}`,
+  evtUnassigned: 'أُلغي الإسناد',
+  evtCommentBy: author => `تعليق من ${author}`,
+  evtClaimedReview: 'استلمها وكيل مراجعة',
+  evtClaimedWorker: 'استلمها عامل',
+  evtWorkerStarted: 'بدأ العامل',
+  evtCompleted: 'اكتملت',
+  evtBlocked: 'محظورة — تحتاج تدخلًا بشريًا',
+  evtUnblocked: col => `أُزيل الحظر${col ? ` → ${col}` : ' → جاهزة'}`,
+  evtReclaimed: 'استُردّت — أُعيدت إلى الطابور',
+  evtSpecified: 'كتب وكيل الفرز المواصفة',
+  evtPromoted: 'اكتملت التبعيات — رُقّيت إلى «جاهزة»',
+  evtScheduled: 'جُدولت لاحقًا',
+  evtArchived: 'مؤرشفة',
+  evtReprioritized: priority => `ضُبطت الأولوية على ${priority}`,
+  someone: 'شخص ما',
+  metaPriority: 'الأولوية',
+  metaTenant: 'المستأجر',
+  metaCreatedBy: 'أنشأها',
+  metaCreated: 'أُنشئت',
+  metaWorkerPid: 'معرّف العامل',
+  readyUnassignedTitle: 'جاهزة لكن بلا معيّن — هذه البطاقة لن تعمل أبدًا.',
+  readyUnassignedBody:
+    'يلتقط المُرسِل البطاقات الجاهزة التي لها معيّن فقط. اختر ملفًا شخصيًا في حقل المعيّن أعلاه (أو اضبط معيّنًا افتراضيًا في إعدادات التنسيق) وستعمل خلال دقيقة.',
+  diagnosticsN: n => `التشخيصات · ${n}`,
+  commandCopied: 'نُسخ الأمر',
+  description: 'الوصف',
+  editDescription: 'تحرير الوصف',
+  cancelEdit: 'إلغاء التحرير',
+  noDescription: 'لا وصف بعد.',
+  result: 'النتيجة',
+  latestSummary: 'أحدث ملخص',
+  dependencies: 'التبعيات',
+  blockedBy: 'محظورة بـ',
+  blocks: 'تحظر',
+  comments: n => `التعليقات · ${n}`,
+  commentsHelpRunning:
+    'هذه المهمة قيد التشغيل. تُدمج ملاحظتك في دور العامل الحالي خلال ثوانٍ — دون حظر/فكّ حظر. «إعادة إلى الطابور مع ملاحظة» يعيد تشغيل المهمة من البداية وملاحظتك في السياق.',
+  commentsHelp: 'تُضاف التعليقات إلى سلسلة المهمة. عندما يلتقط عامل المهمة يقرأها كجزء من سياقه.',
+  send: 'إرسال',
+  comment: 'تعليق',
+  messageWorker: 'رسالة إلى العامل الجاري…',
+  addComment: 'إضافة تعليق…',
+  deliveredLive: 'تصل إلى العامل الجاري خلال ثوانٍ.',
+  requeueWithNote: 'إعادة إلى الطابور مع ملاحظة',
+  notePosted: 'نُشرت الملاحظة — أُعيد العامل إلى الطابور',
+  activity: n => `النشاط · ${n}`,
+  runs: n => `التشغيلات · ${n}`,
+  workerLog: 'سجل العامل',
+  workerLogTail: 'سجل العامل · النهاية',
+  attachments: n => `المرفقات · ${n}`,
+  noAttachments: 'لا مرفقات بعد.',
+  uploadAttachment: 'رفع مرفق',
+  taskActions: 'إجراءات المهمة',
+  copyTaskId: 'نسخ معرّف المهمة',
+  copyTitle: 'نسخ العنوان',
+  copiedId: id => `نُسخ ${id}`,
+  copiedTitle: 'نُسخ العنوان',
+  close: 'إغلاق',
+  working: 'قيد العمل',
+  board: 'اللوحة',
+  newBoard: 'لوحة جديدة',
+  switchBoard: 'تبديل اللوحة',
+  newBoardDots: 'لوحة جديدة…',
+  exportDots: 'تصدير…',
+  importDots: 'استيراد…',
+  renameDots: 'إعادة تسمية…',
+  settingsDots: 'الإعدادات…',
+  exportBoardTitle: 'تصدير اللوحة…',
+  importBoardTitle: 'استيراد لوحة…',
+  boardExported: path => `صُدّرت اللوحة إلى ${path}`,
+  boardImported: name => `استُوردت ${name}`,
+  boardImportedAs: slug => `الاسم محجوز — استُوردت باسم ${slug}`,
+  renameBoardTitle: 'إعادة تسمية اللوحة',
+  deleteBoardTitle: name => `حذف «${name}»؟`,
+  deleteBoardConfirm: 'تُؤرشف اللوحة ولا تُمحى — تبقى مهامها ومرفقاتها على القرص ويمكن استعادتها.',
+  boardArchived: path => `أُرشفت اللوحة إلى ${path}`,
+  boardSettingsFor: name => `إعدادات اللوحة — ${name}`,
+  name: 'الاسم',
+  boardNamePlaceholder: 'اسم اللوحة',
+  slug: slug => `slug: ${slug}`,
+  project: 'المشروع',
+  noProject: 'بلا مشروع (صناديق رمل مؤقتة)',
+  projectHintPre:
+    'تعمل المهام الجديدة في مستودع المشروع (worktree لكل مهمة)؛ ويمكن لكل مهمة تجاوز مساحة عملها عند الإنشاء. أدر المشاريع بـ ',
+  projectHintCmd: 'hermes project',
+  createBoard: 'إنشاء اللوحة',
+  orchestratorProfile: 'ملف المنسّق',
+  defaultAssignee: 'المعيّن الافتراضي',
+  defaultParen: '(افتراضي)',
+  autoDecompose: 'تفكيك مهام الفرز تلقائيًا',
+  profileDescriptions: 'أوصاف الملفات الشخصية',
+  profileDescriptionsHint: 'توجّه الأوصاف توجيهَ المفكّك. ولّدها بالنموذج المساعد أو اكتبها بنفسك.',
+  profileGoodAt: 'بماذا يتقن هذا الملف الشخصي؟',
+  auto: 'تلقائي',
+  notify: {
+    completedTitle: 'اكتملت المهمة',
+    blockedTitle: 'المهمة محظورة — تحتاج مدخلَك',
+    blockLoopTitle: 'المهمة وُجّهت إلى الفرز — يلزم قرار',
+    gaveUpTitle: 'توقفت المهمة',
+    gaveUpBody: 'تعذّر على Hermes إنهاء هذه المهمة. افتح كانبان لترى السبب وتعيد إسنادها.',
+    crashedTitle: 'واجهت المهمة مشكلة — سيعيدها Hermes تلقائيًا',
+    timedOutTitle: 'استغرقت المهمة وقتًا طويلًا — سيعيدها Hermes تلقائيًا',
+    openKanban: 'فتح كانبان',
+    artifacts: (n: number) => `${n} مخرجات`
+  }
+}
+
+/** Registered via `ctx.i18n.register` at plugin load (disposer tracked). */
+export const KANBAN_LOCALES: PluginLocaleBundles = { en, ja, zh, 'zh-hant': zhHant, fr, de, es, ru, ar }
+
+// Bind the message SHAPE to a plugin translator: string leaves resolve now,
+// function leaves forward their args through t(path, …). One tiny generic
+// instead of a hand-written accessor per key.
+type Bound<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => string
+    ? (...args: A) => string
+    : T[K] extends object
+      ? Bound<T[K]>
+      : string
+}
+
+function bind<T extends object>(t: PluginTranslate, template: T, prefix = ''): Bound<T> {
+  const out = {} as Record<string, unknown>
+
+  for (const [key, value] of Object.entries(template)) {
+    const path = prefix ? `${prefix}.${key}` : key
+    out[key] =
+      typeof value === 'function'
+        ? (...args: unknown[]) => t(path, ...args)
+        : value && typeof value === 'object'
+          ? bind(t, value as object, path)
+          : t(path)
+  }
+
+  return out as Bound<T>
+}
+
+export type KanbanText = Bound<KanbanMessages>
+
+/** The kanban strings for the active locale — one hook every component reads. */
+export function useKanban(): KanbanText {
+  const t = usePluginI18n('kanban')
+
+  return useMemo(() => bind(t, en), [t])
+}
+
+// Column labels/help live in i18n; unknown backend statuses fall back to the id.
+export const columnLabel = (k: KanbanText, name: string) => k.col[name as keyof KanbanText['col']]?.label ?? name
+export const columnHelp = (k: KanbanText, name: string) => k.col[name as keyof KanbanText['col']]?.help ?? ''
+export const lockedReason = (k: KanbanText, name: string) => k.locked[name as keyof KanbanText['locked']] ?? ''
