@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd /home/user/Code/ship-test/wt/s18
+cd "$(dirname "$0")"
 
 echo "=== Installing hermes_plus ==="
 flock /tmp/hermes-build.lock .venv/bin/pip install -e 'packages/hermes_plus[test]'

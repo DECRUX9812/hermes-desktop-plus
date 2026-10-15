@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -20,10 +21,10 @@ def _run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.Comple
 
 
 def _stock_hermes() -> str | None:
-    """The stock launcher under test: HERMES_PLUS_TEST_HERMES, then the shared install."""
-    candidate = os.environ.get("HERMES_PLUS_TEST_HERMES") or str(
-        Path.home() / "Code/ship-test/venv/bin/hermes"
-    )
+    """The stock launcher under test: HERMES_PLUS_TEST_HERMES, then `hermes` on PATH."""
+    candidate = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes")
+    if not candidate:
+        return None
     path = Path(candidate).expanduser()
     return str(path) if path.is_file() and os.access(path, os.X_OK) else None
 

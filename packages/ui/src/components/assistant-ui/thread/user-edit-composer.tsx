@@ -452,7 +452,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
   // read it in remote mode, and an image needs its bytes uploaded for vision.
   // Stage each through the same file.attach/image.attach_bytes pipeline the main
   // composer uses, then insert the *gateway-side* ref the agent can resolve —
-  // never the raw local path (the MahmoudR remote-attach bug, which the main
+  // never the raw local path (the Finder remote-attach bug, which the main
   // composer fixes but this edit composer used to reproduce).
   const uploadOsDropRefs = useCallback(
     async (osDrops: ReturnType<typeof extractDroppedFiles>): Promise<InlineRefInput[]> => {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -73,10 +74,7 @@ def test_register_ran_through_upstreams_loader(installed_home: Path) -> None:
 
 
 def _stock_python() -> str:
-    configured = os.environ.get(
-        "HERMES_PLUS_TEST_HERMES",
-        str(Path.home() / "Code" / "ship-test" / "venv" / "bin" / "hermes"),
-    )
+    configured = os.environ.get("HERMES_PLUS_TEST_HERMES") or shutil.which("hermes") or "hermes"
     binary = Path(configured).resolve()
     python = binary.parent / "python3"
     if not python.is_file():

@@ -4,15 +4,15 @@ import { describe, expect, it } from 'vitest'
 
 import { appendAssistantTextPart, chatMessageText, mediaTagValues, renderMediaTags } from './parts'
 
-const SPACED = '/home/Hermes/Morten - Nobly Kickoff - Opening and cue cards EN.docx'
-const CARD = `[File: Morten - Nobly Kickoff - Opening and cue cards EN.docx](#media:${encodeURIComponent(SPACED)})`
+const SPACED = '/home/Hermes/Report - Draft Kickoff - Opening and cue cards EN.docx'
+const CARD = `[File: Report - Draft Kickoff - Opening and cue cards EN.docx](#media:${encodeURIComponent(SPACED)})`
 
 describe('renderMediaTags with interior spaces', () => {
   it('keeps the whole spaced path in one card on every surface that reads MEDIA tags', () => {
     expect(renderMediaTags(`MEDIA:${SPACED}`)).toBe(CARD)
     expect(renderMediaTags(`Here you go: MEDIA:${SPACED} — enjoy`)).toBe(`Here you go: ${CARD} — enjoy`)
-    expect(renderMediaTags('MEDIA:C:\\Users\\Morten\\My Report.docx')).toBe(
-      '[File: My Report.docx](#media:C%3A%5CUsers%5CMorten%5CMy%20Report.docx)'
+    expect(renderMediaTags('MEDIA:C:\\Users\\User\\My Report.docx')).toBe(
+      '[File: My Report.docx](#media:C%3A%5CUsers%5CUser%5CMy%20Report.docx)'
     )
     expect(mediaTagValues(`ready\nMEDIA:${SPACED}\nMEDIA:/tmp/a.png`)).toEqual([SPACED, '/tmp/a.png'])
   })

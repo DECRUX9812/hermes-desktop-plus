@@ -3477,7 +3477,7 @@ describe('usePromptActions file attachment sync', () => {
     // has no bytes to send, so syncAttachments leaves it untouched and the ref
     // reaches the gateway as-is — correct for workspace-relative refs.
     //
-    // The MahmoudR drag-drop bug (a Finder PDF that became a local-path text
+    // The Finder drag-drop bug (a Finder PDF that became a local-path text
     // ref in remote mode) is fixed upstream at the DROP layer: OS drops now
     // carry a path and route through the upload pipeline instead of becoming a
     // path-less inline ref. See partitionDroppedFiles in use-composer-actions.
@@ -3489,11 +3489,11 @@ describe('usePromptActions file attachment sync', () => {
     })
 
     const pathlessRef: ComposerAttachment = {
-      id: 'file:devis',
+      id: 'file:contract',
       kind: 'file',
-      label: 'DEVIS_signed.pdf',
+      label: 'contract_signed.pdf',
       // NOTE: no `path` field — only the pre-baked local @file: ref.
-      refText: '@file:`/Users/mahmoud/Downloads/DEVIS_signed.pdf`'
+      refText: '@file:`/Users/demo/Downloads/contract_signed.pdf`'
     }
 
     const calls: { method: string; params?: Record<string, unknown> }[] = []
@@ -3515,7 +3515,7 @@ describe('usePromptActions file attachment sync', () => {
     // No path → no file.attach, no byte read: the ref passes through unchanged.
     expect(calls.map(c => c.method)).toEqual(['prompt.submit'])
     expect(readFileDataUrl).not.toHaveBeenCalled()
-    expect(calls[0]?.params?.text).toContain('@file:`/Users/mahmoud/Downloads/DEVIS_signed.pdf`')
+    expect(calls[0]?.params?.text).toContain('@file:`/Users/demo/Downloads/contract_signed.pdf`')
   })
 
   it('passes a Windows path directly for a native Windows local backend', async () => {
@@ -5661,7 +5661,7 @@ describe('usePromptActions eager attachment upload (drop-time)', () => {
       if (method === 'file.attach') {
         return {
           attached: true,
-          ref_text: '@file:.hermes/desktop-attachments/DEVIS_signed.pdf',
+          ref_text: '@file:.hermes/desktop-attachments/contract_signed.pdf',
           uploaded: true
         } as never
       }
@@ -5670,7 +5670,7 @@ describe('usePromptActions eager attachment upload (drop-time)', () => {
     })
 
     $composerAttachments.set([
-      { id: 'file:devis', kind: 'file', label: 'DEVIS_signed.pdf', path: '/Users/mahmoud/Downloads/DEVIS_signed.pdf' }
+      { id: 'file:contract', kind: 'file', label: 'contract_signed.pdf', path: '/Users/demo/Downloads/contract_signed.pdf' }
     ])
 
     await actRender(
@@ -5681,9 +5681,9 @@ describe('usePromptActions eager attachment upload (drop-time)', () => {
     await waitFor(() => expect($composerAttachments.get()[0]?.attachedSessionId).toBe(RUNTIME_SESSION_ID))
 
     const chip = $composerAttachments.get()[0]!
-    expect(chip.refText).toBe('@file:.hermes/desktop-attachments/DEVIS_signed.pdf')
+    expect(chip.refText).toBe('@file:.hermes/desktop-attachments/contract_signed.pdf')
     expect(chip.uploadState).toBeUndefined()
-    expect(readFileDataUrl).toHaveBeenCalledWith('/Users/mahmoud/Downloads/DEVIS_signed.pdf')
+    expect(readFileDataUrl).toHaveBeenCalledWith('/Users/demo/Downloads/contract_signed.pdf')
   })
 
   it('flags the chip uploadState=error when the eager upload fails, keeping the path so submit can retry', async () => {
