@@ -24,7 +24,10 @@
 #   HERMES_PLUS_PROOF_PORT    sidecar port (default 9230)
 #   SHOTS_DIR                 screenshot output (default ~/Videos/ship-shots)
 #   TMPDIR                    scratch root for the tool install and the temp home
-#                             (default /tmp; point it at disk when /tmp is a tmpfs)
+#                             (default /tmp; point it at disk when /tmp is a tmpfs).
+#                             The screenshots render paths under it (attachment
+#                             pills, tool cards, session titles), so keep it
+#                             outside your home directory for publishable shots
 #   HERMES_PLUS_TEST_SHARED_INSTALLS
 #                             test-only (see CONTRIBUTING.md): a provisioned
 #                             HERMES_HOME whose installs/ this run's temp home
