@@ -54,6 +54,27 @@ def websocket_url(runtime: Any, path: str, query: list[tuple[str, str]] | None =
     ))
 
 
+async def _send_upstream(client: httpx.AsyncClient, method: str, url: str, headers: dict[str, str], content: Any) -> httpx.Response:
+    """Send once, replaying a bodiless request if the pooled connection was dead.
+
+    The upstream dashboard closes keep-alive connections on its own schedule, so a
+    pooled one can be gone before we reuse it: httpx then raises
+    ``RemoteProtocolError`` ("Server disconnected without sending a response") with
+    the request never delivered, which surfaced as a 500 on ordinary reads (the
+    proof caught one on ``GET /api/profiles/sessions``). A fresh connection is the
+    whole fix. Only methods with no body are replayed — a POST may have reached the
+    upstream, and a genuinely dead dashboard still fails on the second attempt.
+    """
+    outbound = client.build_request(method, url, headers=headers, content=content)
+    try:
+        return await client.send(outbound, stream=True)
+    except httpx.RemoteProtocolError:
+        if content is not None:
+            raise
+        fresh = client.build_request(method, url, headers=headers)
+        return await client.send(fresh, stream=True)
+
+
 async def proxy_http(request: Request, runtime: Any, target_origin: str, *, auth_upstream: bool) -> Response:
     """Stream a request and response without buffering either body."""
     client: httpx.AsyncClient = runtime.http_client
@@ -81,8 +102,7 @@ async def proxy_http(request: Request, runtime: Any, target_origin: str, *, auth
     query = urlencode(query_items)
     target_url = f"{origin}{path}" + (f"?{query}" if query else "")
     content = request.stream() if request.method.upper() in _BODY_METHODS else None
-    outbound = client.build_request(request.method, target_url, headers=headers, content=content)
-    upstream = await client.send(outbound, stream=True)
+    upstream = await _send_upstream(client, request.method, target_url, headers, content)
 
     response_hops = _HOP_HEADERS | _connection_tokens(upstream.headers)
     response_headers = {

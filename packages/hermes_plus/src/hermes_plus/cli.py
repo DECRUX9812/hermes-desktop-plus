@@ -16,6 +16,25 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_GITHUB_REPO = "DECRUX9812/hermes-desktop-plus"
+DEFAULT_RELEASE_API = "https://api.github.com"
+
+# The release endpoint is GitHub's by default; a mirror or a test server can be
+# pointed at without touching the code, and the repo slug can move the same way.
+RELEASE_API_ENV = "HERMES_PLUS_RELEASE_API"
+RELEASE_REPO_ENV = "HERMES_PLUS_RELEASE_REPO"
+
+
+class ReleaseLookupError(Exception):
+    """A release lookup failed for a reason other than "no release published"."""
+
+
+class NoPublishedRelease(Exception):
+    """The release endpoint answered 404: the repo has no published release yet."""
+
+    def __init__(self, repo: str, url: str) -> None:
+        super().__init__(f"No published release found for {repo}")
+        self.repo = repo
+        self.url = url
 
 
 def _get_hermes_home(profile: str | None = None) -> Path:
@@ -755,35 +774,57 @@ def _extract_version_from_tag(tag: str) -> str:
     return tag.lstrip("v")
 
 
-def _resolve_github_release_tag(repo: str, timeout: int = 5) -> str:
-    """Resolve the latest release tag from a GitHub repo.
+def release_api_base() -> str:
+    """The release API base: HERMES_PLUS_RELEASE_API, else GitHub."""
+    return os.environ.get(RELEASE_API_ENV, "").strip().rstrip("/") or DEFAULT_RELEASE_API
+
+
+def release_repo() -> str:
+    """The release repo slug: HERMES_PLUS_RELEASE_REPO, else DEFAULT_GITHUB_REPO."""
+    return os.environ.get(RELEASE_REPO_ENV, "").strip() or DEFAULT_GITHUB_REPO
+
+
+def release_api_url(repo: str) -> str:
+    """The latest-release endpoint for ``repo`` on the configured API base."""
+    return f"{release_api_base()}/repos/{repo}/releases/latest"
+
+
+def _resolve_github_release_tag(repo: str, timeout: int = 5) -> str | None:
+    """Resolve the latest release tag for a repo.
 
     Args:
-        repo: GitHub repo in owner/name format (e.g., DECRUX9812/hermes-desktop-plus).
+        repo: repo in owner/name format (e.g., DECRUX9812/hermes-desktop-plus).
         timeout: HTTP request timeout in seconds.
 
     Returns:
-        The tag name (e.g., "v0.1.0").
+        The tag name (e.g., "v0.1.0"), or None when the repo has no published
+        release (HTTP 404) — an install that has never published one is a normal
+        state, not a failure.
 
     Raises:
-        Exception: if the request fails or the response is invalid.
+        ReleaseLookupError: the endpoint could not be reached, or answered with
+            something other than a release document. The message names the URL.
     """
     import urllib.error
     import urllib.request
 
-    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    url = release_api_url(repo)
     try:
         request = urllib.request.Request(url)
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            data = json.loads(response.read().decode())
-            tag = data.get("tag_name")
-            if not tag:
-                raise ValueError("Latest release has no tag_name")
-            return tag
+            payload = json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise ReleaseLookupError(f"Could not fetch latest release from {url}: {exc}") from exc
     except urllib.error.URLError as exc:
-        raise Exception(f"Could not fetch latest release from {url}: {exc}") from exc
+        raise ReleaseLookupError(f"Could not fetch latest release from {url}: {exc}") from exc
     except json.JSONDecodeError as exc:
-        raise Exception(f"Invalid JSON from {url}: {exc}") from exc
+        raise ReleaseLookupError(f"Invalid JSON from {url}: {exc}") from exc
+    tag = payload.get("tag_name") if isinstance(payload, dict) else None
+    if not tag:
+        raise ReleaseLookupError(f"Latest release at {url} has no tag_name")
+    return tag
 
 
 def _build_wheel_url(repo: str, tag: str, version: str) -> str:
@@ -817,11 +858,15 @@ def _detect_upgrade_command(
 
     Returns:
         A command suitable for the tool manager (uv tool install/upgrade or pipx install/upgrade).
+
+    Raises:
+        NoPublishedRelease: no release is published for ``repo``, so there is no wheel to upgrade to.
+        ReleaseLookupError: the release endpoint could not be read.
     """
     from hermes_plus import __version__
 
     if repo is None:
-        repo = DEFAULT_GITHUB_REPO
+        repo = release_repo()
     if version is None:
         version = __version__
 
@@ -844,13 +889,11 @@ def _detect_upgrade_command(
 
     # Resolve the package source.
     if source is None:
-        # Default: fetch latest release from GitHub and build wheel URL.
-        try:
-            tag = _resolve_github_release_tag(repo)
-            version = _extract_version_from_tag(tag)
-        except Exception as exc:
-            sys.stderr.write(f"Error resolving latest release: {exc}\n")
-            raise RuntimeError(f"Failed to resolve latest release: {exc}") from exc
+        # Default: fetch the latest release and build its wheel URL.
+        tag = _resolve_github_release_tag(repo)
+        if tag is None:
+            raise NoPublishedRelease(repo, release_api_url(repo))
+        version = _extract_version_from_tag(tag)
         source = _build_wheel_url(repo, tag, version)
 
     # Build the upgrade command based on the detected installation method.
@@ -866,14 +909,32 @@ def _detect_upgrade_command(
 
 def cmd_update(args: argparse.Namespace) -> int:
     """Detect installation method, upgrade package, re-install plugins, and run doctor."""
+    from hermes_plus import __version__
+
     source = getattr(args, "source", None)
+    checking = getattr(args, "check", False)
     try:
         upgrade_cmd = _detect_upgrade_command(source=source)
-    except RuntimeError as exc:
-        sys.stderr.write(f"{exc}\n")
+    except NoPublishedRelease as exc:
+        # An unpublished repo (or one whose first release is not cut yet) is a
+        # normal state: --check says so and exits 0. A real upgrade cannot run,
+        # because there is no wheel to install.
+        if checking:
+            print("Upgrade Check:")
+            print(f"  No published release found for {exc.repo}; installed {__version__}.")
+            print(f"  Looked up: {exc.url}")
+            print("  Nothing to upgrade to yet.")
+            return 0
+        sys.stderr.write(
+            f"No published release found for {exc.repo}; nothing to upgrade to "
+            f"(installed {__version__}).\n"
+        )
+        return 1
+    except ReleaseLookupError as exc:
+        sys.stderr.write(f"Error resolving latest release: {exc}\n")
         return 1
 
-    if getattr(args, "check", False):
+    if checking:
         print("Upgrade Check:")
         print(f"  Upgrade command: {' '.join(upgrade_cmd)}")
         profile_flag = f" --profile {args.profile}" if args.profile else ""

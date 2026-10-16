@@ -257,10 +257,45 @@ try {
   context = await browser.newContext({ viewport: VIEWPORT })
   const page = await context.newPage()
   const consoleErrors = []
-  page.on('console', message => {
-    if (message.type() === 'error') {consoleErrors.push(message.text().slice(0, 300))}
+  const failedRequests = []
+  const watch = target => {
+    // A console error with no URL is not actionable: Chromium's
+    // "Failed to load resource: the server responded with a status of 500"
+    // carries the failed URL only in the message's location.
+    target.on('console', message => {
+      if (message.type() !== 'error') {return}
+      const location = typeof message.location === 'function' ? message.location() : null
+      const where = location && location.url
+        ? ` @ ${location.url}${location.lineNumber ? `:${location.lineNumber}` : ''}`
+        : ''
+      consoleErrors.push(`${message.text().slice(0, 300)}${where}`)
+    })
+    target.on('pageerror', error => consoleErrors.push(`pageerror: ${String(error).slice(0, 300)}`))
+  }
+
+  // Every page of the context is watched, popups included: the Bot Room and 3D
+  // Pane overlays are separate tabs (`lib/browser-window-bridges.ts`), so a
+  // handler bound to `page` alone would miss their traffic entirely.
+  watch(page)
+  context.on('page', opened => watch(opened))
+  // Requests are watched at the CONTEXT, so a popup's very first request is
+  // covered too — a page-level listener can attach after its document started.
+  context.on('response', response => {
+    if (response.status() < 400) {return}
+    failedRequests.push({
+      status: response.status(),
+      method: response.request().method(),
+      url: response.url(),
+      resourceType: response.request().resourceType(),
+    })
   })
-  page.on('pageerror', error => consoleErrors.push(`pageerror: ${String(error).slice(0, 300)}`))
+  context.on('requestfailed', request => failedRequests.push({
+    status: 0,
+    method: request.method(),
+    url: request.url(),
+    resourceType: request.resourceType(),
+    error: request.failure() ? request.failure().errorText : '',
+  }))
 
   const landed = await page.goto(TOKEN_URL, { waitUntil: 'domcontentloaded' })
   const landingUrl = page.url()
@@ -491,17 +526,17 @@ try {
           throw new Error(`profiles.create answered ${JSON.stringify(created).slice(0, 200)}`)
         }
       }
-      // Seat the bot on the team. The seat's own `profile` field is not used
-      // here: the sidecar reads `params.profile` as the profile-store selector
-      // (server/multiplexer.py `_dispatch_local`), so a seat carrying a *named*
-      // profile is answered by that bot's own plus.db, which holds no team
-      // ("no team 'team_…'"). The seat is named by its title instead.
+      // Seat the bot on the team by its PROFILE, which is the real UI path
+      // (plugins/hermes-bots/team-org.tsx SeatForm sends `profile`). It is data:
+      // the team store stays the connection's, so the seat lands on the team
+      // created above instead of being looked up in the bot's own plus.db.
       const added = await rpc(page, 'bots_team.member.upsert', {
+        profile: BOT_PROFILE,
         role: 'proofer',
         team_id: teamId,
         title: BOT_PROFILE,
       })
-      if (added?.member?.title !== BOT_PROFILE) {
+      if (added?.member?.profile !== BOT_PROFILE) {
         throw new Error(`bots_team.member.upsert answered ${JSON.stringify(added).slice(0, 200)}`)
       }
 
@@ -666,6 +701,7 @@ try {
   })
 
   diagnostics.consoleErrors = consoleErrors
+  diagnostics.failedRequests = failedRequests
   await context.close()
 } catch (error) {
   record('proof run', 'broken', `aborted: ${error && error.message ? error.message : String(error)}`)
@@ -686,6 +722,16 @@ writeFileSync(REPORT, JSON.stringify(report, null, 2))
 const broken = results.filter(item => item.status === 'broken')
 const blockedItems = results.filter(item => item.status === 'blocked')
 console.log(`\n${results.length - broken.length - blockedItems.length} checks passed, ${blockedItems.length} blocked, ${broken.length} broken`)
+if (diagnostics.failedRequests && diagnostics.failedRequests.length) {
+  console.log('failed requests:')
+  for (const item of diagnostics.failedRequests) {
+    console.log(`  - ${item.status || item.error} ${item.method} ${item.url} (${item.resourceType})`)
+  }
+}
+if (diagnostics.consoleErrors && diagnostics.consoleErrors.length) {
+  console.log('console errors:')
+  for (const text of diagnostics.consoleErrors) {console.log(`  - ${text}`)}
+}
 if (broken.length) {
   console.log('broken:')
   for (const item of broken) {console.log(`  - ${item.name}: ${item.detail}`)}

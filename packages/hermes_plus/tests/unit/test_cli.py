@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from hermes_resolve import resolve_stock_hermes
 
 
@@ -149,17 +151,26 @@ def test_cli_update_github_url_construction() -> None:
     assert url == expected
 
 
-def test_cli_update_github_release_offline_error() -> None:
-    """Test that _resolve_github_release_tag handles offline errors gracefully."""
-    from hermes_plus.cli import _resolve_github_release_tag
+def test_cli_update_github_release_offline_error(monkeypatch) -> None:
+    """An unreachable endpoint is an error whose message names the URL.
 
-    # Point at an unroutable host; should raise an exception with a clear message.
-    try:
-        _resolve_github_release_tag("owner/repo", timeout=1)
-        assert False, "Expected _resolve_github_release_tag to raise an exception"
-    except Exception as exc:
-        assert "Could not fetch latest release" in str(exc)
-        assert "owner/repo" in str(exc)
+    A 404 is NOT an error (no release published yet): that path is covered by
+    tests/unit/test_cli_release_api.py, which drives the CLI against a real
+    HTTP server instead of whatever api.github.com answers today.
+    """
+    import socket
+
+    from hermes_plus.cli import RELEASE_API_ENV, ReleaseLookupError, _resolve_github_release_tag, release_api_url
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    monkeypatch.setenv(RELEASE_API_ENV, f"http://127.0.0.1:{port}")
+
+    with pytest.raises(ReleaseLookupError) as excinfo:
+        _resolve_github_release_tag("owner/repo", timeout=2)
+    assert "Could not fetch latest release" in str(excinfo.value)
+    assert release_api_url("owner/repo") in str(excinfo.value)
 
 
 def test_cli_update_with_source_override() -> None:

@@ -234,8 +234,25 @@ else
   verdict "update --check" 1 "$(tail -3 "$LOG_DIR/update-check.log" | tr '\n' ' ')"
 fi
 
+say "a neutral workspace for the shots"
+# The composer chip and the project label read the session workspace, which is
+# the backend's cwd. Running serve from the worktree put `ship/s27` and
+# `hermes-desktop-plus` in every screenshot; a throwaway repo under the temp
+# root makes them read `main` and `demo-project` instead.
+DEMO_PROJECT="$WORK/demo-project"
+mkdir -p "$DEMO_PROJECT"
+printf '# demo-project\n\nThrowaway repository for the proof screenshots.\n' >"$DEMO_PROJECT/README.md"
+git -C "$DEMO_PROJECT" init -q -b main
+git -C "$DEMO_PROJECT" add README.md
+if git -C "$DEMO_PROJECT" commit -q -m "demo project" >"$LOG_DIR/demo-project.log" 2>&1; then
+  verdict "neutral workspace" 0 \
+    "$DEMO_PROJECT on branch $(git -C "$DEMO_PROJECT" rev-parse --abbrev-ref HEAD) is serve's cwd"
+else
+  verdict "neutral workspace" 1 "git commit failed: $(tail -3 "$LOG_DIR/demo-project.log" | tr '\n' ' ')"
+fi
+
 say "serve"
-"$TOOL" serve --host 127.0.0.1 --port "$PORT" --hermes-bin "$HERMES_BIN" \
+( cd "$DEMO_PROJECT" && exec "$TOOL" serve --host 127.0.0.1 --port "$PORT" --hermes-bin "$HERMES_BIN" ) \
   >"$LOG_DIR/serve.log" 2>&1 &
 SERVE_PID=$!
 LOGIN_URL=""
