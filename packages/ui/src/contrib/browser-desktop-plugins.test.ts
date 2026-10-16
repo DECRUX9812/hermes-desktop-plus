@@ -10,7 +10,7 @@
  * plugin actually loads and registers its contribution.
  */
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,10 +23,22 @@ import { registry } from './registry'
 import { discoverRuntimePlugins, unloadRuntimePlugin, watchRuntimePlugins } from './runtime-loader'
 
 // The user's real plugin, read from disk in the test so the shipped file is
-// what gets evaluated. Path is overridable for portability.
-const REAL_PLUGIN_PATH =
-  process.env.HERMES_TEST_BACKDROPS_PLUGIN ||
-  resolve(process.cwd(), '../../plugins/backdrops/desktop/plugin.js')
+// what gets evaluated. Path is overridable for portability. In this repo the
+// bundled plugin ships inside the sidecar package (the fork checkout keeps it
+// at <root>/plugins); probe both launch roots (repo and packages/ui) so any
+// of the usual npm invocations finds it.
+const SHIPPED_PLUGIN = 'hermes_plus/src/hermes_plus/extras/plugins/backdrops/desktop/plugin.js'
+
+function defaultPluginPath(): string {
+  const candidates = [
+    resolve(process.cwd(), `../${SHIPPED_PLUGIN}`),
+    resolve(process.cwd(), `packages/${SHIPPED_PLUGIN}`)
+  ]
+
+  return candidates.find(existsSync) ?? candidates[0]
+}
+
+const REAL_PLUGIN_PATH = process.env.HERMES_TEST_BACKDROPS_PLUGIN || defaultPluginPath()
 
 // The REAL /api handler for the plugin routes, not a hand-written double: this
 // mirrors hermes_cli/web_routers/desktop_plugins.py's contract (root, one
