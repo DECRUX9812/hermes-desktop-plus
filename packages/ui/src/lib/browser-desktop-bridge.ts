@@ -16,7 +16,7 @@ import {
 } from '@/lib/browser-transport'
 import { createBrowserUploadsBridge } from '@/lib/browser-uploads'
 import { createBrowserWindowOpener, sessionWindowTarget } from '@/lib/browser-window'
-import { createBrowserBotRoomBridge, createBrowserPane3dBridge } from '@/lib/browser-window-bridges'
+import { createBrowserBotRoomBridge, createBrowserBotRoomMascotBridge, createBrowserPane3dBridge } from '@/lib/browser-window-bridges'
 import { createBrowserZoom } from '@/lib/browser-zoom'
 import { $connection } from '@/store/session'
 import type { BackendUpdateCheckResponse } from '@/types/hermes'
@@ -96,6 +96,10 @@ export function installBrowserDesktopBridge(): boolean {
     // browser host stands a same-origin popup tab in for each and relays their
     // push/control traffic over BroadcastChannel, so both surfaces work here.
     botroom: createBrowserBotRoomBridge(),
+    // Per-bot surfaces (mascots, task pill): Electron main spawns one small
+    // always-on-top window per bot; a browser has no such window, so the roster
+    // rows reach the in-page layer through this bridge instead.
+    botroomMascot: createBrowserBotRoomMascotBridge(),
     pane3d: createBrowserPane3dBridge(),
     findInPage: async (query: string) => {
       const find = (window as Window & { find?: (value: string) => boolean }).find

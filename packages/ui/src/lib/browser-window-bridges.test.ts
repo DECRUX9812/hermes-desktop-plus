@@ -10,15 +10,37 @@
 import { BroadcastChannel as NodeBroadcastChannel } from 'node:worker_threads'
 
 import type { PaneControl, PaneState } from '@/app/pane3d/protocol'
-import type { BotRoomControl, BotRoomStatePayload } from '@/store/botroom'
+import { dispatchBotRoomControl } from '@/store/botroom'
+import type { BotRoomBot, BotRoomControl, BotRoomStatePayload } from '@/store/botroom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { BOT_ROOM_CHANNEL, PANE3D_CHANNEL, createBrowserBotRoomBridge, createBrowserPane3dBridge } from './browser-window-bridges'
+import {
+  BOT_ROOM_CHANNEL,
+  PANE3D_CHANNEL,
+  createBrowserBotRoomBridge,
+  createBrowserBotRoomMascotBridge,
+  createBrowserPane3dBridge
+} from './browser-window-bridges'
 
-/** `BroadcastChannel` delivery is a task, never a microtask. */
-const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
+/**
+ * `BroadcastChannel` delivery is a task, never a microtask — and it is not
+ * ORDERED against a `setTimeout(0)`, so on a loaded event loop (this file runs
+ * inside the whole `src/lib` batch) the timer can fire before the frame lands.
+ * Spin the loop a few turns so the assertions below read a settled channel.
+ */
+const tick = async (): Promise<void> => {
+  for (let turn = 0; turn < 8; turn += 1) {
+    await new Promise(resolve => setTimeout(resolve, 0))
+  }
+}
 
 const DEMO_BOT = { id: 'profile:demo-bot', name: 'demo-bot', status: 'idle' as const }
+const DEMO_ROW = { ...DEMO_BOT, displayName: 'Demo Bot', status: 'working' as const }
+
+/** A `?win=` document: the mascot/pill tabs read the roster off the channel. */
+const asWindowDocument = (win: string): void => {
+  window.history.replaceState(null, '', `?win=${win}`)
+}
 
 beforeEach(() => {
   vi.stubGlobal('BroadcastChannel', NodeBroadcastChannel)
@@ -26,6 +48,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  window.history.replaceState(null, '', '/')
+  delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
 })
 
 describe('bot room channel', () => {
@@ -157,5 +181,90 @@ describe('3D Pane channel', () => {
 
   it('uses a pane channel name that cannot be confused with the bot room', () => {
     expect(PANE3D_CHANNEL).not.toBe(BOT_ROOM_CHANNEL)
+  })
+})
+
+describe('bot mascot channels', () => {
+  it('hands a mascot/pill tab the roster and action frames the renderer posts', async () => {
+    asWindowDocument('botroom-mascot')
+
+    const mascot = createBrowserBotRoomMascotBridge()
+    const renderer = createBrowserBotRoomBridge()
+    const rows: BotRoomBot[] = []
+    const actions: Array<{ action: string; botId: string }> = []
+
+    mascot.onState(row => rows.push(row))
+    mascot.onAction(action => actions.push(action))
+
+    renderer.pushState({ bots: [DEMO_ROW], type: 'bots' })
+    renderer.pushState({ bot: { ...DEMO_ROW, status: 'idle' }, type: 'bot.status' })
+    renderer.pushState({ action: 'dance', botId: DEMO_ROW.id, type: 'bot.action' })
+    // Not a mascot row: the overlay's own room traffic must not reach them.
+    renderer.pushState({ rooms: [], type: 'rooms' })
+    await tick()
+
+    expect(rows).toEqual([DEMO_ROW, { ...DEMO_ROW, status: 'idle' }])
+    expect(actions).toEqual([{ action: 'dance', botId: DEMO_ROW.id }])
+    // A tab has no OS drag region: the page layer moves its own slot instead.
+    expect(mascot.drag({ botId: DEMO_ROW.id, phase: 'move', x: 10, y: 20 })).toBeUndefined()
+  })
+
+  it('drops mascot frames that do not match the channel schema', async () => {
+    asWindowDocument('botroom-pill')
+
+    const mascot = createBrowserBotRoomMascotBridge()
+    const rows: BotRoomBot[] = []
+    const actions: Array<{ action: string; botId: string }> = []
+
+    mascot.onState(row => rows.push(row))
+    mascot.onAction(action => actions.push(action))
+
+    // A real same-origin writer, posting the shapes a broken tab could.
+    const writer = new NodeBroadcastChannel(BOT_ROOM_CHANNEL)
+
+    writer.postMessage({ hermesWindowChannel: 1, kind: 'state', payload: { bots: [{ id: 7 }], type: 'bots' } })
+    writer.postMessage({
+      hermesWindowChannel: 1,
+      kind: 'state',
+      payload: { action: 'dance', botId: DEMO_BOT.id, type: 'bot.action', x: 1 }
+    })
+    writer.postMessage({ hermesWindowChannel: 2, kind: 'state', payload: { bots: [DEMO_ROW], type: 'bots' } })
+    await tick()
+
+    expect(rows).toEqual([])
+    expect(actions).toEqual([])
+    writer.close()
+  })
+
+  it('feeds the main renderer from the store it shares, and still pushes to the windows', () => {
+    const pushed: BotRoomStatePayload[] = []
+
+    // The main renderer's host contract, hand-built the way `store/pane3d.test.ts`
+    // builds the pane's: the store's own `push` is the thing under test.
+    window.hermesDesktop = {
+      botroom: {
+        close: async () => ({ ok: true }),
+        control: () => undefined,
+        onControl: () => () => undefined,
+        onState: () => () => undefined,
+        open: async () => ({ ok: true }),
+        pushState: (payload: BotRoomStatePayload) => pushed.push(payload),
+        setFocusable: () => undefined,
+        setIgnoreMouse: () => undefined
+      }
+    } as unknown as Window['hermesDesktop']
+
+    const mascot = createBrowserBotRoomMascotBridge()
+    const actions: Array<{ action: string; botId: string }> = []
+
+    mascot.onAction(action => actions.push(action))
+
+    // The store's own verb path — the overlay's `mascot.perform` relay, which
+    // pushes `bot.action` to every window. The in-page layer is this same
+    // document, so it hears it without a channel round trip.
+    dispatchBotRoomControl({ action: 'dance', botId: DEMO_BOT.id, type: 'mascot.action' })
+
+    expect(actions).toEqual([{ action: 'dance', botId: DEMO_BOT.id }])
+    expect(pushed).toEqual([{ action: 'dance', botId: DEMO_BOT.id, type: 'bot.action' }])
   })
 })

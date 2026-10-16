@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type CSSProperties, lazy, type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
+import { BotRoomMascotLayerHost } from '@/app/botroom/mascot-layer-host'
 import { $splitSessionAction, splitFocusedSession } from '@/app/chat/split-session'
 import { formatRefValue } from '@/components/assistant-ui/directive-text'
 import { BootFailureOverlay } from '@/components/boot-failure-overlay'
@@ -1591,6 +1592,12 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       {/* Petdex floating mascot — renders nothing unless installed + enabled.
           Never in the HUD: that window is the chat bar and nothing else. */}
       {!isHudWindow() && !isBrowserWindow() && <FloatingPet />}
+
+      {/* Bot mascots over the app (browser host only): Electron spawns one
+          always-on-top window per bot, which a tab cannot do, so the same
+          surfaces float here instead. Renders nothing until the user turns it
+          on, and never in the HUD or a popped-out Browser window. */}
+      {!isHudWindow() && !isBrowserWindow() && <BotRoomMascotLayerHost />}
 
       {/* In-app tips. Renders nothing until the app is quiet and has something
           to point at, and nothing at all once they're off or all retired. The

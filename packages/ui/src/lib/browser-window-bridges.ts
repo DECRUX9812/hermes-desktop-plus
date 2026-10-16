@@ -13,6 +13,7 @@
 import type { AvatarId, DemoScript, PaneAnchor, PaneControl, PaneState } from '@/app/pane3d/protocol'
 import { AVATAR_IDS } from '@/app/pane3d/protocol'
 import { prefersReducedMotion } from '@/app/pane3d/scene/reduced-motion'
+import { subscribeBotRoomState } from '@/store/botroom'
 import type { BotRoomBot, BotRoomControl, BotRoomRoom, BotRoomStatePayload } from '@/store/botroom'
 
 import { browserUnsupported } from './browser-bridge-stubs'
@@ -117,6 +118,81 @@ export function createBrowserBotRoomBridge(): Window['hermesDesktop']['botroom']
     pushState: channel.postState,
     setFocusable: () => undefined,
     setIgnoreMouse: () => undefined
+  }
+}
+
+/**
+ * The browser host's per-bot surface channels (`botroomMascot`) — what Electron
+ * main relays to each mascot/pill window over `hermes:botroom-mascot:state`.
+ *
+ * Where the rows come from depends on which document this is. The main renderer
+ * (the in-page layer) is the store's own context, and a BroadcastChannel never
+ * delivers a frame back to the context that posted it, so it listens to the
+ * store's local echo. A `?win=botroom-mascot` / `-pill` tab has no store of its
+ * own, so it reads the roster frames the main renderer posts on the bot-room
+ * channel — the same payload main taps for its windows.
+ *
+ * `drag` is a no-op: a tab has no OS drag region, and the page layer moves its
+ * own slot instead (see `BotRoomMascotViewOptions.onDrag`).
+ */
+export function createBrowserBotRoomMascotBridge(): NonNullable<Window['hermesDesktop']['botroomMascot']> {
+  const stateListeners = new Set<(bot: BotRoomBot) => void>()
+  const actionListeners = new Set<(payload: { botId: string; action: string }) => void>()
+
+  const apply = (payload: BotRoomStatePayload): void => {
+    switch (payload.type) {
+      case 'bots':
+      case 'init':
+        for (const bot of payload.bots ?? []) {
+          stateListeners.forEach(listener => listener(bot))
+        }
+
+        return
+
+      case 'bot.status': {
+        const bot = payload.bot
+
+        if (bot) {
+          stateListeners.forEach(listener => listener(bot))
+        }
+
+        return
+      }
+
+      case 'bot.action':
+        if (payload.botId) {
+          const action = { action: payload.action ?? '', botId: payload.botId }
+
+          actionListeners.forEach(listener => listener(action))
+        }
+
+        return
+
+      default:
+        return
+    }
+  }
+
+  if (new URLSearchParams(window.location.search).has('win')) {
+    createWindowChannel<BotRoomStatePayload, BotRoomControl>({
+      controlGuards: BOT_ROOM_CONTROL_GUARDS,
+      name: BOT_ROOM_CHANNEL,
+      stateGuards: BOT_ROOM_STATE_GUARDS
+    }).onState(apply)
+  } else {
+    subscribeBotRoomState(apply)
+  }
+
+  const subscribe = <Listener>(listeners: Set<Listener>) => (listener: Listener): (() => void) => {
+    listeners.add(listener)
+
+    return () => listeners.delete(listener)
+  }
+
+  return {
+    drag: () => undefined,
+    onAction: subscribe(actionListeners),
+    onState: subscribe(stateListeners)
   }
 }
 
