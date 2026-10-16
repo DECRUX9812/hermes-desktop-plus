@@ -25,6 +25,11 @@
 #   SHOTS_DIR                 screenshot output (default ~/Videos/ship-shots)
 #   TMPDIR                    scratch root for the tool install and the temp home
 #                             (default /tmp; point it at disk when /tmp is a tmpfs)
+#   HERMES_PLUS_TEST_SHARED_INSTALLS
+#                             test-only (see CONTRIBUTING.md): a provisioned
+#                             HERMES_HOME whose installs/ this run's temp home
+#                             borrows, so stock does not build a dependency
+#                             environment for it (387-645s on the first enable)
 #
 # The model id is whatever the local cliproxy actually serves. TASK.md names
 # `gemini-3.7-flash-high`, which this proxy rejects with
@@ -52,6 +57,18 @@ WORK=$(mktemp -d "$TMP_ROOT/hp-proof-work-XXXXXX")
 HOME_DIR=$(mktemp -d "$TMP_ROOT/hp-proof-XXXXXX")
 LOG_DIR="$WORK/logs"
 mkdir -p "$LOG_DIR" "$SHOTS_DIR"
+
+# Test-only opt-in (CONTRIBUTING.md): borrow a provisioned home's dependency state, so the
+# first `plugins enable` here is a no-op instead of a 387-645s build for this temp home.
+if [ -n "${HERMES_PLUS_TEST_SHARED_INSTALLS:-}" ]; then
+  shared_installs="$HERMES_PLUS_TEST_SHARED_INSTALLS/installs"
+  if [ ! -d "$shared_installs" ]; then
+    echo "HERMES_PLUS_TEST_SHARED_INSTALLS=$HERMES_PLUS_TEST_SHARED_INSTALLS has no installs/ directory" >&2
+    exit 2
+  fi
+  ln -s "$shared_installs" "$HOME_DIR/installs"
+  printf 'shared installs: %s\n' "$shared_installs"
+fi
 
 SERVE_PID=""
 FAILURES=0
