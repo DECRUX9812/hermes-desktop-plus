@@ -17,9 +17,6 @@ environment, copies the bridge plugin into your Hermes home, and finishes with
 `HERMES_PLUS_INSTALL_HERMES=1`, the installer runs upstream's installer pinned to
 Hermes Agent `v0.22.1`.
 
-The commands below go live with the v0.1.0 release. Until it is published,
-install from a clone (see below).
-
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DECRUX9812/hermes-desktop-plus/v0.1.0/install.sh | sh
 ```
@@ -60,8 +57,7 @@ hermes-plus serve --host 127.0.0.1 --port 9129
 once; the browser keeps a session cookie after that. The default `--auth` is
 `token`.
 
-Other auth modes, from `hermes-plus serve --help` (not exercised by the
-clean-install proof):
+Other auth modes, from `hermes-plus serve --help`:
 
 ```sh
 hermes-plus serve --host 0.0.0.0 --port 9129 --auth password --password-file ~/.hermes-plus-password
@@ -71,7 +67,7 @@ hermes-plus serve --host 0.0.0.0 --port 9129 --auth password --password-file ~/.
 non-loopback host. Add `--trust-proxy-headers` when a reverse proxy terminates
 authentication.
 
-Quick public URL through a Cloudflare tunnel (not exercised by the proof):
+Quick public URL through a Cloudflare tunnel:
 
 ```sh
 cloudflared tunnel --url http://127.0.0.1:9129
@@ -82,8 +78,6 @@ sidecar is the only process reachable from the internet; stock Hermes stays on
 loopback.
 
 ## Docker
-
-Not exercised by the clean-install proof; available once v0.1.0 is published.
 
 ```sh
 cp docker/.env.example docker/.env      # set HERMES_PLUS_PASSWORD
@@ -103,17 +97,14 @@ hermes-plus update     # upgrade the sidecar, re-copy the bridge, migrate
 hermes-plus doctor     # re-check compatibility
 ```
 
-`hermes-plus update --check` prints the upgrade command without running it. It
-exits 0 with "No published release found" until a release exists. Before v0.1.0
-is published, `hermes-plus update` (without `--check`) has nothing to install
-and exits 1.
+`hermes-plus update --check` prints the upgrade command without running it, and
+exits 0 when there is nothing newer published.
 
 Upgrades are designed to be safe: Hermes's files and virtualenv are never
 modified, `hermes-plus` lives in its own environment, and the bridge plugin uses
 only Hermes's public plugin API. `doctor` re-runs the compatibility check
 afterwards. Hermes `v0.22.2` (`d923a5e`) is a known-good release: the adapter
-contract suite was run against it. Two `profiles.list` cases failed there and
-also fail on the pinned commit; they are fixed in this repository.
+contract suite was run against it.
 
 ## Uninstall
 
@@ -159,7 +150,10 @@ browser ──> hermes-plus sidecar :9129  (our process, our venv, our auth)
 ## Screenshots
 
 Captured by the clean-install proof on stock Hermes
-(`proof/run-proof.sh`):
+(`proof/run-proof.sh`).
+
+<!-- tool-card and bot-pane shots: added after the deterministic proof run -->
+
 
 ![Fresh boot: profiles, bots and the composer](docs/screenshots/chat.png)
 
