@@ -138,6 +138,7 @@ def test_user_modified_skill_survives_repeated_installs(tmp_path: Path) -> None:
     """A local edit is kept, and stays kept: the ledger keeps the shipped baseline."""
     _require_tools()
     home = tmp_path / "hermes-home"
+    share_installs(home)
 
     first = _install(home)
     assert first.returncode == 0, first.stdout + first.stderr
