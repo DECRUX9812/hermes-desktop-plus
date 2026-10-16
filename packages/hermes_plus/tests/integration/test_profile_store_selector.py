@@ -99,6 +99,17 @@ async def test_a_mailbox_note_sender_profile_does_not_pick_the_store(sidecar: Si
 
 
 @pytest.mark.asyncio
+async def test_a_made_up_plus_method_still_answers(sidecar: Sidecar):
+    """The store rule is consulted for every plus-owned name, invented ones included:
+    a raise there would leave the client with no reply instead of method-not-found."""
+    async with await _ws_open(sidecar) as ws:
+        reply = await _ws_call(ws, "fork.something-new.get", {"profile": BOT}, timeout=20)
+
+    assert "result" not in reply
+    assert reply["error"]["code"] == -32601
+
+
+@pytest.mark.asyncio
 async def test_a_profile_scoped_method_still_takes_its_param_as_the_selector(sidecar: Sidecar):
     """fork.memory.* addresses THAT profile's real MEMORY.md (the fork's @_profile_scoped)."""
     async with await _ws_open(sidecar) as ws:

@@ -12,9 +12,11 @@ import pytest
 
 from hermes_plus.rpc import methods
 from hermes_plus.rpc.profile_scope import (
+    CONNECTION,
     CONNECTION_SCOPED_NAMESPACES,
     PROFILE_SCOPED_NAMESPACES,
-    UnclassifiedMethod,
+    SELECTOR,
+    classify,
     selects_store_from_params,
 )
 
@@ -56,13 +58,7 @@ SELECTOR_PROFILE_METHODS = (
 
 def test_every_registered_method_has_a_selector_decision():
     """A new namespace must pick a side, never inherit a store by accident."""
-    unclassified = []
-    for name in methods():
-        try:
-            selects_store_from_params(name)
-        except UnclassifiedMethod:
-            unclassified.append(name)
-    assert unclassified == []
+    assert [name for name in methods() if not classify(name)] == []
 
 
 @pytest.mark.parametrize("name", DATA_PROFILE_METHODS)
@@ -81,8 +77,15 @@ def test_namespaces_do_not_overlap():
     assert not set(PROFILE_SCOPED_NAMESPACES) & set(CONNECTION_SCOPED_NAMESPACES)
 
 
-def test_an_unknown_plus_namespace_is_refused():
-    with pytest.raises(UnclassifiedMethod):
-        selects_store_from_params("fork.something-new.get")
-    with pytest.raises(UnclassifiedMethod):
-        selects_store_from_params("bots_teams.list")
+def test_a_made_up_name_is_never_profile_scoped():
+    """A client-invented name under a plus namespace still routes here, so the
+    rule must be total — and must not let a data field pick a database."""
+    assert classify("fork.something-new.get") == ""
+    assert selects_store_from_params("fork.something-new.get") is False
+    assert classify("bots_teams.list") == ""
+    assert selects_store_from_params("bots_teams.list") is False
+
+
+def test_classify_names_the_side():
+    assert classify("fork.memory.list") == SELECTOR
+    assert classify("bots_team.list") == CONNECTION

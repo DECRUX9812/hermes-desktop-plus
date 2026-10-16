@@ -19,6 +19,9 @@ silently re-pointing the call at that bot's empty database.
 
 from __future__ import annotations
 
+SELECTOR = "selector"
+CONNECTION = "connection"
+
 # The fork's @_profile_scoped surface we implement, by namespace.
 PROFILE_SCOPED_NAMESPACES = (
     "delegation",
@@ -40,18 +43,21 @@ CONNECTION_SCOPED_NAMESPACES = (
 )
 
 
-class UnclassifiedMethod(LookupError):
-    """A plus-owned method with no store-selector decision: add it to one table above."""
+def classify(name: str) -> str:
+    """How ``name`` picks its plus.db: SELECTOR, CONNECTION, or "" when undecided."""
+    if name.startswith(tuple(f"{namespace}." for namespace in PROFILE_SCOPED_NAMESPACES)):
+        return SELECTOR
+    if name.startswith(tuple(f"{namespace}." for namespace in CONNECTION_SCOPED_NAMESPACES)):
+        return CONNECTION
+    return ""
 
 
 def selects_store_from_params(name: str) -> bool:
     """Whether ``params['profile']`` selects this method's plus.db.
 
-    Raises UnclassifiedMethod for a plus-owned name that neither table covers, so
-    a new namespace cannot inherit a store by accident.
+    Total by design: an undecided name — a client-made-up ``fork.unknown.deep``,
+    which the multiplexer still routes here — is NOT profile-scoped, so a data
+    field can never pick a database. tests/test_rpc_profile_scope.py fails when a
+    REGISTERED method has no decision, so a new namespace cannot slip in.
     """
-    if name.startswith(tuple(f"{namespace}." for namespace in PROFILE_SCOPED_NAMESPACES)):
-        return True
-    if name.startswith(tuple(f"{namespace}." for namespace in CONNECTION_SCOPED_NAMESPACES)):
-        return False
-    raise UnclassifiedMethod(name)
+    return classify(name) == SELECTOR
