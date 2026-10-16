@@ -73,6 +73,16 @@ image-managed, so the upgrade path is pulling/rebuilding the image above.
 ## 4. Inspecting a running container
 
 ```bash
-docker compose -f docker/compose.yaml exec hermes-plus hermes-plus doctor
+docker compose -f docker/compose.yaml exec hermes-plus hermes-plus doctor --json
 docker compose -f docker/compose.yaml logs -f hermes-plus
+```
+
+`default_port` is a pre-flight check (is 9129 free to bind?), so against a
+running container it says "Port 9129 is already in use" — the sidecar itself
+holds it — and `doctor` exits 1. That is the check working, not a broken
+install; every other check reports on the container as it stands. For a clean
+all-ok run, ask about a port nothing holds:
+
+```bash
+docker compose -f docker/compose.yaml exec hermes-plus hermes-plus doctor --port 9177
 ```
