@@ -21,6 +21,9 @@ import sys
 
 _COPYLEFT = re.compile(r"\b(AGPL|LGPL|SSPL|BUSL|GPL)\b")
 _PERMISSIVE = re.compile(r"(MIT|ISC|APACHE|BSD|CC0|UNLICENSE|PYTHON-2|PSF|BLUEOAK|ZLIB|CC-BY|WTFPL)", re.I)
+# Published without a license field; license read from the registry document or the
+# tarball's LICENSE file. Pinned by version so an upgrade is re-checked.
+_VERIFIED = {"fuzzy@0.1.3": "MIT", "khroma@2.1.0": "MIT", "webgl-constants@1.1.1": "MIT"}
 
 
 def classify(field: object) -> str:
@@ -69,8 +72,9 @@ def entries(root: pathlib.Path, lock: dict) -> tuple[list[tuple[str, str, str]],
         entry, name, field = lock[path], path.rsplit("node_modules/", 1)[1], lock[path].get("license")
         manifest = installed / path / "package.json" if installed else None
         data = json.loads(manifest.read_text(encoding="utf-8")) if manifest and manifest.is_file() else {}
-        node.append((data.get("name") or name, str(entry.get("version", "")),
-                     str(data.get("license") or field or "")))
+        version = str(entry.get("version", ""))
+        license_text = str(data.get("license") or field or "") or _VERIFIED.get(f"{name}@{version}", "")
+        node.append((data.get("name") or name, version, license_text))
     python = []
     for meta in sorted((root / ".venv").glob("lib/python*/site-packages/*.dist-info/METADATA")):
         message = email.parser.Parser().parsestr(meta.read_text(encoding="utf-8", errors="replace"))

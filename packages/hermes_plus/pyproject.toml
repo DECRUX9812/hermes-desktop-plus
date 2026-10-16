@@ -9,7 +9,7 @@ description = "Hermes Desktop Plus: the desktop/web app add-on for stock Hermes 
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-authors = [{ name = "DECRUX9812" }]
+authors = [{ name = "Hermes Desktop Plus contributors" }]
 keywords = ["hermes", "hermes-agent", "desktop", "web-ui", "sidecar"]
 classifiers = [
   "Development Status :: 4 - Beta",
