@@ -736,7 +736,7 @@ try {
   const sessionTitles = sessionRows.map(session => session.title || session.name || '')
   // The rail titles a session from its first user message, so the first
   // session's rail label is the model's short title, not the prompt.
-  const firstTitle = sessionTitles.find(title => !title.includes(SECOND_TITLE)) || FIRST_PROMPT
+  const firstTitle = sessionTitles.find(title => !title.includes(SECOND_TITLE)) || FIRST_PROMPTS[0]
   const secondTitle = sessionTitles.find(title => title.includes(SECOND_TITLE)) || SECOND_TITLE
   diagnostics.sessionTitlesAfterReload = sessionTitles
   diagnostics.firstTitle = firstTitle
