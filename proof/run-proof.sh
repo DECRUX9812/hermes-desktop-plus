@@ -158,6 +158,39 @@ else
 fi
 sed -n '1,40p' "$LOG_DIR/install.log"
 
+# The extra plugins are opt-in (`--extras`), so the base install above never
+# touches them. This second, idempotent install is what a user runs to get
+# backdrops/memory/langfuse; it also proves the extras path itself. stdin is
+# /dev/null: `hermes plugins enable` asks for capability consent only on a TTY
+# and fails closed otherwise, so this can never hang.
+EXTRAS="backdrops,claude-mem,holographic,langfuse"
+say "install the opt-in extras"
+if heavy "$TOOL" install --extras "$EXTRAS" <"/dev/null" >"$LOG_DIR/extras-install.log" 2>&1; then
+  verdict "hermes-plus install --extras" 0 \
+    "$(grep -c . "$LOG_DIR/extras-install.log") lines; $(grep -ci 'extra plugin' "$LOG_DIR/extras-install.log") extra plugin line(s)"
+else
+  verdict "hermes-plus install --extras" 1 "$(tail -5 "$LOG_DIR/extras-install.log" | tr '\n' ' ')"
+fi
+grep -i 'extra plugin' "$LOG_DIR/extras-install.log" | sed -n '1,8p'
+
+say "stock Hermes sees the extras plugins"
+plugins_plain=$("$HERMES_BIN" plugins list --plain --no-bundled 2>/dev/null || true)
+extras_missing=""
+extras_rows=0
+for extra in backdrops claude-mem holographic langfuse; do
+  if printf '%s' "$plugins_plain" | grep -qi -- "$extra"; then
+    extras_rows=$((extras_rows + 1))
+  else
+    extras_missing="$extras_missing $extra"
+  fi
+done
+if [ -z "$extras_missing" ]; then
+  verdict "extras plugins installed and enabled" 0 \
+    "$extras_rows of 4 rows in \`hermes plugins list --plain --no-bundled\` (backdrops, claude-mem, holographic, langfuse)"
+else
+  verdict "extras plugins installed and enabled" 1 "missing from \`hermes plugins list\`:$extras_missing"
+fi
+
 say "configure the model provider in the temp home"
 # The model id is whatever the local cliproxy actually serves. TASK.md names
 # `gemini-3.7-flash-high`, which this proxy answers with
@@ -188,8 +221,14 @@ providers["cliproxy"] = {
     "default_model": model,
 }
 config["model"] = {"provider": "cliproxy", "default": model}
+# The composer-prediction auxiliary task is OFF by default; the backend parity
+# proof turns it on in this temp home so `session.predict_next` is exercised for
+# real instead of only shape-checked. It never touches the operator's home.
+auxiliary = config.setdefault("auxiliary", {})
+auxiliary.setdefault("composer_prediction", {})["enabled"] = True
 path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-print(f"providers.cliproxy + model.default = {model}; plugins section kept: {'plugins' in config}")
+print(f"providers.cliproxy + model.default = {model}; plugins section kept: {'plugins' in config}"
+      f"; composer_prediction enabled: {auxiliary['composer_prediction']['enabled']}")
 PY
 then
   verdict "provider configured" 0 "$(tail -1 "$LOG_DIR/config-merge.log")"
@@ -257,6 +296,24 @@ else
   verdict "neutral workspace" 1 "git commit failed: $(tail -3 "$LOG_DIR/demo-project.log" | tr '\n' ' ')"
 fi
 
+say "install a desktop plugin through the disk door"
+# The second plugin door: `<hermes home>/desktop-plugins/<id>/plugin.js`, which
+# the app's watcher loads at runtime (the door an agent or a user writes
+# through). The repo's hello-runtime example is written FOR this door — it is
+# deliberately not a bundled module (`plugin.runtime.js`, and the boot glob is
+# `plugin.{js,ts,tsx}`) — so installing it is the honest way to prove the door,
+# the loader, and the `/api/desktop-plugins/*` routes against a real install.
+DESKTOP_PLUGIN_ID=hello-runtime
+DESKTOP_PLUGIN_DIR="$HOME_DIR/desktop-plugins/$DESKTOP_PLUGIN_ID"
+DESKTOP_PLUGIN_SRC="$REPO_ROOT/packages/ui/src/plugins/$DESKTOP_PLUGIN_ID/plugin.runtime.js"
+mkdir -p "$DESKTOP_PLUGIN_DIR"
+if [ -f "$DESKTOP_PLUGIN_SRC" ] && cp "$DESKTOP_PLUGIN_SRC" "$DESKTOP_PLUGIN_DIR/plugin.js"; then
+  verdict "desktop plugin installed through the disk door" 0 \
+    "$DESKTOP_PLUGIN_ID/plugin.js ($(wc -c <"$DESKTOP_PLUGIN_DIR/plugin.js") bytes)"
+else
+  verdict "desktop plugin installed through the disk door" 1 "no $DESKTOP_PLUGIN_SRC"
+fi
+
 say "serve"
 ( cd "$DEMO_PROJECT" && exec "$TOOL" serve --host 127.0.0.1 --port "$PORT" --hermes-bin "$HERMES_BIN" ) \
   >"$LOG_DIR/serve.log" 2>&1 &
@@ -288,6 +345,7 @@ if [ -n "$LOGIN_URL" ]; then
     --chrome "$CHROME" \
     --tool-file "$TOOL_FILE" \
     --tool-token "$TOOL_TOKEN" \
+    --desktop-plugin "$DESKTOP_PLUGIN_ID" \
     --json "$WORK/browser-report.json" 2>&1 | tee "$LOG_DIR/browser.log"
   browser_rc=${PIPESTATUS[0]}
   verdict "browser proof" "$browser_rc" "see $SHOTS_DIR and $WORK/browser-report.json"
@@ -329,6 +387,46 @@ PY
   else
     verdict "api plus info" 1 "HTTP $http_code, body: $(head -c 200 "$WORK/plus-info.json")"
   fi
+fi
+
+say "backend parity proof"
+# The surfaces a user does not click: our RPC namespaces, our HTTP routes, the
+# host-terminal WS, and the stock cron cross-check for routines. It uses the
+# same session credential the browser pass holds. Whether a model turn works is
+# read back from the browser report, so a run with no provider marks
+# session.ask BLOCKED instead of BROKEN.
+if [ -n "${TOKEN:-}" ]; then
+  model_expected=$(python3 - "$WORK/browser-report.json" <<'PY'
+import json
+import sys
+try:
+    report = json.load(open(sys.argv[1]))
+except Exception:
+    print("no")
+    raise SystemExit
+for item in report.get("results", []):
+    if item.get("name") == "chat reply streams from the configured model":
+        print("yes" if item.get("status") == "pass" else "no")
+        break
+else:
+    print("no")
+PY
+)
+  heavy "$REPO_ROOT/.venv/bin/python" "$REPO_ROOT/proof/parity-proof.py" \
+    --base "http://127.0.0.1:$PORT" \
+    --token "$TOKEN" \
+    --hermes-bin "$HERMES_BIN" \
+    --hermes-home "$HOME_DIR" \
+    --demo-project "$DEMO_PROJECT" \
+    --worktree-path "$WORK/proof-worktree" \
+    --model-expected "$model_expected" \
+    --json "$WORK/parity-report.json" 2>&1 | tee "$LOG_DIR/parity.log"
+  parity_rc=${PIPESTATUS[0]}
+  grep -E '^\[(PASS|BROKEN|BLOCKED)\]' "$LOG_DIR/parity.log" | tee -a "$RESULTS" >/dev/null
+  verdict "backend parity proof" "$parity_rc" \
+    "$(grep -c '^\[PASS\]' "$LOG_DIR/parity.log" || true) passed, $(grep -c '^\[BLOCKED\]' "$LOG_DIR/parity.log" || true) blocked, $(grep -c '^\[BROKEN\]' "$LOG_DIR/parity.log" || true) broken (see $WORK/parity-report.json)"
+else
+  verdict "backend parity proof" 1 "skipped: the sidecar never printed a login URL"
 fi
 
 say "shut the sidecar down"

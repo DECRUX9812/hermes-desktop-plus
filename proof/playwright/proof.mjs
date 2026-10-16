@@ -15,6 +15,7 @@
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { chromium } from 'playwright-core'
@@ -45,6 +46,15 @@ const TOKEN_URL = args['token-url'] || `${BASE}/`
 const OUT = args['out']
 const CHROME = args['chrome']
 const REPORT = args['json'] || join(OUT, 'browser-report.json')
+// A plugin the runner installed through the disk door
+// (`<hermes home>/desktop-plugins/<id>/plugin.js`) before serving, so the proof
+// can assert the runtime door end to end. Empty when the runner installed none.
+const DESKTOP_PLUGIN = args['desktop-plugin'] || ''
+// The status-bar marker each known disk-door fixture paints, keyed by its id.
+// The repo's hello-runtime example is the reference implementation of this door
+// and documents the chip it contributes; an unknown id only gets the inventory
+// assertion (the proof cannot know what an arbitrary plugin paints).
+const DESKTOP_PLUGIN_MARKERS = {'hello-runtime': '⚡'}
 
 if (!OUT || !CHROME) {
   console.error('usage: node proof.mjs --out DIR --chrome BINARY --token-url URL [--base URL]')
@@ -222,6 +232,57 @@ async function clickSessionByTitle(page, title) {
 async function sessionRailTitles(page) {
   return await page.$$eval(SESSION_ROW_SELECTOR, nodes =>
     nodes.map(node => (node.innerText || '').replace(/\s+/g, ' ').trim()).filter(Boolean))
+}
+
+/**
+ * A fresh page holding this run's session cookie, booted straight into the chat.
+ *
+ * The parity checks cannot reuse the long-lived page: the app's route resume
+ * rewrites the hash back to the last route (`#/capabilities`) between a
+ * hash-only `goto` and the next click, so a reload lands on the capabilities
+ * route with no composer and a click races a re-mount. A new context has no
+ * persisted route, so the SPA boots into the chat and stays there. The cookie
+ * is copied, so it is the same session the browser pass holds.
+ */
+async function withFreshPage(fn) {
+  const fresh = await browser.newContext({ viewport: VIEWPORT })
+  try {
+    await fresh.addCookies(await context.cookies())
+    await fresh.addInitScript(RPC_HELPER)
+    const page = await fresh.newPage()
+    await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' })
+    await composer(page)
+    await page.waitForTimeout(1500)
+    return await fn(page)
+  } finally {
+    await fresh.close()
+  }
+}
+
+/** Click something React may re-mount underneath the click. */
+async function clickStable(locator, page, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs
+  let lastError = null
+  while (Date.now() < deadline) {
+    try {
+      await locator.click({ timeout: 10000 })
+      return
+    } catch (error) {
+      lastError = error
+      await page.waitForTimeout(1500)
+    }
+  }
+  const reason = lastError && lastError.message ? lastError.message.split('\n')[0] : 'unknown'
+  throw new Error(`the target never became clickable: ${reason}`)
+}
+
+/** `sendMessage`, but the editor click survives a re-mount. */
+async function sendMessageStable(page, text) {
+  const editor = page.locator('[data-slot="composer-root"] [contenteditable="true"]').first()
+  await clickStable(editor, page)
+  await page.keyboard.type(text)
+  await page.waitForTimeout(150)
+  await page.keyboard.press('Enter')
 }
 
 const browser = await chromium.launch({
@@ -753,6 +814,537 @@ try {
     }
     return `hermes ${info.body.hermes_version} @ ${info.body.hermes_commit}, compat ${compat}`
   })
+
+  // ── 10. Parity surfaces the earlier steps never touched (S39) ────────────
+  // Every PARITY.md row that is a UI surface gets a real check here. Backend
+  // surfaces (our RPC namespaces, our HTTP routes, the host-terminal WS, the
+  // stock cron cross-check) are covered by proof/parity-proof.py, which the
+  // proof runner calls right after this browser pass with the same session
+  // credential this page holds.
+  //
+  // ── S34 INSERTION POINT ──────────────────────────────────────────────────
+  // S34 owns the bot mascots and the 3D Pane opener. Its proof recipe goes
+  // here, ahead of the sections below, so its screenshots keep their own
+  // numbering and its checks read as one block.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // (a) The bundled extras skills are real, installed skills: the Skills tab
+  //     of the Capabilities page renders one toggle row per installed skill,
+  //     and each row's switch carries the skill name as its accessible name.
+  const EXTRA_SKILLS = ['ambition', 'first-task', 'bot-team-builder', 'bot-team-retro', 'excalidraw', 'initiate-setup']
+  await check('the bundled extras skills are listed on the Skills tab', () => withFreshPage(async tab => {
+    await tab.goto(BASE + '/#/capabilities?tab=skills', { waitUntil: 'domcontentloaded' })
+    await tab.waitForTimeout(6000)
+    await shot(tab, '07-skills')
+    const listed = []
+    for (const name of EXTRA_SKILLS) {
+      // Each installed skill row renders a toggle whose accessible name is the
+      // skill name (`CapRow` -> `Switch aria-label={toggleLabel ?? title}`).
+      const switchCount = await tab.locator(`[data-slot="switch"][aria-label="${name}"]`).count()
+      if (switchCount < 1) {continue}
+      listed.push(name)
+    }
+    diagnostics.skillsTab = { listed, body: (await bodyText(tab)).slice(0, 1200) }
+    const missing = EXTRA_SKILLS.filter(name => !listed.includes(name))
+    if (missing.length) {
+      throw new Error(
+        `the Skills tab has no row for ${missing.join(', ')} (found ${listed.join(', ') || 'none'});`
+        + ` page text: ${(await bodyText(tab)).replace(/\n/g, ' / ').slice(0, 300)}`)
+    }
+    return `all ${EXTRA_SKILLS.length} extras skills are installed and listed (${listed.join(', ')})`
+  }))
+
+  // (b) `/ambition` completes to a real skill chip in the composer. The row is
+  //     backend data (`complete.slash`), so a chip can only appear if stock
+  //     Hermes knows the installed skill; the chip carries the skill kind.
+  const SKILL_CHIP_SELECTOR = '[data-slot="composer-rich-input"] [data-slash-kind="skill"]'
+  await check('typing /ambition offers the skill and inserts a skill chip', () => withFreshPage(async page => {
+    const editor = page.locator('[data-slot="composer-root"] [contenteditable="true"]').first()
+    await clickStable(editor, page)
+    await page.keyboard.type('/amb')
+    const drawer = page.locator('[data-slot="composer-completion-drawer"][role="listbox"]')
+    await drawer.waitFor({ state: 'visible', timeout: 30000 })
+    const row = drawer.locator('button:has(span[data-ref="skill"])').filter({ hasText: '/ambition' }).first()
+    try {
+      await row.waitFor({ state: 'visible', timeout: 30000 })
+    } catch (error) {
+      const rows = await drawer.locator('button').allInnerTexts()
+      await shot(page, '07-ambition-chip')
+      throw new Error(`no /ambition skill row in the completion drawer; rows: ${JSON.stringify(rows).slice(0, 300)}`)
+    }
+    await clickStable(row, page)
+    const chip = page.locator(SKILL_CHIP_SELECTOR).first()
+    await chip.waitFor({ state: 'attached', timeout: 15000 })
+    const refText = await chip.getAttribute('data-ref-text')
+    await shot(page, '07-ambition-chip')
+    if (refText !== '/ambition') {
+      throw new Error(`the chip carries data-ref-text=${JSON.stringify(refText)}, expected /ambition`)
+    }
+    return `the completion drawer offered the skill row and inserting it produced a skill chip (data-ref-text="${refText}")`
+  }))
+
+  // (c) File upload: the composer's own attach path posts the file to
+  //     POST /api/chat/file-upload and shows an attachment pill, then a prompt
+  //     carrying it gets a reply that quotes a token only the file holds.
+  const ATTACHMENT_NAME = `hp-proof-attachment-${Math.random().toString(16).slice(2, 8)}.txt`
+  const ATTACHMENT_TOKEN = `hp-attach-${Math.random().toString(16).slice(2, 10)}`
+  const ATTACHMENT_PATH = join(tmpdir(), ATTACHMENT_NAME)
+  writeFileSync(ATTACHMENT_PATH, `The attachment token is ${ATTACHMENT_TOKEN}.\n`, 'utf8')
+  const uploadResponses = []
+
+  // Both attachment checks run on ONE fresh page: the pill and the draft it
+  // carries must survive from the attach step into the prompt step.
+  let attachmentFlowStarted = false
+  try {
+    await withFreshPage(async page => {
+      attachmentFlowStarted = true
+      page.context().on('response', response => {
+        if (response.url().includes('/api/chat/file-upload')) {
+          uploadResponses.push({ status: response.status(), method: response.request().method() })
+        }
+      })
+      await check('attaching a file uploads it and paints an attachment in the composer', async () => {
+        const attachButton = page.getByRole('button', { name: 'Add context' }).first()
+        await attachButton.waitFor({ state: 'visible', timeout: 30000 })
+        await clickStable(attachButton, page)
+        const [chooser] = await Promise.all([
+          page.waitForEvent('filechooser', { timeout: 30000 }),
+          clickStable(page.getByRole('menuitem', { name: /^Files/ }).first(), page),
+        ])
+        await chooser.setFiles(ATTACHMENT_PATH)
+        const pill = page.locator('[data-slot="composer-attachments"] button')
+          .filter({ hasText: ATTACHMENT_NAME }).first()
+        try {
+          await pill.waitFor({ state: 'visible', timeout: 60000 })
+        } catch (error) {
+          await shot(page, '08-attachment')
+          const text = await bodyText(page)
+          throw new Error(
+            `no attachment pill for ${ATTACHMENT_NAME}; composer text: ${text.replace(/\n/g, ' / ').slice(0, 300)}`)
+        }
+        await shot(page, '08-attachment')
+        diagnostics.attachment = { uploadResponses, pillText: (await pill.innerText()).trim() }
+        const ok = uploadResponses.filter(item => item.status === 200)
+        if (!ok.length) {
+          throw new Error(`no successful POST /api/chat/file-upload; saw ${JSON.stringify(uploadResponses)}`)
+        }
+        return `POST /api/chat/file-upload answered 200 and the composer painted "${(await pill.innerText()).trim()}"`
+      })
+
+      const ATTACHMENT_PROMPTS = [
+        `The file ${ATTACHMENT_NAME} is attached. Read it and reply with the token written inside it and nothing else.`,
+        `You must read the attached file ${ATTACHMENT_NAME} before answering. Reply with only the token it contains. A reply without that token is wrong.`,
+      ]
+      let attachmentReply = null
+      let attachmentPromptError = null
+      for (let attempt = 0; attempt < ATTACHMENT_PROMPTS.length && !attachmentReply; attempt += 1) {
+        try {
+          await sendMessageStable(page, ATTACHMENT_PROMPTS[attempt])
+          await waitForSettled(page, 240000)
+        } catch (error) {
+          attachmentPromptError = error
+          break
+        }
+        const texts = await assistantTexts(page)
+        const quoted = texts.some(text => text.toLowerCase().includes(ATTACHMENT_TOKEN.toLowerCase()))
+        diagnostics[`attachmentAttempt${attempt + 1}`] = {
+          quoted, last: texts.length ? texts[texts.length - 1].slice(0, 200) : '',
+        }
+        if (quoted) {attachmentReply = texts[texts.length - 1]}
+      }
+      await shot(page, '08-attachment-reply')
+      if (attachmentReply) {
+        await check('a prompt carrying the attachment gets a reply that quotes it', () =>
+          `the reply quoted the file's token: "${attachmentReply.slice(0, 160)}"`)
+      } else if (attachmentPromptError) {
+        record(
+          'a prompt carrying the attachment gets a reply that quotes it',
+          'broken',
+          `the prompt could not be sent: ${attachmentPromptError.message ? attachmentPromptError.message.split('\n')[0] : attachmentPromptError}`,
+        )
+      } else {
+        const texts = await assistantTexts(page)
+        record(
+          'a prompt carrying the attachment gets a reply that quotes it',
+          'broken',
+          `no reply quoted ${ATTACHMENT_TOKEN} after ${ATTACHMENT_PROMPTS.length} prompt(s);`
+          + ` last assistant text: ${(texts.length ? texts[texts.length - 1] : '(none)').slice(0, 200)}`,
+        )
+      }
+    })
+  } catch (error) {
+    if (!attachmentFlowStarted) {
+      record(
+        'attaching a file uploads it and paints an attachment in the composer',
+        'broken',
+        `the chat page never became usable: ${error && error.message ? error.message.split('\n')[0] : error}`,
+      )
+    }
+  }
+
+  // (d) Share links: a grant for a session renders the filtered projection for
+  //     an anonymous reader, and the projection carries no system/tool rows.
+  let shareSessionId = ''
+  let sharePath = ''
+  await check('a share link can be created for a session', () => withFreshPage(async page => {
+    const shareRows = (await rpc(page, 'session.list', { limit: 50 }).catch(() => ({})))?.sessions || []
+    // The share target is chosen by CONTENT, not recency: the projection is
+    // built from the stock `/api/sessions/<id>/messages` rows, so the session to
+    // share is the one whose rows hold the first turn's reply. (Recency would
+    // pick whichever session ran last — the attachment turn — and the viewer
+    // check would then be about the wrong transcript.)
+    const found = await page.evaluate(async ({ ids, needle }) => {
+      for (const id of ids) {
+        const response = await fetch(
+          `/api/sessions/${id}/messages?order=oldest&limit=50&offset=0&inline_images=false`)
+        if (!response.ok) {continue}
+        const body = await response.json()
+        const flat = (body.messages || []).map(row => String(row.display_content ?? row.content ?? '')).join('\n')
+        if (flat.toLowerCase().includes(needle)) {return id}
+      }
+      return null
+    }, { ids: shareRows.map(row => row.id), needle: FIRST_REPLY })
+    shareSessionId = found || ''
+    if (!shareSessionId) {
+      throw new Error(`no session's message rows hold the first reply "${FIRST_REPLY}":`
+        + ` ${JSON.stringify(shareRows.map(row => row.title || row.name)).slice(0, 250)}`)
+    }
+    const created = await page.evaluate(async sessionId => {
+      const response = await fetch('/api/share/create', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      })
+      return { status: response.status, body: await response.json() }
+    }, shareSessionId)
+    diagnostics.shareCreate = created
+    if (created.status !== 200 || !created.body.token || !created.body.path) {
+      throw new Error(`POST /api/share/create answered ${created.status}: ${JSON.stringify(created.body).slice(0, 200)}`)
+    }
+    sharePath = created.body.path
+    return `share grant for ${shareSessionId} at ${sharePath} (expires ${created.body.expires_at})`
+  }))
+
+  await check('an anonymous reader sees the filtered projection at /share/view', async () => {
+    if (!sharePath) {throw new Error('no share link: the create step did not complete')}
+    const anonymous = await browser.newContext({ viewport: VIEWPORT })
+    try {
+      const viewer = await anonymous.newPage()
+      const response = await viewer.goto(BASE + sharePath, { waitUntil: 'domcontentloaded' })
+      if (!response || response.status() !== 200) {
+        throw new Error(`GET ${sharePath} -> HTTP ${response ? response.status() : 'no response'}`)
+      }
+      // The viewer polls /api/share/view and paints one `.m` node per event.
+      await viewer.waitForFunction(
+        () => document.querySelectorAll('main#chat .m').length > 0, null, { timeout: 60000 })
+      const rendered = (await viewer.evaluate(() => document.querySelector('main#chat').innerText))
+        .replace(/\s+/g, ' ').trim()
+      // The same projection, read directly: roles and keys must be filtered.
+      const projection = await viewer.evaluate(async () => {
+        const response = await fetch(`/api/share/view${location.search}`)
+        return { status: response.status, body: await response.json() }
+      })
+      await shot(viewer, '09-share')
+      diagnostics.share = { path: sharePath, rendered: rendered.slice(0, 600), projection: projection.body }
+      if (projection.status !== 200) {throw new Error(`/api/share/view -> HTTP ${projection.status}`)}
+      const events = projection.body.events
+      if (!Array.isArray(events) || !events.length) {
+        throw new Error(`the projection has no events: ${JSON.stringify(projection.body).slice(0, 250)}`)
+      }
+      const allowedRoles = new Set(['user', 'assistant'])
+      const allowedKeys = new Set(['id', 'role', 'text', 'tools', 'timestamp'])
+      for (const event of events) {
+        if (!allowedRoles.has(event.role)) {
+          throw new Error(`the projection leaked a ${event.role} row: ${JSON.stringify(event).slice(0, 200)}`)
+        }
+        const extra = Object.keys(event).filter(key => !allowedKeys.has(key))
+        if (extra.length) {
+          throw new Error(`the projection leaked keys ${extra.join(', ')}: ${JSON.stringify(event).slice(0, 200)}`)
+        }
+        if (!Array.isArray(event.tools) || event.tools.some(tool => typeof tool !== 'string')) {
+          throw new Error(`tool entries are not bare names: ${JSON.stringify(event.tools).slice(0, 200)}`)
+        }
+      }
+      if (!rendered.toLowerCase().includes(FIRST_REPLY)) {
+        throw new Error(`the viewer did not render the shared transcript: ${rendered.slice(0, 300)}`)
+      }
+      return `${events.length} event(s), roles only user/assistant, keys only ${[...allowedKeys].join('/')},`
+        + ` viewer rendered the shared reply`
+    } finally {
+      await anonymous.close()
+    }
+  })
+
+  // (e) Mobile companion: the phone page is public; the pairing endpoints are
+  //     the operator side and answer on the authenticated session.
+  await check('the mobile companion page loads without a cookie', async () => {
+    const anonymous = await browser.newContext({ viewport: { width: 390, height: 844 } })
+    try {
+      const phone = await anonymous.newPage()
+      const response = await phone.goto(BASE + '/mobile', { waitUntil: 'domcontentloaded' })
+      await shot(phone, '10-mobile')
+      const text = (await bodyText(phone)).slice(0, 400)
+      diagnostics.mobilePage = text
+      if (!response || response.status() !== 200) {
+        throw new Error(`GET /mobile -> HTTP ${response ? response.status() : 'no response'}`)
+      }
+      if (!/Hermes companion/i.test(text)) {
+        throw new Error(`the mobile page has no companion shell: ${text.replace(/\n/g, ' / ')}`)
+      }
+      return `GET /mobile -> 200 and painted the companion shell`
+    } finally {
+      await anonymous.close()
+    }
+  })
+
+  await check('the mobile pairing endpoint answers on the session', () => withFreshPage(async page => {
+    const pairing = await page.evaluate(async () => {
+      const response = await fetch('/api/mobile/pairing', { method: 'POST' })
+      return { status: response.status, body: await response.json() }
+    })
+    diagnostics.mobilePairing = { status: pairing.status, keys: Object.keys(pairing.body || {}) }
+    if (pairing.status !== 200 || !pairing.body.code || pairing.body.page !== '/mobile') {
+      throw new Error(`POST /api/mobile/pairing answered ${pairing.status}: ${JSON.stringify(pairing.body).slice(0, 200)}`)
+    }
+    return `POST /api/mobile/pairing answered a ${String(pairing.body.code).length}-char code`
+      + ` (expires in ${pairing.body.expires_in}s, page ${pairing.body.page})`
+  }))
+
+  // (f) Profiles switcher: the sidebar rail lists the profiles this backend
+  //     serves, and picking one re-scopes the app to that profile.
+  await check('the profiles switcher lists and switches the served profiles', () => withFreshPage(async page => {
+    const rail = page.locator('[data-slot="profile-rail"]').first()
+    await rail.waitFor({ state: 'visible', timeout: 30000 })
+    const railLabel = await rail.getAttribute('aria-label')
+    const served = (await page.evaluate(async () => {
+      const response = await fetch('/api/profiles')
+      return response.ok ? (await response.json()).profiles : null
+    })) || []
+    const named = served.filter(profile => !profile.is_default).map(profile => profile.name)
+    if (!named.length) {
+      throw new Error(`the backend served no named profile to switch to: ${JSON.stringify(served).slice(0, 200)}`)
+    }
+    // The rail's own controls: the default's pill (aria-pressed) and one square
+    // per named profile in the wide layout, or a condensed dropdown whose rows
+    // are the named profiles (`ProfileDropdown` gets `named`, the default stays
+    // on its pill).
+    const squares = await rail.locator('button[aria-pressed]')
+      .evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') || ''))
+    const dropdown = rail.locator('[data-slot="profile-dropdown"]').first()
+    let rows = []
+    if (await dropdown.count()) {
+      await clickStable(dropdown, page)
+      try {
+        await page.locator('[role="menuitemradio"]').first().waitFor({ state: 'visible', timeout: 20000 })
+      } catch (error) {
+        await shot(page, '11-profiles')
+        throw new Error(`the profiles dropdown painted no rows (rail label ${JSON.stringify(railLabel)})`)
+      }
+      rows = await page.locator('[role="menuitemradio"]')
+        .evaluateAll(nodes => nodes.map(node => (node.innerText || '').replace(/\s+/g, ' ').trim()))
+    }
+    const listed = squares.concat(rows)
+    await shot(page, '11-profiles')
+    diagnostics.profilesSwitcher = { railLabel, served: served.map(profile => profile.name), squares, rows }
+    if (!listed.length) {
+      throw new Error(`the rail (aria-label ${JSON.stringify(railLabel)}) painted no profile control`)
+    }
+    const missing = named.filter(name =>
+      !listed.some(label => label.toLowerCase().includes(name.toLowerCase())))
+    if (missing.length) {
+      throw new Error(`the rail offers no control for ${missing.join(', ')}; controls: ${JSON.stringify(listed).slice(0, 250)}`)
+    }
+
+    // Switch: select the named profile through whichever control the rail
+    // exposes, then require the app to re-scope its requests to it. Nothing
+    // short of a `profile=` round trip proves the switcher did anything.
+    const target = named[0]
+    const scoped = []
+    page.on('request', request => {
+      if (request.url().includes(`profile=${encodeURIComponent(target)}`)) {scoped.push(request.url())}
+    })
+    if (rows.length) {
+      await clickStable(page.locator('[role="menuitemradio"]').filter({ hasText: target }).first(), page)
+    } else {
+      await clickStable(rail.getByRole('button', { name: new RegExp(`^${target}`, 'i') }).first(), page)
+    }
+    const deadline = Date.now() + 60000
+    while (!scoped.length && Date.now() < deadline) {await page.waitForTimeout(500)}
+    const active = await rail.locator('button[aria-pressed="true"]')
+      .evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') || ''))
+    await shot(page, '11-profiles-switched')
+    diagnostics.profilesSwitch = { target, scoped: scoped.slice(0, 3), active }
+    if (!scoped.length) {
+      throw new Error(`selecting ${target} produced no request scoped to that profile;`
+        + ` the rail's active control is ${JSON.stringify(active)}`)
+    }
+    return `${served.length} profiles served (${served.map(profile => profile.name).join(', ')}),`
+      + ` the rail lists ${listed.length} control(s); selecting ${target} scoped ${scoped.length} request(s) to it`
+      + ` (e.g. ...${scoped[0].slice(-48)})`
+  }))
+
+  // (g) The bundled UI plugins (PARITY row 32). Each one is a real plugin in
+  //     the packaged build, so the Plugins inventory must carry its row, with
+  //     the per-half switches the page renders for every installed plugin.
+  //     `hello-runtime` is deliberately NOT here: its file is `plugin.runtime.js`
+  //     and the boot glob is `plugin.{js,ts,tsx}`, so it only ever loads through
+  //     the runtime door — check (g2) below proves that path instead.
+  const BUNDLED_PLUGINS = ['AgentCraft Studio', 'Bots', 'Kanban', 'Radio']
+  await check('the bundled UI plugins are installed on the Plugins tab', () => withFreshPage(async page => {
+    await page.goto(BASE + '/#/capabilities?tab=plugins', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(8000)
+    await shot(page, '12-plugins-tab')
+    const rows = {}
+    for (const name of BUNDLED_PLUGINS) {
+      // `plugins-tab.tsx` labels each half's switch `${Desktop|Agent}: ${pkg.name}`.
+      rows[name] = await page.locator(`[data-slot="switch"][aria-label$=": ${name}"]`)
+        .evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
+    }
+    diagnostics.pluginsTab = rows
+    const missing = BUNDLED_PLUGINS.filter(name => !rows[name].length)
+    if (missing.length) {
+      const seen = await page.locator('[data-slot="switch"]')
+        .evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
+      throw new Error(`no Plugins-tab row for ${missing.join(', ')}; the page's plugin switches are`
+        + ` ${JSON.stringify(seen).slice(0, 300)}`)
+    }
+    const summary = BUNDLED_PLUGINS.map(name => `${name} (${rows[name].join(' + ')})`)
+    return `the Plugins inventory carries a toggle row for each bundled plugin: ${summary.join(', ')}`
+  }))
+
+  // (g2) The runtime door: a plugin.js dropped into
+  //      `<hermes home>/desktop-plugins/<id>/` is loaded by the app's watcher,
+  //      appears in the same inventory as a `kind: runtime` plugin, and paints
+  //      its status-bar contribution. run-proof.sh installs the repo's own
+  //      hello-runtime fixture this way and passes --desktop-plugin.
+  if (DESKTOP_PLUGIN) {
+    await check(`the plugin installed through the disk door (${DESKTOP_PLUGIN}) is live`, () =>
+      withFreshPage(async page => {
+        const marker = DESKTOP_PLUGIN_MARKERS[DESKTOP_PLUGIN] || ''
+        const statusText = await page.locator('[data-slot="statusbar"]').first().innerText().catch(() => '')
+        await page.goto(BASE + '/#/capabilities?tab=plugins', { waitUntil: 'domcontentloaded' })
+        await page.waitForTimeout(9000)
+        await shot(page, '12-desktop-plugin')
+        const switches = await page.locator('[data-slot="switch"]')
+          .evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
+        const listed = switches.filter(label => /(desktop|agent)/i.test(label || '')
+          && new RegExp(`: ${DESKTOP_PLUGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i').test(label || ''))
+        const text = await bodyText(page)
+        diagnostics.desktopPlugin = { id: DESKTOP_PLUGIN, switches: listed, marker, statusText }
+        if (!listed.length) {
+          throw new Error(`the Plugins inventory has no row for the disk-door plugin ${DESKTOP_PLUGIN};`
+            + ` its switches are ${JSON.stringify(switches).slice(0, 300)}`)
+        }
+        if (marker && !statusText.includes(marker)) {
+          throw new Error(`the status bar does not carry the ${DESKTOP_PLUGIN} contribution`
+            + ` (expected ${JSON.stringify(marker)}): ${statusText.replace(/\n/g, ' / ').slice(0, 200)}`)
+        }
+        return `the disk-door plugin is listed (${listed.join(', ')})`
+          + (marker ? ` and its status-bar chip ${JSON.stringify(marker)} is on screen` : '')
+          + ` (page text ${text.length} chars)`
+      }))
+  }
+
+  // (h) The bundled plugins' own surfaces actually mount: two contributed full
+  //     pages, and the two overlay views (which are the app's own route views,
+  //     not plugin contributions, but the same PARITY row names them).
+  await check('the bundled plugin pages and overlays render', () => withFreshPage(async page => {
+    const surfaces = []
+
+    await page.goto(BASE + '/#/kanban', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(8000)
+    await shot(page, '12-kanban')
+    const kanbanText = await bodyText(page)
+    diagnostics.kanban = kanbanText.slice(0, 800)
+    if (!/New task/.test(kanbanText) || !/Triage/.test(kanbanText)) {
+      throw new Error(`the /kanban page did not paint the board: ${kanbanText.replace(/\n/g, ' / ').slice(0, 300)}`)
+    }
+    surfaces.push('kanban board at /kanban')
+
+    await page.goto(BASE + '/#/studio', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(10000)
+    await shot(page, '12-studio')
+    const studioRoots = await page.locator('.ac-page').count()
+    diagnostics.studio = { acPage: studioRoots, text: (await bodyText(page)).slice(0, 400) }
+    if (!studioRoots) {
+      throw new Error(`the /studio page painted no AgentCraft root (.ac-page);`
+        + ` body: ${(await bodyText(page)).replace(/\n/g, ' / ').slice(0, 300)}`)
+    }
+    surfaces.push('agentcraft studio at /studio')
+
+    await page.goto(BASE + '/#/starmap', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(12000)
+    await shot(page, '12-starmap')
+    const starmapOverlay = await page.locator('[data-overlay-surface]').count()
+    // The map is a canvas; with nothing learned yet (or a scan that failed) the
+    // same overlay states that instead. Both are real outcomes, so the check
+    // requires the overlay AND one of the two states.
+    const starmapCanvas = await page.locator('canvas.touch-none.select-none').count()
+    const starmapText = await bodyText(page)
+    const starmapState = starmapCanvas
+      ? `${starmapCanvas} canvas`
+      : (/Nothing learned yet/.test(starmapText) ? 'the empty state ("Nothing learned yet")'
+        : (/Could not load memory graph/.test(starmapText) ? 'the load-failure state'
+          : 'neither the map nor an empty/failed state'))
+    diagnostics.starmap = { overlay: starmapOverlay, canvas: starmapCanvas, text: starmapText.slice(0, 400) }
+    if (!starmapOverlay || (!starmapCanvas && !/Nothing learned yet|Could not load memory graph/.test(starmapText))) {
+      throw new Error(`/starmap opened no memory-graph overlay content`
+        + ` (overlay surfaces ${starmapOverlay}, ${starmapState};`
+        + ` text ${starmapText.replace(/\n/g, ' / ').slice(0, 250)})`)
+    }
+    surfaces.push(`memory-graph overlay at /starmap (${starmapState})`)
+
+    await page.goto(BASE + '/#/mission-control', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(9000)
+    await shot(page, '12-mission-control')
+    const missionOverlay = await page.locator('[data-overlay-surface]').count()
+    const missionCards = await page.locator('[data-overview-card]').count()
+    const missionText = await bodyText(page)
+    diagnostics.missionControl = { overlay: missionOverlay, cards: missionCards, text: missionText.slice(0, 400) }
+    if (!missionOverlay || (missionCards < 1 && !/No live sessions/.test(missionText))) {
+      throw new Error(`/mission-control opened no session-overview overlay`
+        + ` (overlay surfaces ${missionOverlay}, cards ${missionCards},`
+        + ` text ${missionText.replace(/\n/g, ' / ').slice(0, 200)})`)
+    }
+    surfaces.push(`mission-control overlay at /mission-control (${missionCards} card(s))`)
+
+    return `rendered ${surfaces.join(', ')}`
+  }))
+
+  // (i) i18n and themes: the Appearance settings own both — the language
+  //     switcher (`Switch language`, on the General sub-page) and the look /
+  //     colour-mode segmented controls the theme system drives (Theme
+  //     sub-page). The appearance view redirects to `page=general` by default,
+  //     so each half is opened by its own sub-page.
+  await check('the appearance settings expose the language switcher and the theme controls', () =>
+    withFreshPage(async page => {
+      await page.goto(BASE + '/#/settings?tab=config:appearance&page=general', { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(9000)
+      await shot(page, '12-appearance')
+      const languageButtons = await page.locator('button[aria-label]')
+        .evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')).filter(label => /switch language/i.test(label || '')))
+      const generalText = await bodyText(page)
+      if (!languageButtons.length) {
+        throw new Error(`no language switcher on the Appearance page:`
+          + ` ${generalText.replace(/\n/g, ' / ').slice(0, 300)}`)
+      }
+      await page.goto(BASE + '/#/settings?tab=config:appearance&page=theme', { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(9000)
+      await shot(page, '12-appearance-theme')
+      const pressed = await page.locator('button[aria-pressed]')
+        .evaluateAll(nodes => nodes.map(node => (node.innerText || '').trim()).filter(Boolean))
+      const text = await bodyText(page)
+      diagnostics.appearance = { languageButtons, pressed: pressed.slice(0, 20), text: text.slice(0, 800) }
+      const looks = pressed.filter(label => /^(soft|classic)$/i.test(label))
+      const modes = pressed.filter(label => /^(light|dark|system|auto)$/i.test(label))
+      if (!looks.length || !modes.length) {
+        throw new Error(`the theme controls are missing (look options ${JSON.stringify(looks)},`
+          + ` colour-mode options ${JSON.stringify(modes)}); pressed controls: ${JSON.stringify(pressed).slice(0, 250)}`
+          + `; page text: ${text.replace(/\n/g, ' / ').slice(0, 250)}`)
+      }
+      return `the language switcher (${languageButtons.length} control) and the theme controls are on screen:`
+        + ` look ${JSON.stringify(looks)}, mode ${JSON.stringify(modes)}`
+    }))
 
   diagnostics.consoleErrors = consoleErrors
   diagnostics.failedRequests = failedRequests
