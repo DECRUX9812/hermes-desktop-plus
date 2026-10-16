@@ -20,14 +20,14 @@ This table tracks feature parity between stock Hermes, the Hermes Plus sidecar, 
 | 8 | Group chat / bot room, `bots_team.*` (21 methods) | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/bots_team.py` | contract tests | done |
 | 9 | Bot mailbox `bots_mailbox.*` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/bots_mailbox.py` | contract tests | done |
 | 10 | Bot identity / memory `fork.bot.identity.*`, `fork.memory.*` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/fork_bot_identity.py`, `fork_memory.py` | contract tests | done |
-| 11 | Bot relay extensions (`bot_relay.outbox.pending`, roster.sync, deliver/reply changes) | S + P | `packages/hermes_plus/src/hermes_plus/rpc/handlers/` | contract tests | in flight on ship/s8 |
-| 12 | Bot mode DM/probe, hosted rooms | S + B | `packages/hermes_plus/src/hermes_plus/rpc/handlers/`, `bridge/` | contract tests | in flight on ship/s8 |
-| 13 | Team mode (team goals → spawn task, budgets, audit, packs) | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/` | contract tests | in flight on ship/s8 |
+| 11 | Bot relay extensions (`bot_relay.outbox.pending`, roster.sync, deliver/reply changes) | S + P | `packages/hermes_plus/src/hermes_plus/rpc/handlers/` | contract tests | in progress |
+| 12 | Bot mode DM/probe, hosted rooms | S + B | `packages/hermes_plus/src/hermes_plus/rpc/handlers/`, `bridge/` | contract tests | in progress |
+| 13 | Team mode (team goals → spawn task, budgets, audit, packs) | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/` | contract tests | in progress |
 | 14 | Routines `fork.routines.*` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/fork_routines.py` | contract tests | done |
 | 15 | Onboarding `fork.onboarding.*` (setup profile/session) | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/fork_onboarding.py` | contract tests | done |
-| 16 | Policies, first-task and initiate-setup prompts | B | `packages/hermes_plus/src/hermes_plus/bridge/` | contract tests | in flight on ship/s7 |
-| 17 | Browser snapshot/thumbnail `fork.browser.*` | B + S | `packages/hermes_plus/src/hermes_plus/bridge/`, `store/` | contract tests | in flight on ship/s7 |
-| 18 | Computer-use timeline `fork.computer.timeline` | B + S | `packages/hermes_plus/src/hermes_plus/bridge/`, `store/` | contract tests | in flight on ship/s7 |
+| 16 | Policies, first-task and initiate-setup prompts | B | `packages/hermes_plus/src/hermes_plus/bridge/` | contract tests | in progress |
+| 17 | Browser snapshot/thumbnail `fork.browser.*` | B + S | `packages/hermes_plus/src/hermes_plus/bridge/`, `store/` | contract tests | in progress |
+| 18 | Computer-use timeline `fork.computer.timeline` | B + S | `packages/hermes_plus/src/hermes_plus/bridge/`, `store/` | contract tests | in progress |
 | 19 | MCP app tool cards `mcp_apps.list/call/read_ui` | S | `packages/hermes_plus/src/hermes_plus/rpc/handlers/mcp_apps.py` | contract tests | done |
 | 20 | Plugin rail `/api/desktop-plugins/*` | S | `packages/hermes_plus/src/hermes_plus/http/desktop_plugins.py` | contract tests | done |
 | 21 | Web host terminal `WS /api/host-terminal` | S | `packages/hermes_plus/src/hermes_plus/http/host_terminal.py` | contract tests | done |
@@ -37,10 +37,10 @@ This table tracks feature parity between stock Hermes, the Hermes Plus sidecar, 
 | 25 | Mobile companion `/api/mobile/*`, `/mobile` | S | `packages/hermes_plus/src/hermes_plus/http/mobile.py` | contract tests | done |
 | 26 | Webapp windows `/webapp/*`, window tickets | S | `packages/hermes_plus/src/hermes_plus/http/webapp.py` | contract tests | done |
 | 27 | Profiles switcher, profile lifecycle | P | `packages/ui/src/api/profiles.ts` | contract tests | done |
-| 28 | Git panel (web_git extras) | P + S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | in flight on ship/s6 |
-| 29 | Extra plugins: backdrops, memory (claude-mem, holographic), langfuse | P + B | `packages/hermes_plus/src/hermes_plus/bridge/`, extras | contract tests | in flight on ship/s7 |
-| 30 | Extra skills (bot-team-builder/retro, first-task, initiate-setup, excalidraw canvas) | U + B | `packages/hermes_plus/src/hermes_plus/bridge/`, extras | tests | in flight on ship/s7 |
-| 31 | Extra tools (apply_layout, visualization, verify_preview, git_ship, browser_step_thumbnail, mcp_apps) | B + S | `packages/hermes_plus/src/hermes_plus/bridge/`, handlers | tests | in flight on ship/s8 |
+| 28 | Git panel (web_git extras) | P + S | `packages/hermes_plus/src/hermes_plus/server/` | contract tests | in progress |
+| 29 | Extra plugins: backdrops, memory (claude-mem, holographic), langfuse | P + B | `packages/hermes_plus/src/hermes_plus/bridge/`, extras | contract tests | in progress |
+| 30 | Extra skills (bot-team-builder/retro, first-task, initiate-setup, excalidraw canvas) | U + B | `packages/hermes_plus/src/hermes_plus/bridge/`, extras | tests | in progress |
+| 31 | Extra tools (apply_layout, visualization, verify_preview, git_ship, browser_step_thumbnail, mcp_apps) | B + S | `packages/hermes_plus/src/hermes_plus/bridge/`, handlers | tests | in progress |
 | 32 | pane3d, agentcraft, kanban, radio, starmap, mission-control, hello-runtime, i18n, themes | U | `packages/ui/src/` | UI tests | done |
 | 33 | Auth for public serving (token/password, Cloudflare Access) | S | `packages/hermes_plus/src/hermes_plus/server/auth.py` | contract tests | done |
 
@@ -54,8 +54,8 @@ All HTTP paths called by the UI are served by stock or plus. No unserved HTTP ro
 
 ## Notes
 
-- S6 (http routes), S7 (bridge plugin), S8b (bot teams), and S13 (coverage audit) are merged
-- S14 round 2: fixed stock-side extraction to detect `@_profile_handler`, `@_projects_handler` wrappers; removed duplicate plus profiles.list handler
-- Table reflects completion state as of S14 round 2: all UI-called RPC and HTTP endpoints are served
+- The HTTP routes, bridge plugin, bot teams, and coverage audit are merged
+- Stock-side extraction detects `@_profile_handler` and `@_projects_handler` wrappers; the duplicate plus `profiles.list` handler was removed
+- Table reflects the completion state at the last coverage audit: all UI-called RPC and HTTP endpoints are served
 - Coverage script now correctly detects Starlette Route() definitions and all wrapper decorators (@_*_handler patterns)
 - Zero unserved RPC methods and zero unserved HTTP routes from UI coverage check
