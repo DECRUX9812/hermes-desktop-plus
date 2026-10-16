@@ -12,6 +12,7 @@ Data calls reach STOCK tui_gateway handlers over the internal gateway client:
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time

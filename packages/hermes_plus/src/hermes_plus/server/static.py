@@ -69,12 +69,26 @@ def _inject(html: str, settings: Any, runtime: Any) -> str:
 
 
 def _safe_path(root: Path, relative: str) -> Path | None:
-    candidate = (root / relative).resolve()
+    """``root/relative`` when it stays inside ``root``, else None.
+
+    Resolution (not string matching) is what makes the check hold: it collapses
+    ``..`` and follows symlinks, so a link planted in the UI root cannot read
+    outside it. An embedded NUL or an unreadable path resolves to None rather
+    than raising into a 500.
+    """
     try:
+        candidate = (root / relative).resolve()
         candidate.relative_to(root.resolve())
-    except ValueError:
+    except (OSError, RuntimeError, ValueError):
         return None
     return candidate
+
+
+def _authenticated(request: Request, settings: Any) -> bool:
+    if settings.auth == "none":
+        return True
+    auth = getattr(request.app.state, "auth", None)
+    return auth is None or bool(auth.authenticated(request.scope))
 
 
 async def serve(request: Request, settings: Any, runtime: Any) -> Response:
@@ -84,6 +98,13 @@ async def serve(request: Request, settings: Any, runtime: Any) -> Response:
     root = _ui_root(settings)
     if root is None:
         return Response("Frontend not built", status_code=404)
+
+    if not _authenticated(request, settings):
+        # Only a public path can reach here (the front door gates every other
+        # request), and index.html carries the session token: never hand it out
+        # unauthenticated. This is the backstop for the front-door public-path
+        # rule, not the rule itself.
+        return Response("Authentication required", status_code=401)
 
     relative = request.path_params.get("path", "").lstrip("/")
     candidate = _safe_path(root, relative) if relative else None
