@@ -12,3 +12,8 @@
 # into the runtime stage.
 **/dist-webapp
 **/ui_dist
+# Secrets: docker/.env is the file docker/README.md §1 tells the user to create
+# (it holds HERMES_PLUS_PASSWORD and TUNNEL_TOKEN). No stage needs it and the
+# build context is shipped to the daemon, so keep it out. .env.example stays.
+.env
+**/.env
