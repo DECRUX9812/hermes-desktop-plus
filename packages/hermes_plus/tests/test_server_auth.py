@@ -89,7 +89,9 @@ def test_password_attempts_are_rate_limited(tmp_path: Path, monkeypatch):
 def test_forwarded_for_only_when_trusted():
     headers = [(b"x-forwarded-for", b"198.51.100.7, 10.0.0.1")]
     trusted = FrontDoorAuth(ServeSettings(trust_proxy_headers=True))
-    assert trusted.client_address(_scope(headers)) == "198.51.100.7"
+    # A trusted proxy appends the peer it saw, so the RIGHTMOST entry is the one
+    # it wrote: the leftmost is caller text and cannot be the limiter's key.
+    assert trusted.client_address(_scope(headers)) == "10.0.0.1"
     plain = FrontDoorAuth(ServeSettings(trust_proxy_headers=False))
     assert plain.client_address(_scope(headers)) == "127.0.0.1"
 

@@ -22,6 +22,10 @@ services:
       - HERMES_PLUS_AUTH=${HERMES_PLUS_AUTH:-password}
       - HERMES_PLUS_PASSWORD=${HERMES_PLUS_PASSWORD:-}
       - HERMES_PLUS_TRUST_PROXY_HEADERS=${HERMES_PLUS_TRUST_PROXY_HEADERS:-0}
+      # Origins other than the sidecar's own that may drive it (the sidecar
+      # refuses a browser Origin that does not match its Host). Leave empty for
+      # a browser at the published address; see docs/security.md.
+      - HERMES_PLUS_ALLOWED_ORIGINS=${HERMES_PLUS_ALLOWED_ORIGINS:-}
     restart: unless-stopped
 
   cloudflared:
@@ -33,7 +37,9 @@ services:
     # In Cloudflare Zero Trust dashboard, create a tunnel and add a public hostname
     # with service origin: http://hermes-plus:9129
     # When routing via Cloudflare Tunnel, set HERMES_PLUS_TRUST_PROXY_HEADERS=1
-    # on the hermes-plus service to trust incoming proxy headers.
+    # on the hermes-plus service to trust incoming proxy headers, and make sure
+    # the tunnel forwards X-Forwarded-Host: the sidecar refuses a browser Origin
+    # that does not match its own host. See docs/security.md.
     command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
     depends_on:
       - hermes-plus

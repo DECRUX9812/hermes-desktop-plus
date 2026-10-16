@@ -18,6 +18,11 @@ from hermes_plus.server import multiplexer, proxy, static
 from hermes_plus.server import auth as auth_module
 from hermes_plus.server.auth import AuthMiddleware, FrontDoorAuth, login_page
 from hermes_plus.server.bridge_rpc import bridge_rpc
+from hermes_plus.server.hygiene import (
+    AccessLogMiddleware,
+    SecurityHeadersMiddleware,
+    install_log_filters,
+)
 from hermes_plus.server.runtime import Runtime
 from hermes_plus.settings import ServeSettings
 
@@ -118,6 +123,12 @@ def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
         routes=routes,
         lifespan=lifespan,
         middleware=[
+            # Outermost first: the access log records the status every other
+            # layer produced, and the redaction it does is why uvicorn's own
+            # access log (which prints the raw query string, token included) is
+            # turned off in run().
+            Middleware(AccessLogMiddleware, token=runtime.auth.token),
+            Middleware(SecurityHeadersMiddleware),
             Middleware(AuthMiddleware, auth=runtime.auth),
             Middleware(uploads.ChatFileUploadLimitMiddleware),
         ],
@@ -135,6 +146,7 @@ def run(settings: ServeSettings) -> None:
         level=getattr(logging, settings.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    install_log_filters()
     runtime = Runtime(settings)
     app = build_app(settings, runtime)
     config = uvicorn.Config(
@@ -142,5 +154,9 @@ def run(settings: ServeSettings) -> None:
         host=settings.host,
         port=settings.port,
         log_level=settings.log_level,
+        # Uvicorn logs the whole request target, and the target of the printed
+        # one-time login URL is ``/?token=<session token>``. Our own
+        # AccessLogMiddleware logs the same line with the query redacted.
+        access_log=False,
     )
     uvicorn.Server(config).run()

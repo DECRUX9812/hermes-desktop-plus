@@ -11,7 +11,7 @@ import httpx
 import websockets
 from starlette.background import BackgroundTask
 from starlette.requests import Request
-from starlette.responses import Response, StreamingResponse
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from websockets.exceptions import ConnectionClosed
 
@@ -32,6 +32,10 @@ def _origin(url: str) -> str:
     parts = urlsplit(url)
     scheme = "https" if parts.scheme in {"https", "wss"} else "http"
     return f"{scheme}://{parts.netloc}"
+
+
+def _has_dot_segment(path: str) -> bool:
+    return any(segment in (".", "..") for segment in path.split("/"))
 
 
 def authenticated_url(url: str, token: str, extra_query: list[tuple[str, str]] | None = None) -> str:
@@ -94,6 +98,11 @@ async def proxy_http(request: Request, runtime: Any, target_origin: str, *, auth
         headers["X-Hermes-Session-Token"] = runtime.upstream_token
 
     path = request.url.path
+    if _has_dot_segment(path):
+        # The URL we hand to httpx is normalised, so ``/api/share/view/../../x``
+        # would be sent as ``/x`` — a path this sidecar never routed. Refuse the
+        # dot segment instead of letting normalisation rewrite the target.
+        return JSONResponse({"detail": "Invalid path"}, status_code=400)
     query_items = [
         (key, value)
         for key, value in parse_qsl(request.url.query, keep_blank_values=True)
