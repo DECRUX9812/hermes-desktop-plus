@@ -679,21 +679,35 @@ try {
       throw new Error(`identity did not round-trip: ${JSON.stringify(read).slice(0, 200)}`)
     }
     // The bot pane is the plugin pane registered as `hermes-bots:pane`; its
-    // command-palette row is labelled "Bots" and opens it (the `/roster` route
-    // is the fleet-run roster, a different surface). The pane host carries
-    // `data-pane-host` (`keep-alive-panes.tsx`) and a revealed pane drops
-    // `data-pane-hidden` (`pane-visibility.ts`), so that pair is a selector
-    // unique to the OPEN Bots pane — the palette itself is a different element.
-    const BOTS_PANE_SELECTOR = '[data-pane-host="hermes-bots:pane"]:not([data-pane-hidden])'
+    // command-palette row is labelled "Bots" (the `/roster` route is the
+    // fleet-run roster, a different surface). The pane's roster container
+    // carries `data-slot="bots-roster"` (`roster-pane-content.tsx`) — unique
+    // to this pane, and invisible while the pane sits hidden as a keep-alive
+    // tab — so a VISIBLE roster container is the open pane.
+    const BOTS_ROSTER_SELECTOR = '[data-slot="bots-roster"]'
     await page.keyboard.press('Control+k')
     await page.waitForTimeout(1200)
     await page.keyboard.type('Bots')
     await page.waitForTimeout(1200)
     await shot(page, '05-bot-palette')
     await page.keyboard.press('Enter')
+    await page.waitForTimeout(800)
+    // Enter can leave the palette row un-activated (S28 saw it still open
+    // seconds later); fold whatever remains so it cannot photobomb the shot.
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500)
     await check('bot pane opens', async () => {
-      await page.locator(BOTS_PANE_SELECTOR).waitFor({ state: 'visible', timeout: 30000 })
-      return 'the Bots pane host is visible after the palette "Bots" row'
+      const roster = page.locator(BOTS_ROSTER_SELECTOR)
+      if (!(await roster.isVisible().catch(() => false))) {
+        // The user path the roster's own rail button owns (the same toggle the
+        // Bot Room overlay flow uses): click it only when the pane is closed,
+        // because the rail entry is a toggle, not a reveal.
+        const railBots = page.locator('button[data-rail-entry="hermes-bots:pane"]').first()
+        await railBots.waitFor({ state: 'visible', timeout: 30000 })
+        await railBots.click()
+      }
+      await roster.waitFor({ state: 'visible', timeout: 30000 })
+      return 'the Bots pane roster (data-slot bots-roster) is on screen'
     })
     await page.waitForTimeout(2500)
     await shot(page, '05-bot')
