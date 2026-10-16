@@ -124,8 +124,18 @@ export function browserBootstrap(): BrowserBootstrap | null {
 
 export function endpointUrl(path: string, basePath: string, profile?: null | string): URL {
   const config = browserTransportConfig(basePath)
+  const base = endpointBaseUrl(config)
+  const url = new URL(endpointPath(config, path), base)
+
+  // A protocol-relative or absolute path can carry a foreign origin past the
+  // pathname-only base check below (upstream pins requests to the Webapp
+  // origin; here that origin is the configured endpoint base, which is the
+  // Webapp origin unless an operator explicitly sets a different apiBase).
+  if (url.origin !== base.origin) {
+    throw new Error('Hermes API paths must remain on the Webapp origin')
+  }
+
   const normalizedBase = endpointRoot(config)
-  const url = new URL(endpointPath(config, path), endpointBaseUrl(config))
 
   if (
     normalizedBase &&
