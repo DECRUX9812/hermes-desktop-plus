@@ -512,30 +512,17 @@ export const OVERLAY_CSS = `
 .hr-ask-in::placeholder { color: var(--ink-faint); }
 `
 /**
- * CSS for the small per-bot windows (`?win=botroom-mascot` / `-pill`).
- * Same glass language as the overlay stage, tuned for a 150px / 320px canvas.
- * The mascot window body is a native drag region — drag is the transport,
- * the action dot + context menu are the only interactive pixels.
+ * The per-bot surfaces' rules: the small always-on-top panels Electron opens
+ * (`?win=botroom-mascot` / `-pill`) and the same boxes in the browser host's
+ * page layer. Same glass language as the overlay stage, tuned for a 150px /
+ * 320px canvas. The mascot window body is a native drag region — drag is the
+ * transport, the action dot + context menu are the only interactive pixels.
+ *
+ * Context-free on purpose: the markup renders in a bare window document AND
+ * inside the app, so only the preamble differs (see the two bundles below).
  */
-export const MASCOT_PILL_CSS = `
-:root {
-  --glass: rgba(22, 22, 36, .78);
-  --glass-soft: rgba(22, 22, 36, .5);
-  --hairline: rgba(255, 255, 255, .10);
-  --ink: #f4f4f8;
-  --ink-dim: rgba(244, 244, 248, .62);
-  --ink-faint: rgba(244, 244, 248, .38);
-  --shadow: 0 18px 50px rgba(0, 0, 0, .45), 0 2px 10px rgba(0, 0, 0, .3);
-  --accent: #a78bfa;
-  --spring: cubic-bezier(.32, 1.4, .44, 1);
-  --ease: cubic-bezier(.25, .9, .3, 1);
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { background: transparent; overflow: hidden; }
-body { font: 12.5px/1.45 -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; }
-button { font: inherit; color: inherit; }
-
-/* ── mascot window ─────────────────────────────────────────────── */
+const MASCOT_SURFACE_CSS = `
+/* ── mascot surface ────────────────────────────────────────────── */
 .hr-mw { position: fixed; inset: 0; cursor: grab; }
 .hr-mw:active { cursor: grabbing; }
 .hr-mw-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -591,7 +578,7 @@ button { font: inherit; color: inherit; }
 }
 .hr-mw-menu button:hover { background: rgba(255, 255, 255, .08); color: var(--ink); }
 
-/* ── task pill window ──────────────────────────────────────────── */
+/* ── task pill surface ─────────────────────────────────────────── */
 .hr-pill {
   position: fixed; inset: 6px; display: flex; flex-direction: column;
   border-radius: 18px; background: var(--glass); border: 1px solid var(--hairline);
@@ -635,3 +622,93 @@ button { font: inherit; color: inherit; }
 .hr-pill-send:hover { filter: brightness(1.12); transform: scale(1.06); }
 .hr-pill-send:active { transform: scale(.92); }
 `
+
+/**
+ * The page layer's bundle: the surfaces, their variables scoped to the layer,
+ * and the layout the layer adds. Scoped because the host app is a full theme of
+ * its own — the window bundle's `:root` variables, body reset and
+ * `user-select: none` would restyle the whole app.
+ *
+ * z-index 45: over the shell's own content (≤20) so a mascot is never buried in
+ * a scroll column, under the menus (50) and modals (--z-modal) that the user
+ * just opened and that must win.
+ */
+const MASCOT_LAYER_CSS = `
+.hr-layer {
+  --glass: rgba(22, 22, 36, .78);
+  --glass-soft: rgba(22, 22, 36, .5);
+  --hairline: rgba(255, 255, 255, .10);
+  --ink: #f4f4f8;
+  --ink-dim: rgba(244, 244, 248, .62);
+  --ink-faint: rgba(244, 244, 248, .38);
+  --shadow: 0 18px 50px rgba(0, 0, 0, .45), 0 2px 10px rgba(0, 0, 0, .3);
+  --accent: #a78bfa;
+  --spring: cubic-bezier(.32, 1.4, .44, 1);
+  --ease: cubic-bezier(.25, .9, .3, 1);
+
+  position: fixed; inset: 0; z-index: 45; pointer-events: none;
+}
+/* The slot is the mascot's world, so the mascot box stops being viewport-fixed
+   and fills its slot instead. */
+.hr-layer-slot {
+  position: absolute; cursor: grab; pointer-events: auto; touch-action: none;
+}
+.hr-layer-slot .hr-mw { position: absolute; inset: 0; }
+.hr-layer-slot .hr-mw:active { cursor: grabbing; }
+.hr-layer-pill {
+  position: absolute; pointer-events: auto; cursor: default;
+}
+.hr-layer-pill .hr-pill { position: absolute; inset: 0; }
+${MASCOT_SURFACE_CSS}`
+
+/** What a standalone window document needs on top of the surfaces. */
+const MASCOT_WINDOW_CSS = `
+:root {
+  --glass: rgba(22, 22, 36, .78);
+  --glass-soft: rgba(22, 22, 36, .5);
+  --hairline: rgba(255, 255, 255, .10);
+  --ink: #f4f4f8;
+  --ink-dim: rgba(244, 244, 248, .62);
+  --ink-faint: rgba(244, 244, 248, .38);
+  --shadow: 0 18px 50px rgba(0, 0, 0, .45), 0 2px 10px rgba(0, 0, 0, .3);
+  --accent: #a78bfa;
+  --spring: cubic-bezier(.32, 1.4, .44, 1);
+  --ease: cubic-bezier(.25, .9, .3, 1);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: transparent; overflow: hidden; }
+body { font: 12.5px/1.45 -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; }
+button { font: inherit; color: inherit; }
+${MASCOT_SURFACE_CSS}`
+
+let injectedCss: null | string = null
+let injectedSheet: HTMLStyleElement | null = null
+
+function inject(css: string): void {
+  if (injectedCss === css || typeof document === 'undefined') {
+    return
+  }
+
+  injectedCss = css
+
+  // One sheet per document, whichever bundle asked first: the two callers are
+  // disjoint by construction (a `?win=` document, or the app's page layer), so
+  // the second bundle only ever appears in a test or a mis-mount — and then
+  // swapping the rules beats stacking both preambles.
+  if (!injectedSheet) {
+    injectedSheet = document.createElement('style')
+    document.head.appendChild(injectedSheet)
+  }
+
+  injectedSheet.textContent = css
+}
+
+/** A window document's own bundle — the caller is a `?win=` entry point. */
+export function ensureMascotWindowStyles(): void {
+  inject(MASCOT_WINDOW_CSS)
+}
+
+/** The page layer's bundle — the caller renders inside the app document. */
+export function ensureMascotLayerStyles(): void {
+  inject(MASCOT_LAYER_CSS)
+}
