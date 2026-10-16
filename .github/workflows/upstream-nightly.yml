@@ -85,6 +85,12 @@ jobs:
           set -euo pipefail
           export HERMES_PLUS_TEST_HERMES="$HERMES_BIN"
           export HERMES_HOME="$RUNNER_TEMP/hroot"
+          # Test-only (CONTRIBUTING.md): the integration fixtures create fresh HERMES_HOMEs,
+          # and stock builds a whole dependency environment inside the first `plugins enable`
+          # in each one (387-645s). Borrowing the provisioned home's installs/ makes that
+          # build a no-op. The binary above was provisioned with HERMES_HOME="$RUNNER_TEMP/hroot",
+          # so that is the home whose installs/ key matches it.
+          export HERMES_PLUS_TEST_SHARED_INSTALLS="$RUNNER_TEMP/hroot"
           .venv/bin/pytest packages/hermes_plus/tests -q -m "not model"
       - name: Clean-install smoke
         run: |

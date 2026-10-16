@@ -97,6 +97,17 @@ Then point the suite at it:
 export HERMES_PLUS_TEST_HERMES="$ROOT/.local/bin/hermes"
 ```
 
+**Test-only speed-up.** Stock keys its dependency environment per data root
+(`<HERMES_HOME>/installs/<key>/`) and builds a whole one there the first time a plugin is
+enabled in a home, which costs 387-645s. A user pays it once per home; every integration
+fixture home and every proof run would pay it again, so `HERMES_PLUS_TEST_SHARED_INSTALLS`
+(opt-in, read by the fixtures, `run-proof.sh` and `run-tests.sh`) makes a fresh temp home
+borrow `<value>/installs/` by symlink and turns that build into a no-op. It is test-only
+and changes nothing in the product. Point it at the home the binary was *provisioned with*:
+the key is the first 16 hex characters of the SHA-256 of the `Install directory:` line that
+`hermes --version` prints, so a home provisioned for another checkout shares nothing. Leave
+it unset to get the default behaviour byte for byte.
+
 ## Running the tests
 
 `HERMES_PLUS_TEST_HERMES=/path/to/hermes ./run-tests.sh` runs all three legs

@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from hermes_resolve import prepend_bin_dir, resolve_stock_hermes
+from support import share_installs
 
 pytestmark = pytest.mark.integration
 
@@ -51,6 +52,7 @@ def _read_capture(stock_python: str, home: Path, env_extra: dict[str, str]) -> d
 def langfuse_home(stock_hermes: str, tmp_path_factory) -> Path:
     """A throwaway HERMES_HOME with the langfuse extra installed and enabled."""
     home = tmp_path_factory.mktemp("langfuse-settings-home")
+    share_installs(home)
     (home / "plugins").mkdir()
     shutil.copytree(LANGFUSE_SRC, home / "plugins" / "langfuse")
     result = subprocess.run(

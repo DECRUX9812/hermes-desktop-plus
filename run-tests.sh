@@ -11,6 +11,11 @@
 #   unit         no real processes (tests/unit + the unmarked top-level tests)
 #   integration  real sidecar/dashboard subprocesses (marker: integration)
 #   contract     real stock Hermes CLI, dashboard and /api/ws (marker: contract)
+#
+# Optional, test-only: HERMES_PLUS_TEST_SHARED_INSTALLS=<provisioned HERMES_HOME>
+# lets every fresh fixture home borrow that home's installs/, so stock does not
+# build a dependency environment per home (387-645s each). The named home must be
+# the one this binary was provisioned with; see CONTRIBUTING.md.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -18,6 +23,9 @@ if [ -z "${HERMES_PLUS_TEST_HERMES:-}" ]; then
   echo "HERMES_PLUS_TEST_HERMES is required: set it to a stock hermes binary," >&2
   echo "e.g. export HERMES_PLUS_TEST_HERMES=\"\$HOME/.hermes/hermes-agent/.venv/bin/hermes\"" >&2
   exit 2
+fi
+if [ -n "${HERMES_PLUS_TEST_SHARED_INSTALLS:-}" ]; then
+  echo "shared installs: $HERMES_PLUS_TEST_SHARED_INSTALLS/installs"
 fi
 if [ ! -x .venv/bin/pytest ]; then
   echo "no .venv/bin/pytest; run:" >&2

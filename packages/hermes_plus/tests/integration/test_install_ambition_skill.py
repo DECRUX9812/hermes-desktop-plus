@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from hermes_resolve import resolve_stock_hermes
+from support import share_installs
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SHIPPED_SKILL_DIR = (
@@ -95,6 +96,7 @@ def installed_home(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """One real ``hermes-plus install`` into a temp HERMES_HOME (cold homes take ~40s)."""
     _require_tools()
     home = tmp_path_factory.mktemp("ambition-home")
+    share_installs(home)
     result = _install(home)
     assert result.returncode == 0, (
         f"hermes-plus install failed (exit {result.returncode})\n"
@@ -136,6 +138,7 @@ def test_user_modified_skill_survives_repeated_installs(tmp_path: Path) -> None:
     """A local edit is kept, and stays kept: the ledger keeps the shipped baseline."""
     _require_tools()
     home = tmp_path / "hermes-home"
+    share_installs(home)
 
     first = _install(home)
     assert first.returncode == 0, first.stdout + first.stderr
