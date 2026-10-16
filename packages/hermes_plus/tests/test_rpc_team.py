@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import os
+
+import pytest
+from hermes_resolve import resolve_stock_hermes
+
 from support import fault, ok
 
 
 async def _create(call, name: str = "Alpha") -> str:
     view = ok(await call("bots_team.create", {"name": name, "mission": "Ship the demo", "actor": "you"}))
     return view["team"]["id"]
+
+
+def _hermes_available() -> bool:
+    binary, source = resolve_stock_hermes()
+    return binary.is_file() and os.access(binary, os.X_OK)
 
 
 async def test_team_lifecycle_create_seat_read_and_audit(call):
@@ -58,7 +68,23 @@ async def test_goal_tree_links_a_task_under_a_parent(call):
     assert linked["goal"]["parent_id"] == parent["id"]
 
 
-async def test_spawn_task_creates_kanban_task_and_links_to_goal(call):
+# spawn_task delegates to the Hermes CLI; without a binary the RPC answers a
+# structured 5110 instead of creating a task.
+@pytest.mark.skipif(
+    not _hermes_available(),
+    reason="stock Hermes binary is unavailable (no HERMES_PLUS_TEST_HERMES, no hermes on PATH); "
+    "bots_team.goal.spawn_task delegates to the Hermes CLI",
+)
+async def test_spawn_task_creates_kanban_task_and_links_to_goal(call, tmp_path, monkeypatch):
+    # The in-process handler resolves Hermes like the sidecar does
+    # (HERMES_PLUS_HERMES_BIN, then PATH) and spawns a real CLI subprocess —
+    # same convention as the kanban adapter tests: point it at the stock
+    # binary under test inside a throwaway HERMES_HOME.
+    binary, _ = resolve_stock_hermes()
+    home = tmp_path / "hermes-home"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("HERMES_PLUS_HERMES_BIN", str(binary))
     team_id = await _create(call)
     ok(await call("bots_team.member.upsert", {"team_id": team_id, "profile": "lead", "lead": True}))
     goal = ok(await call("bots_team.goal.upsert", {"team_id": team_id, "title": "Launch"}))["goal"]

@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from hermes_resolve import resolve_stock_hermes
 
 
@@ -212,6 +214,10 @@ def test_wheel_build_filename_matches_version() -> None:
     import subprocess
     import tempfile
     import re
+    import shutil
+
+    if shutil.which("uv") is None:
+        pytest.skip("uv is not on PATH (the CI python job installs it via setup-uv); cannot build the wheel here")
 
     repo_root = Path(__file__).resolve().parents[4]
     pyproject_toml = repo_root / "packages" / "hermes_plus" / "pyproject.toml"

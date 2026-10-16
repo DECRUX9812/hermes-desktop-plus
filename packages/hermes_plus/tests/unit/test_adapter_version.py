@@ -60,8 +60,25 @@ def test_commit_is_recovered_from_the_owning_checkout_of_an_install_dir(tmp_path
     checkout = tmp_path / "sh" / "hermes-agent"
     checkout.mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(checkout)], check=True, timeout=60)
-    subprocess.run(["git", "-C", str(checkout), "commit", "-q", "--allow-empty", "-m", "init"],
-                   check=True, timeout=60)
+    # A fresh HOME has no ambient git identity; commit with a test-local one.
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(checkout),
+            "-c",
+            "user.name=demo",
+            "-c",
+            "user.email=demo@example.com",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "init",
+        ],
+        check=True,
+        timeout=60,
+    )
     expected = subprocess.run(
         ["git", "-C", str(checkout), "rev-parse", "--short", "HEAD"],
         check=True, capture_output=True, text=True, timeout=60,
