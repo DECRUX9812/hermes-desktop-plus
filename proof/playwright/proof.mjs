@@ -675,9 +675,13 @@ try {
     if (Array.isArray(value.sessions)) {return value.sessions.length}
     return Array.isArray(value) ? value.length : -1
   }
-  const sessionsBefore = sessionCount(
-    await rpc(page, 'session.list', { limit: 50 }).catch(error => ({ error: String(error) })),
+  const sessionsBeforeListing = await rpc(page, 'session.list', { limit: 50 })
+    .catch(error => ({ error: String(error) }))
+  const sessionsBeforeIds = new Set(
+    (Array.isArray(sessionsBeforeListing?.sessions) ? sessionsBeforeListing.sessions : [])
+      .map(row => String(row.id || '')),
   )
+  const sessionsBefore = sessionCount(sessionsBeforeListing)
   diagnostics.sessionsBeforeSecond = sessionsBefore
   await check('start a second session from the UI', async () => {
     for (const label of NEW_SESSION_LABELS) {
@@ -701,10 +705,18 @@ try {
   let secondSettled = false
   let secondStarted = false
   let secondReply = null
+  // The session the second prompt created, identified by its STORED id (the
+  // one it did not exist under before), not by the model's own session title.
+  let secondStoredSessionId = ''
   if (turnSettled) {
     const turn = await sendAndSettle(page, SECOND_PROMPT)
     secondStarted = turn.started
     secondSettled = turn.settled
+    const afterListing = await rpc(page, 'session.list', { limit: 50 }).catch(() => null)
+    secondStoredSessionId = (Array.isArray(afterListing?.sessions) ? afterListing.sessions : [])
+      .map(row => String(row.id || ''))
+      .find(id => id && !sessionsBeforeIds.has(id)) || await shownSessionId(page)
+    diagnostics.secondStoredSessionId = secondStoredSessionId
     if (secondSettled) {
       const texts = await assistantTexts(page)
       secondReply = texts.find(text => text.toLowerCase().includes('session two ok')) || null
@@ -734,14 +746,19 @@ try {
   diagnostics.sessions = sessions
   const sessionRows = Array.isArray(sessions?.sessions) ? sessions.sessions : []
   const sessionTitles = sessionRows.map(session => session.title || session.name || '')
-  // The rail titles a session from its first user message, so the first
-  // session's rail label is the model's short title, not the prompt.
-  const firstTitle = sessionTitles.find(title => !title.includes(SECOND_TITLE)) || FIRST_PROMPTS[0]
-  const secondTitle = sessionTitles.find(title => title.includes(SECOND_TITLE)) || SECOND_TITLE
+  // Resolve each session's rail label from its STORED id, never by matching the
+  // model's title: a title is a model paraphrase of the first message (a prompt
+  // that said "Second session: …" came back titled "Confirm session two
+  // acknowledgment"), so a title match silently picks the wrong row — S39b run 1
+  // did exactly that and then measured the second session as if it were the
+  // first. The title is only used to find the row on screen.
+  const titleById = new Map(sessionRows.map(row => [String(row.id || ''), String(row.title || row.name || '')]))
+  const firstTitle = titleById.get(firstStoredSessionId) || FIRST_PROMPTS[0]
+  const secondTitle = titleById.get(secondStoredSessionId) || SECOND_TITLE
   diagnostics.sessionTitlesAfterReload = sessionTitles
   diagnostics.firstTitle = firstTitle
   diagnostics.secondTitle = secondTitle
-  const railTitles = await waitForRailTitle(page, secondTitle.slice(0, 10))
+  const railTitles = await waitForRailTitle(page, secondTitle.slice(0, 8))
   const railRowCount = await page.locator(SESSION_ROW_SELECTOR).count()
   diagnostics.railTitles = railTitles
   diagnostics.railRowCount = railRowCount
@@ -755,14 +772,18 @@ try {
     if (after < sessionsBefore + 1 && sessionsBefore >= 0) {
       throw new Error(`session.list has ${after} sessions, expected more than the ${sessionsBefore} before the second one`)
     }
-    if (!sessionTitles.some(title => title.includes(SECOND_TITLE))) {
-      throw new Error(`second session missing from session.list: ${JSON.stringify(sessionTitles).slice(0, 200)}`)
+    const ids = sessionRows.map(row => String(row.id || ''))
+    if (firstStoredSessionId && !ids.includes(firstStoredSessionId)) {
+      throw new Error(`the first session ${firstStoredSessionId} is missing from session.list: ${JSON.stringify(ids).slice(0, 200)}`)
+    }
+    if (!secondStoredSessionId || !ids.includes(secondStoredSessionId)) {
+      throw new Error(`the second session ${secondStoredSessionId || '(unknown)'} is missing from session.list: ${JSON.stringify(sessionRows.map(r => `${r.id}=${r.title}`)).slice(0, 200)}`)
     }
     if (railRowCount < 2) {
       throw new Error(`the rail painted ${railRowCount} session rows, expected both sessions: ${JSON.stringify(railTitles).slice(0, 200)}`)
     }
-    if (!railTitles.some(title => title.includes(secondTitle.slice(0, 10)))) {
-      throw new Error(`second session missing from the rail: ${JSON.stringify(railTitles).slice(0, 200)}`)
+    if (!railTitles.some(title => title.includes(secondTitle.slice(0, 8)))) {
+      throw new Error(`the rail shows no row for "${secondTitle}": ${JSON.stringify(railTitles).slice(0, 200)}`)
     }
     return `${after} sessions via session.list (${sessionTitles.join(' | ')}), ${railRowCount} rail rows`
   })
