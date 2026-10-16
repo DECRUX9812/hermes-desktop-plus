@@ -257,22 +257,30 @@ try {
   context = await browser.newContext({ viewport: VIEWPORT })
   const page = await context.newPage()
   const consoleErrors = []
-  // A console error with no URL is not actionable: Chromium's
-  // "Failed to load resource: the server responded with a status of 500"
-  // carries the failed URL only in the message's location.
-  page.on('console', message => {
-    if (message.type() !== 'error') {return}
-    const location = typeof message.location === 'function' ? message.location() : null
-    const where = location && location.url
-      ? ` @ ${location.url}${location.lineNumber ? `:${location.lineNumber}` : ''}`
-      : ''
-    consoleErrors.push(`${message.text().slice(0, 300)}${where}`)
-  })
-  page.on('pageerror', error => consoleErrors.push(`pageerror: ${String(error).slice(0, 300)}`))
-  // Every request the page made that did not succeed, with its URL, so a
-  // non-zero status in the report can be traced to the endpoint behind it.
   const failedRequests = []
-  page.on('response', response => {
+  const watch = target => {
+    // A console error with no URL is not actionable: Chromium's
+    // "Failed to load resource: the server responded with a status of 500"
+    // carries the failed URL only in the message's location.
+    target.on('console', message => {
+      if (message.type() !== 'error') {return}
+      const location = typeof message.location === 'function' ? message.location() : null
+      const where = location && location.url
+        ? ` @ ${location.url}${location.lineNumber ? `:${location.lineNumber}` : ''}`
+        : ''
+      consoleErrors.push(`${message.text().slice(0, 300)}${where}`)
+    })
+    target.on('pageerror', error => consoleErrors.push(`pageerror: ${String(error).slice(0, 300)}`))
+  }
+
+  // Every page of the context is watched, popups included: the Bot Room and 3D
+  // Pane overlays are separate tabs (`lib/browser-window-bridges.ts`), so a
+  // handler bound to `page` alone would miss their traffic entirely.
+  watch(page)
+  context.on('page', opened => watch(opened))
+  // Requests are watched at the CONTEXT, so a popup's very first request is
+  // covered too — a page-level listener can attach after its document started.
+  context.on('response', response => {
     if (response.status() < 400) {return}
     failedRequests.push({
       status: response.status(),
@@ -281,7 +289,7 @@ try {
       resourceType: response.request().resourceType(),
     })
   })
-  page.on('requestfailed', request => failedRequests.push({
+  context.on('requestfailed', request => failedRequests.push({
     status: 0,
     method: request.method(),
     url: request.url(),
