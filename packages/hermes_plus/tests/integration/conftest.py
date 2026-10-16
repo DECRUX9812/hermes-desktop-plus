@@ -193,6 +193,14 @@ class Sidecar:
 
 
 def make_sidecar(tmp_path: Path, env_extra: dict[str, str] | None = None) -> Sidecar:
+    # A sidecar needs a stock Hermes to detect and a hermes-plus to run, so
+    # without either the child exits 3 before it serves. Skip the way the
+    # `sidecar` fixture does: every caller then reports "not available here"
+    # instead of a failure (the CI python job has no Hermes at all).
+    if not HERMES_BIN.exists():
+        pytest.skip(f"stock Hermes binary not available at {HERMES_BIN}")
+    if not HERMES_PLUS_BIN.exists():
+        pytest.skip("hermes-plus is not installed in the worktree venv")
     ui_dir = tmp_path / "ui"
     ui_dir.mkdir(parents=True, exist_ok=True)
     (tmp_path / "hermes-home").mkdir(parents=True, exist_ok=True)
