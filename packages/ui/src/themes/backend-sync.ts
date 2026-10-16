@@ -149,14 +149,14 @@ export function ingestBackendSkin(skin: HermesSkin | undefined | null, { apply }
   if (!apply) {
     // Connect-time seed: record without painting. A reconnect re-seed keeps an
     // earlier real apply's flag so repeat events can't override a manual switch.
-    if (lastSynced?.name !== name || !lastSynced.applied) {
+    if (lastSynced === null || lastSynced.name !== name || !lastSynced.applied) {
       lastSynced = { applied: false, name }
     }
 
     return
   }
 
-  if (name !== lastSynced?.name || !lastSynced.applied) {
+  if (lastSynced === null || name !== lastSynced.name || !lastSynced.applied) {
     lastSynced = { applied: true, name }
     $pendingSkinApply.set(name)
   }

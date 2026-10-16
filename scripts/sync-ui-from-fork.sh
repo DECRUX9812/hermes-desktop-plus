@@ -132,6 +132,11 @@ if [[ -f "$patterns_file" ]]; then
   done < "$patterns_file"
 fi
 perl_rules+=('s{/home/([a-z])}{"/home/" . uc($1)}ge')
+# Same normalization for percent-encoded paths: the rule above rewrites a
+# plain input path but not its URL-encoded expectation ('%2Fhome%2F…'), which
+# then mismatches in tests (desktop-fs, media.remote, use-composer-actions,
+# markdown-text.media).
+perl_rules+=('s{%2[Ff]home%2[Ff]([a-z])}{"%2Fhome%2F" . uc($1)}ge')
 
 while IFS= read -r -d '' file; do
   perl -pi -e "${perl_rules[*]}" "$file"

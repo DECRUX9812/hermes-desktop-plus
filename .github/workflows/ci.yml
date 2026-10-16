@@ -52,6 +52,11 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci --no-audit --no-fund
       - name: Typecheck
+        # tsc's heap peaked near its ~4 GB default cap on a loaded runner
+        # (an OOM was observed under load); the allowance is free on the
+        # 16 GB GitHub runner and only raises the ceiling.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm --prefix packages/ui run typecheck
       - name: Unit tests
         run: npm --prefix packages/ui run test

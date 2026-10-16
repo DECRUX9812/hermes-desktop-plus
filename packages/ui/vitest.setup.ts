@@ -12,14 +12,23 @@ await preloadBundledLocales()
 // not `vi.stubGlobal`, so a test's `vi.unstubAllGlobals()` cannot strip it.
 globalThis.ResizeObserver ??= InertResizeObserver as unknown as typeof ResizeObserver
 
+// Every Node version gets the same in-memory Storage, for two reasons.
+//
 // Node 26 defines its own `localStorage` accessor on the global object, which
 // returns `undefined` unless the process was started with --localstorage-file
 // (it warns: "localStorage is not available because --localstorage-file was
 // not provided"). In the jsdom environment `globalThis` IS the window, so that
 // accessor shadows jsdom's Storage and every `localStorage.getItem(...)` in a
-// test throws "Cannot read properties of undefined". Install a real in-memory
-// Storage when the global resolves to nothing, before any test module reads it.
-if (typeof (globalThis as any).localStorage === 'undefined') {
+// test throws "Cannot read properties of undefined".
+//
+// On earlier Node versions the jsdom Storage IS reachable — but it is a Proxy
+// over the item map whose `get` trap always hands out the original methods,
+// so `vi.spyOn(localStorage, 'setItem')` defines a spy the trap never
+// consults: failed-write tests (quota, security errors) then see the write
+// succeed and fail. The plain object below is spy-able and is what the suite
+// already runs against on Node 26; install it unconditionally so results do
+// not depend on the runner's Node version.
+{
   const store = new Map<string, string>()
 
   const storage: Storage = {
