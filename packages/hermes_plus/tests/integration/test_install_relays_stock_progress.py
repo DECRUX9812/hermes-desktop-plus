@@ -2,8 +2,8 @@
 
 Stock prints its provisioning steps on stderr while it prepares the isolated runtime and
 the dependency environment. The install relays those lines, so the minutes a first install
-takes are visible. Real stock binary, real cold home, no mocks: the enable call really does
-outlive the short budget below.
+takes are visible. Real stock binary, real cold home, no mocks: the enable call usually
+outlives the short budget below, and finishes inside it on a warm cache.
 """
 
 from __future__ import annotations
@@ -56,11 +56,14 @@ def test_a_cold_enable_relays_stock_progress(tmp_path: Path) -> None:
         timeout=300,
         check=False,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
+    # With a warm uv cache the whole sync can finish inside the budget, so either exit is
+    # legitimate; what must hold either way is that stock's progress was relayed.
+    assert result.returncode in (0, 1), result.stdout + result.stderr
     assert "may be preparing its runtime" in result.stdout
     relayed = result.stderr
     assert (
         "Preparing the isolated Hermes runtime" in relayed
         or "Installing Python dependencies" in relayed
     ), f"stock's progress never reached the user:\n{relayed[-2000:]}"
-    assert "did not finish within 15 s" in relayed
+    if result.returncode == 1:
+        assert "did not finish within 15 s" in relayed

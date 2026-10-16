@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from hermes_resolve import resolve_stock_hermes
+from support import share_installs
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 INSTALL_SH = REPO_ROOT / "install.sh"
@@ -39,11 +40,13 @@ def _install_env(
     tmp_path: Path, hermes_bin: Path, *, source: str | None = None
 ) -> dict[str, str]:
     """Environment for install.sh: sandboxed tool dirs, temp HERMES_HOME, stock launcher."""
+    hermes_home = tmp_path / "hermes_home"
+    share_installs(hermes_home)
     tool_bin_dir = tmp_path / "uv_bin"
     env = os.environ.copy()
     env.update(
         {
-            "HERMES_HOME": str(tmp_path / "hermes_home"),
+            "HERMES_HOME": str(hermes_home),
             "HERMES_PLUS_SOURCE": source if source is not None else str(PACKAGE_DIR),
             "HERMES_PLUS_HERMES_BIN": str(hermes_bin),
             # This machine's stock launcher resolves the version from the ambient

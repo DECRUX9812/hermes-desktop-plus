@@ -21,6 +21,7 @@ import pytest
 import websockets
 
 from hermes_resolve import prepend_bin_dir, resolve_stock_hermes
+from support import share_installs
 
 # Track all temp HERMES_HOME directories created during the session for cleanup
 _temp_homes: list[Path] = []
@@ -329,6 +330,7 @@ def plus_bin() -> str:
 def installed_home(stock_hermes: str, plus_bin: str, tmp_path_factory) -> Path:
     """A temp HERMES_HOME with a real `hermes-plus install` (bridge + backdrops extra)."""
     home = tmp_path_factory.mktemp("hermes-plus-bridge-home")
+    share_installs(home)
     subprocess.run(
         [plus_bin, "install", "--hermes", stock_hermes, "--extras", "backdrops"],
         env={**os.environ, "HERMES_HOME": str(home)},
