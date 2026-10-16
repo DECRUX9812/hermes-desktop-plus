@@ -352,3 +352,25 @@ def test_the_login_limit_survives_a_forged_forwarded_for(password_sidecar: Sidec
     statuses = [attempt(f"198.51.100.{index}") for index in range(1, 8)]
     assert statuses[:5] == [401] * 5, statuses
     assert statuses[5:] == [429, 429], statuses
+
+
+def test_the_bridge_route_still_answers_its_own_loopback_client(sidecar: Sidecar):
+    """The bridge plugin inside Hermes calls this route with no Origin header, so
+    the Origin rule must leave it alone; a page on another origin must not."""
+    def call(headers: dict[str, str]) -> httpx.Response:
+        return httpx.post(
+            f"{sidecar.url}/api/plus/bridge/rpc",
+            headers=headers,
+            json={"method": "no.such.method", "params": {}},
+            timeout=30,
+        )
+
+    plain = call({"X-Hermes-Plus-Bridge": sidecar.token})
+    assert plain.status_code == 200, plain.text
+    assert plain.json()["error"], plain.text
+
+    borrowed = call({
+        "X-Hermes-Plus-Bridge": sidecar.token,
+        "Origin": "http://127.0.0.1:8000",
+    })
+    assert borrowed.status_code == 403, borrowed.text
