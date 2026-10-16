@@ -8,15 +8,21 @@ Hermes Desktop Plus never patches Hermes. A sidecar in its own virtualenv serves
 the web UI, multiplexes the gateway connection, and fronts a loopback-only stock
 `hermes dashboard`. Upgrading Hermes stays one command.
 
-## Install in one command
+## Install
+
+You need stock Hermes Agent on your `PATH` and either [uv](https://astral.sh/uv)
+or pipx. The installer finds `hermes`, installs the sidecar into its own tool
+environment, copies the bridge plugin into your Hermes home, and finishes with
+`hermes-plus doctor`. If Hermes is missing and you set
+`HERMES_PLUS_INSTALL_HERMES=1`, the installer runs upstream's installer pinned to
+Hermes Agent `v0.22.1`.
+
+The commands below go live with the v0.1.0 release. Until it is published,
+install from a clone (see below).
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DECRUX9812/hermes-desktop-plus/v0.1.0/install.sh | sh
 ```
-
-The script finds stock Hermes on `PATH`, installs the sidecar into its own tool
-environment, copies the bridge plugin into your Hermes home, runs migrations,
-and finishes with `hermes-plus doctor`.
 
 Without the script:
 
@@ -25,7 +31,7 @@ uv tool install https://github.com/DECRUX9812/hermes-desktop-plus/releases/downl
 hermes-plus install
 ```
 
-From a clone (development):
+From a clone (development). This is the sequence `proof/run-proof.sh` and CI use:
 
 ```sh
 cd hermes-desktop-plus
@@ -47,6 +53,17 @@ HERMES_PLUS_SOURCE="$(ls dist/hermes_plus-*.whl)" ./install.sh
 ## Serve over the web
 
 ```sh
+hermes-plus serve --host 127.0.0.1 --port 9129
+```
+
+`serve` prints a one-time login URL (`http://127.0.0.1:9129/?token=...`). Open it
+once; the browser keeps a session cookie after that. The default `--auth` is
+`token`.
+
+Other auth modes, from `hermes-plus serve --help` (not exercised by the
+clean-install proof):
+
+```sh
 hermes-plus serve --host 0.0.0.0 --port 9129 --auth password --password-file ~/.hermes-plus-password
 ```
 
@@ -54,16 +71,10 @@ hermes-plus serve --host 0.0.0.0 --port 9129 --auth password --password-file ~/.
 non-loopback host. Add `--trust-proxy-headers` when a reverse proxy terminates
 authentication.
 
-For a quick public URL:
+Quick public URL through a Cloudflare tunnel (not exercised by the proof):
 
 ```sh
 cloudflared tunnel --url http://127.0.0.1:9129
-```
-
-The Docker compose file ships the same tunnel as a sidecar:
-
-```sh
-docker compose -f docker/compose.yaml --profile tunnel up -d
 ```
 
 Put **Cloudflare Access** (Zero Trust SSO/MFA) in front of the hostname. The
@@ -72,14 +83,17 @@ loopback.
 
 ## Docker
 
+Not exercised by the clean-install proof; available once v0.1.0 is published.
+
 ```sh
 cp docker/.env.example docker/.env      # set HERMES_PLUS_PASSWORD
 docker compose -f docker/compose.yaml up -d --build
 ```
 
 Then open `http://127.0.0.1:9129`. The image is a thin layer on the official
-`nousresearch/hermes-agent` image; `HERMES_TAG` picks the Hermes release. See
-`docker/README.md`.
+`nousresearch/hermes-agent` image; `HERMES_TAG` picks the Hermes release
+(default `v0.22.1`). The compose file has a `tunnel` profile for Cloudflare Tunnel.
+See `docker/README.md`.
 
 ## Upgrading
 
@@ -89,20 +103,41 @@ hermes-plus update     # upgrade the sidecar, re-copy the bridge, migrate
 hermes-plus doctor     # re-check compatibility
 ```
 
-Upgrades are safe by design: Hermes's files and virtualenv are never modified,
-`hermes-plus` lives in its own environment, and the bridge plugin uses only
-Hermes's public plugin API. `doctor` re-runs the compatibility check afterwards.
+`hermes-plus update --check` prints the upgrade command without running it. It
+exits 0 with "No published release found" until a release exists. Before v0.1.0
+is published, `hermes-plus update` (without `--check`) has nothing to install
+and exits 1.
+
+Upgrades are designed to be safe: Hermes's files and virtualenv are never
+modified, `hermes-plus` lives in its own environment, and the bridge plugin uses
+only Hermes's public plugin API. `doctor` re-runs the compatibility check
+afterwards. Hermes `v0.22.2` (`d923a5e`) is a known-good release: the adapter
+contract suite was run against it. Two `profiles.list` cases failed there and
+also fail on the pinned commit; they are fixed in this repository.
+
+## Uninstall
+
+```sh
+hermes-plus uninstall                 # disable + remove the bridge plugin
+hermes-plus uninstall --purge --yes   # also delete plus.db and uploaded files
+uv tool uninstall hermes-plus         # remove the sidecar itself (or: pipx uninstall hermes-plus)
+```
+
+`uninstall` without `--purge` keeps `plus.db` and uploaded files, so a
+reinstall picks up where you left off. It disables the plugin in Hermes's config
+and does not touch Hermes's own files.
 
 ## Compatibility
 
-Generated from `packages/hermes_plus/src/hermes_plus/compat/matrix.json`:
+Generated from `packages/hermes_plus/src/hermes_plus/compat/matrix.json` by
+`scripts/render-compat-table.py`:
 
 | Field | Value | Meaning |
 | --- | --- | --- |
 | Adapter API | `1` | Wire contract between the sidecar and the adapter. |
 | Minimum | `0.22.0` | Below this, `serve` refuses and `doctor` explains the fix. |
-| Known good releases | `0.22.0`, `0.22.1` | Full feature set, contract-tested in CI. |
-| Known good commits | `379cf12` | Abbreviated upstream shas accepted as known-good. |
+| Known good releases | `0.22.0`, `0.22.1`, `0.22.2` | Full feature set, contract-tested in CI. |
+| Known good commits | `379cf12`, `297552a`, `d923a5e` | Abbreviated upstream shas accepted as known-good. |
 | Tested main | `379cf122` | The upstream main commit nightly tracks. |
 | Newest tested minor | `0.22` | A newer minor is served with a banner, features gated on capability probes. |
 
@@ -123,14 +158,7 @@ browser ──> hermes-plus sidecar :9129  (our process, our venv, our auth)
 
 ## Screenshots
 
-To be captured into `docs/screenshots/`:
-
-- `chat-tool-cards.png`: a chat turn with tool cards, diffs and todos
-- `sessions-sidebar.png`: the sessions sidebar with the ask dialog
-- `group-chat.png`: a bot room with the mailbox and roster
-- `team-mode.png`: a team goal with tasks, budget and audit
-- `plugin-rail.png`: the desktop plugin rail
-- `mobile-companion.png`: the mobile companion page on a phone
+SCREENSHOTS_PLACEHOLDER
 
 ## FAQ
 
@@ -143,16 +171,6 @@ Everything of ours lives under your Hermes home, in
 `<HERMES_HOME>/hermes-plus/`: `plus.db` (SQLite) plus uploaded files under
 `hermes-plus/files/`. Hermes's own sessions, config and credentials stay in
 their usual places and are never copied into our database.
-
-**Can I uninstall cleanly?**
-
-```sh
-hermes-plus uninstall                 # disable + remove the bridge plugin
-hermes-plus uninstall --purge --yes   # also delete plus.db and uploaded files
-```
-
-Then `uv tool uninstall hermes-plus` (or `pipx uninstall hermes-plus`) removes
-the sidecar itself. Hermes is left exactly as it was.
 
 ## Contributing
 
