@@ -11,7 +11,7 @@ import socket
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,10 @@ DEFAULT_RELEASE_API = "https://api.github.com"
 # pointed at without touching the code, and the repo slug can move the same way.
 RELEASE_API_ENV = "HERMES_PLUS_RELEASE_API"
 RELEASE_REPO_ENV = "HERMES_PLUS_RELEASE_REPO"
+
+# A cold HERMES_HOME makes the first Hermes command provision the stock runtime (minutes).
+INSTALL_TIMEOUT_ENV = "HERMES_PLUS_INSTALL_TIMEOUT"
+DEFAULT_INSTALL_TIMEOUT = 900
 
 
 class ReleaseLookupError(Exception):
@@ -203,8 +207,38 @@ def cmd_version(args: argparse.Namespace) -> int:
     return 0
 
 
+def _install_timeout_message(command: Sequence[str], budget: int) -> str:
+    shown = " ".join([Path(command[0]).name, *command[1:]])
+    return (
+        f"'{shown}' did not finish within {budget} s. On a first run in a new HERMES_HOME, "
+        "stock Hermes prepares its isolated runtime, which can take several minutes. "
+        "Re-run 'hermes-plus install' (it is safe to repeat), or raise the budget with "
+        f"{INSTALL_TIMEOUT_ENV}=<seconds>."
+    )
+
+
+def _budgeted_enable(enable_plugin: Callable[..., Any], budget: int) -> Callable[..., None]:
+    announced = False
+
+    def enable(name: str, *, profile: str | None) -> None:
+        nonlocal announced
+        if not announced:
+            announced = True
+            print("Stock Hermes may be preparing its runtime on first use, "
+                  "which can take several minutes.")
+        enable_plugin(name, profile=profile, timeout=budget)
+
+    return enable
+
+
 def cmd_install(args: argparse.Namespace) -> int:
     """Install bridge plugin, configure profile, and migrate database."""
+    try:
+        budget = int(os.environ.get(INSTALL_TIMEOUT_ENV) or DEFAULT_INSTALL_TIMEOUT)
+    except ValueError:
+        sys.stderr.write(f"{INSTALL_TIMEOUT_ENV} must be a whole number of seconds\n")
+        return 2
+
     # 1. detect() and check_compat()
     try:
         from hermes_plus import adapter
@@ -264,7 +298,9 @@ def cmd_install(args: argparse.Namespace) -> int:
     p_home.mkdir(parents=True, exist_ok=True)
 
     pkg_root = Path(__file__).resolve().parent
-    for line in _install_bridge_and_extras(
+    enable_plugin = getattr(adapter, "enable_plugin", None)
+    try:
+        lines = _install_bridge_and_extras(
             bridge_src=pkg_root / "bridge",
             extras_src=pkg_root / "extras",
             plugins_dir=plugins_dir,
@@ -272,7 +308,17 @@ def cmd_install(args: argparse.Namespace) -> int:
             plus_home=p_home,
             extras=args.extras,
             profile=args.profile,
-            enable_plugin=getattr(adapter, "enable_plugin", None)):
+            enable_plugin=(
+                None if enable_plugin is None else _budgeted_enable(enable_plugin, budget)
+            ))
+    except subprocess.TimeoutExpired as exc:
+        sys.stderr.write(_install_timeout_message(exc.cmd, budget) + "\n")
+        return 1
+    except subprocess.CalledProcessError as exc:
+        detail = _first_error_line(exc.stderr or "")
+        sys.stderr.write(f"Enabling a plugin failed (exit {exc.returncode}): {detail}\n")
+        return 1
+    for line in lines:
         print(line)
 
     # 4. open_store(plus_home).migrate()

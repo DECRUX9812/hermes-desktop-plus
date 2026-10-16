@@ -50,12 +50,12 @@ def _atomic_config_write(path: Path, config: dict[str, Any]) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
-def enable_plugin(name: str, profile: str | None = None) -> None:
+def enable_plugin(name: str, profile: str | None = None, *, timeout: int = 300) -> None:
     """Enable a plugin through Hermes, using an atomic config fallback only without its CLI."""
     if not name.strip():
         raise ValueError("plugin name cannot be empty")
     if resolve_hermes_bin() is not None:
-        result = run_hermes(["plugins", "enable", name], profile=profile)
+        result = run_hermes(["plugins", "enable", name], profile=profile, timeout=timeout)
         if result.returncode:
             raise subprocess.CalledProcessError(
                 result.returncode, result.args, output=result.stdout, stderr=result.stderr
