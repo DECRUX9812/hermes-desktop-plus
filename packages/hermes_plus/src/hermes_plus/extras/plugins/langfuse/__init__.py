@@ -324,12 +324,11 @@ def _build_client() -> Optional[Langfuse]:
         return None
 
     kwargs: dict[str, Any] = {"public_key": public_key, "secret_key": secret_key}
-    for key, name, default in (("base_url", "base_url", "https://cloud.langfuse.com"),
-                               ("environment", "environment", ""),
-                               ("release", "release", "")):
+    for name, default in (("base_url", "https://cloud.langfuse.com"),
+                          ("environment", ""), ("release", "")):
         value = _knob(name, default)
         if value:
-            kwargs[key] = value
+            kwargs[name] = value
     sample_rate = _knob("sample_rate")
     if sample_rate:
         try:
