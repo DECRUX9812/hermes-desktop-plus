@@ -225,8 +225,10 @@ def _budgeted_enable(enable_plugin: Callable[..., Any], budget: int) -> Callable
         if not announced:
             announced = True
             print("Stock Hermes may be preparing its runtime on first use, "
-                  "which can take several minutes.")
-        enable_plugin(name, profile=profile, timeout=budget)
+                  "which can take several minutes; its progress follows.")
+        # Stock prints the provisioning steps on stderr; relay them, or a first
+        # install in a cold HERMES_HOME is minutes of silence.
+        enable_plugin(name, profile=profile, timeout=budget, relay_stderr=True)
 
     return enable
 

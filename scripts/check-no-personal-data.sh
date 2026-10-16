@@ -18,8 +18,6 @@ patterns_file=${HERMES_PPD_PATTERNS:-"$root_dir/.personal-data-patterns"}
 # passes when it still matches after these substrings are removed.
 allowlist=(
   'DECRUX9812/hermes-desktop-plus'
-  'github.com/DECRUX9812'
-  'raw.githubusercontent.com/DECRUX9812'
   '60716910+DECRUX9812@users.noreply.github.com'
   'favoownerortcut'
 )

@@ -17,6 +17,10 @@ environment, copies the bridge plugin into your Hermes home, and finishes with
 `HERMES_PLUS_INSTALL_HERMES=1`, the installer runs upstream's installer pinned to
 Hermes Agent `v0.22.1`.
 
+On a machine that already runs stock Hermes, the first install takes a few minutes,
+nearly all of it downloading the sidecar's Python dependencies (about three minutes
+in our test). Re-running it takes about ten seconds.
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DECRUX9812/hermes-desktop-plus/v0.1.0/install.sh | sh
 ```
@@ -76,6 +80,11 @@ cloudflared tunnel --url http://127.0.0.1:9129
 Put **Cloudflare Access** (Zero Trust SSO/MFA) in front of the hostname. The
 sidecar is the only process reachable from the internet; stock Hermes stays on
 loopback.
+
+Before exposing it to anything, read **[docs/security.md](docs/security.md)**:
+what the front door protects, what a share link or the host terminal exposes, and
+what to configure on a tunnel (`--auth password`, `--trust-proxy-headers`,
+`X-Forwarded-Host`, `HERMES_PLUS_ALLOWED_ORIGINS`).
 
 ## Docker
 
