@@ -16,6 +16,7 @@ from websockets.exceptions import ConnectionClosed
 
 from hermes_plus.rpc import RpcContext, UpstreamRpcError, dispatch, owns
 from hermes_plus.rpc.context import GatewayUpstream
+from hermes_plus.rpc.profile_scope import selects_store_from_params
 from hermes_plus.server.proxy import authenticated_url
 from hermes_plus.server.taps import TapDispatcher
 
@@ -113,10 +114,17 @@ async def _dispatch_local(
 ) -> None:
     request_params = request.get("params")
     params = request_params if isinstance(request_params, dict) else {}
-    profile = _profile(params.get("profile"), connection_profile)
-    if profile and "profile" not in params:
-        params = {**params, "profile": profile}
-        request = {**request, "params": params}
+    if selects_store_from_params(request["method"]):
+        # The fork's @_profile_scoped handlers: `profile` names the store, so an
+        # omitted one defaults to the connection's.
+        profile = _profile(params.get("profile"), connection_profile)
+        if profile and "profile" not in params:
+            params = {**params, "profile": profile}
+            request = {**request, "params": params}
+    else:
+        # `profile` is data here (a seat's teammate, a note's sender); the store
+        # is always the connection's, never the bot the field happens to name.
+        profile = connection_profile
     store = await asyncio.to_thread(runtime.store_for, profile)
     context = RpcContext(
         store=store,
