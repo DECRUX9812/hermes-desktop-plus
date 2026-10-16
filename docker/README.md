@@ -26,6 +26,26 @@ docker compose -f docker/compose.yaml up -d --build
 
 The desktop web application is then at `http://127.0.0.1:9129`.
 
+`HERMES_PLUS_PASSWORD` is mandatory in `password` mode. The container refuses to
+start — exit 1, before it writes anything to the volume — when it is empty or
+still the `change-me-to-a-secure-password` placeholder from `.env.example`, and
+says which file to fix. Otherwise a skipped `docker/.env` would install, exit 1
+and restart-loop under `restart: unless-stopped`, or serve the published port to
+anyone with the documented placeholder. A mounted secret also works: give the
+service `HERMES_PLUS_PASSWORD_FILE=/run/secrets/hermes-plus-password`.
+
+### Signing in, and staying signed in
+
+In `password` mode a signed-in browser stays signed in across a container
+restart (and a host reboot or image upgrade): the session cookie is signed with a
+key at `<HERMES_HOME>/hermes-plus/session.key` (mode 0600, created at the first
+login) inside the `hermes-data` volume. Changing `HERMES_PLUS_PASSWORD` refuses
+every session minted with the old password; deleting `session.key` logs everyone
+out too.
+
+In `token` mode the cookie holds the process token, so a restart ends every
+browser session unless `HERMES_PLUS_TOKEN` is pinned. That is unchanged.
+
 All state (Hermes config and profiles, `hermes-plus/plus.db`, uploads, the
 installed bridge plugin) lives in the `hermes-data` volume mounted at `/opt/data`.
 

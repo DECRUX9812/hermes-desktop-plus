@@ -5,19 +5,32 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
+import tempfile
 import threading
 import time
 from collections import defaultdict, deque
 from http.cookies import SimpleCookie
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode
 
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
+from hermes_plus import adapter
+
+log = logging.getLogger(__name__)
+
 COOKIE_NAME = "hermes_plus_session"
 SESSION_HEADER = "x-hermes-session-token"
+# The persistent browser-session signing key, in our own data directory.
+SESSION_KEY_FILE = "session.key"
+SESSION_KEY_BYTES = 32
+# Cookie values carry the scheme tag so a future change can tell them apart.
+SESSION_COOKIE_PREFIX = "v1."
+_SESSION_MAC_CONTEXT = b"hermes-plus-session-v1:"
 # Feature surfaces that self-secure or ride purpose tickets (the fork's
 # PUBLIC_API_PATHS + public prefixes: share links, mobile pairing, webapp
 # handoffs). /api/share/view is capability-token-secured, /api/mobile/pair is
@@ -62,6 +75,57 @@ def _cookie_token(headers: dict[bytes, bytes]) -> str:
     return morsel.value if morsel else ""
 
 
+def session_key_path(profile: str | None = None) -> Path:
+    """Where this profile's browser-session key lives."""
+    return adapter.plus_home(profile) / SESSION_KEY_FILE
+
+
+def _atomic_write(path: Path, payload: bytes) -> None:
+    """Write payload to path in one step, owner-readable only (0600)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.")
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def load_or_create_session_key(path: Path) -> bytes:
+    """Return the persistent 32-byte session-signing key, creating it on first use.
+
+    A file that exists but is not a key of the expected size is replaced: every
+    existing browser session is invalidated, which is the same outcome as
+    deleting the file by hand, and logging in keeps working. Whoever can write
+    this file can already forge sessions, so self-healing costs nothing.
+    """
+    try:
+        key = path.read_bytes()
+    except FileNotFoundError:
+        key = b""
+    except OSError as exc:
+        log.warning("cannot read the session key at %s (%s)", path, exc)
+        key = b""
+    if len(key) == SESSION_KEY_BYTES:
+        return key
+    if key:
+        log.warning(
+            "%s is not a %d-byte key; writing a new one, which invalidates "
+            "existing browser sessions", path, SESSION_KEY_BYTES,
+        )
+    key = secrets.token_bytes(SESSION_KEY_BYTES)
+    _atomic_write(path, key)
+    return key
+
+
 class FrontDoorAuth:
     """Own the browser session credential and enforce it at the ASGI boundary."""
 
@@ -75,6 +139,8 @@ class FrontDoorAuth:
         self._attempts: dict[str, deque[float]] = defaultdict(deque)
         self._ws_tickets: dict[str, float] = {}
         self._ws_ticket_lock = threading.Lock()
+        self._session_key: bytes | None = None
+        self._session_key_lock = threading.Lock()
 
     def mint_ws_ticket(self) -> str:
         """Mint a single-use credential for a WebSocket upgrade.
@@ -126,12 +192,53 @@ class FrontDoorAuth:
     def has_valid_token(self, candidate: str) -> bool:
         return bool(candidate) and hmac.compare_digest(candidate, self.token)
 
+    def session_key(self) -> bytes:
+        """This profile's persistent cookie-signing key, read once per process.
+
+        Loading is lazy: a token-mode server (and every code path that never
+        signs a browser session) never reads or creates the file.
+        """
+        with self._session_key_lock:
+            if self._session_key is None:
+                self._session_key = load_or_create_session_key(
+                    session_key_path(self.settings.profile)
+                )
+            return self._session_key
+
+    def _session_mac(self) -> bytes:
+        """The MAC a password-mode session cookie must carry.
+
+        The key outlives the process, so a restart does not log anyone out; the
+        MAC is bound to the password digest, so changing the password (or the
+        password file's contents) invalidates every cookie minted before it.
+        """
+        binding = self._password_digest or bytes(hashlib.sha256().digest_size)
+        return hmac.new(self.session_key(), _SESSION_MAC_CONTEXT + binding, hashlib.sha256).digest()
+
+    def session_cookie_value(self) -> str:
+        """Mint the signed browser-session value used in password mode."""
+        return SESSION_COOKIE_PREFIX + self._session_mac().hex()
+
+    def valid_session_cookie(self, value: str) -> bool:
+        """True when value is a session cookie this password minted and signed."""
+        if self.settings.auth != "password" or not value.startswith(SESSION_COOKIE_PREFIX):
+            return False
+        try:
+            supplied = bytes.fromhex(value[len(SESSION_COOKIE_PREFIX):])
+        except ValueError:
+            return False
+        return hmac.compare_digest(supplied, self._session_mac())
+
     def authenticated(self, scope: dict[str, Any], *, websocket: bool = False) -> bool:
         if self.settings.auth == "none":
             return True
         headers = _headers(scope)
         header_token = headers.get(SESSION_HEADER.encode(), b"").decode("latin-1")
         if self.has_valid_token(header_token) or self.has_valid_token(_cookie_token(headers)):
+            return True
+        # Password mode signs its cookie instead of carrying the process token,
+        # so one restart no longer logs every browser out.
+        if self.valid_session_cookie(_cookie_token(headers)):
             return True
         if not websocket and self.settings.auth == "token":
             # The fork's paired phone and its web client authenticate with a
@@ -164,8 +271,15 @@ class FrontDoorAuth:
         return hmac.compare_digest(supplied, expected) and self._password_digest is not None
 
     def cookie_header(self, scope: dict[str, Any]) -> bytes:
+        """The Set-Cookie value for the front door.
+
+        Token mode hands the browser the process token (unchanged). Password
+        mode hands it a signed session value instead, so the token stays a
+        login credential and never lands in a cookie.
+        """
+        value = self.session_cookie_value() if self.settings.auth == "password" else self.token
         parts = [
-            f"{COOKIE_NAME}={self.token}",
+            f"{COOKIE_NAME}={value}",
             "Path=/",
             "HttpOnly",
             "SameSite=Lax",
