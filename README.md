@@ -128,8 +128,8 @@ Generated from `packages/hermes_plus/src/hermes_plus/compat/matrix.json` by
 | Adapter API | `1` | Wire contract between the sidecar and the adapter. |
 | Minimum | `0.22.0` | Below this, `serve` refuses and `doctor` explains the fix. |
 | Known good releases | `0.22.0`, `0.22.1`, `0.22.2` | Full feature set, contract-tested in CI. |
-| Known good commits | `379cf12`, `297552a`, `d923a5e` | Abbreviated upstream shas accepted as known-good. |
-| Tested main | `379cf122` | The upstream main commit nightly tracks. |
+| Known good commits | `379cf12`, `297552a`, `d923a5e`, `607a0b0d` | Abbreviated upstream shas accepted as known-good. |
+| Tested main | `607a0b0d` | The upstream main commit nightly tracks. |
 | Newest tested minor | `0.22` | A newer minor is served with a banner, features gated on capability probes. |
 
 A version above the minimum that is not listed is **untested**: the server runs,

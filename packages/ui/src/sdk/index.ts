@@ -60,6 +60,7 @@ import { mergeRailArtifacts, type RailArtifactItem, registryArtifactsForSessions
 import { $artifactRegistry } from '@/store/artifacts'
 import { $attentionItems, type AttentionItem } from '@/store/attention-inbox'
 import { $attentionCountsByOwner } from '@/store/attention-owner-counts'
+import { $botRoomMascotLayerVisible, toggleBotRoomMascotLayer } from '@/store/botroom-mascot-layer'
 import { $statusItemsBySession, type ComposerStatusItem } from '@/store/composer-status'
 import { $cronJobs } from '@/store/cron'
 import {
@@ -775,6 +776,10 @@ export const host = {
     attentionItems: readonlyAtom<readonly AttentionItem[]>($attentionItems),
     /** True from send until the first assistant payload on the focused chat. */
     awaitingResponse: readonlyAtom<boolean>($focusedAwaitingResponse),
+    /** Browser host only: whether the in-page bot mascot layer is on. Electron
+     *  renders each bot's mascot in its own window main spawns, so this stays
+     *  false there — gate the door on `isBrowserHostedDesktop()`. */
+    botRoomMascotsVisible: readonlyAtom<boolean>($botRoomMascotLayerVisible),
     /**
      * True while the focused chat is working after a send. Covers the wait
      * for the first token and the stream that follows. Follows tile focus —
@@ -862,6 +867,11 @@ export const host = {
   /** Toast into the app's notification stack. */
   notify,
   notifyError,
+
+  /** Browser host only: turn the in-page bot mascot layer on/off — the same
+   *  mascots and task pill Electron puts in per-bot windows. A no-op surface in
+   *  Electron, so gate the door on `isBrowserHostedDesktop()`. */
+  toggleBotRoomMascots: toggleBotRoomMascotLayer,
 
   // NOTE: every host door is async-safe — wrapped so a sync throw from an
   // internal helper (e.g. no desktop bridge in a plain browser) becomes a
@@ -2353,6 +2363,10 @@ export { catalogProviderMatches } from '@/lib/model-options'
  *  hand-picked color still sits with the generated ones; reach for them
  *  instead of literal hex, which can't follow the theme. */
 export { PROFILE_SWATCHES, profileColor, profileColorSoft } from '@/lib/profile-color'
+/** True when this renderer is the add-on's browser host rather than Electron.
+ *  A shell-specific surface (one the native app renders in its own windows, or
+ *  one only a page can render) gates on this instead of sniffing the bridge. */
+export { isBrowserHostedDesktop } from '@/lib/platform'
 /** The shared client itself, for invalidation OUTSIDE React (e.g. a
  *  `ctx.socket` frame invalidating a query). Inside components keep using
  *  `useQueryClient`. */

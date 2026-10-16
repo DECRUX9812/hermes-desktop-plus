@@ -9,6 +9,7 @@ import { SessionStatusDot } from '@/app/chat/session-status-dot'
 import { SessionTabStatus } from '@/app/chat/session-tab-status'
 import { SkillTag } from '@/app/chat/skill-tag'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
+import { registerBrowserWindowCommands } from '@/app/contrib/browser-window-commands'
 import { installChatRoomGuard } from '@/app/shell/chat-room'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
 import { InlinePreviewDirective } from '@/components/assistant-ui/inline-preview-directive'
@@ -571,6 +572,10 @@ registry.registerMany([
 ])
 
 registerLayoutPresets()
+
+// The browser host's own doors for the two window-backed surfaces Electron opens
+// from its main process (the 3D Pane and the bot mascots). No-ops in Electron.
+registerBrowserWindowCommands()
 
 declareDefaultTree(DEFAULT_TREE, BASIC_TREE)
 

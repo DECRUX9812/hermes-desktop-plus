@@ -156,8 +156,22 @@ export class OverlayScene {
   private raf = 0
   private visible = true
   private pointer = { x: 0, y: 0 }
+  private canvas: HTMLCanvasElement
 
-  constructor(canvas: HTMLCanvasElement) {
+  /**
+   * `viewport` is the coordinate space the mascots live in. It defaults to the
+   * window, which is what the full-screen overlay stage wants; the per-bot
+   * page-layer slots pass their own box, so one mascot is framed exactly as it
+   * is inside its own 150x165 window.
+   */
+  constructor(
+    canvas: HTMLCanvasElement,
+    private viewport: () => { height: number; width: number } = () => ({
+      height: window.innerHeight,
+      width: window.innerWidth,
+    }),
+  ) {
+    this.canvas = canvas
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
@@ -169,11 +183,8 @@ export class OverlayScene {
     this.scene = new THREE.Scene()
     this.camera = new THREE.OrthographicCamera(0, 1, 0, 1, -500, 500)
     this.resize()
-    window.addEventListener('resize', () => this.resize())
-    window.addEventListener('pointermove', (e) => {
-      this.pointer.x = e.clientX
-      this.pointer.y = e.clientY
-    })
+    window.addEventListener('resize', this.onResize)
+    window.addEventListener('pointermove', this.onPointerMove)
 
     const key = new THREE.DirectionalLight(0xfff4e0, 2.0)
     key.position.set(0.6, 1.4, 2.2)
@@ -185,15 +196,30 @@ export class OverlayScene {
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x4a4480, 1.0))
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.5))
 
-    document.addEventListener('visibilitychange', () => {
-      this.visible = !document.hidden
-    })
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
     this.loop()
   }
 
+  private onResize = () => this.resize()
+
+  // Canvas-relative, so a mascot's eyes track the cursor correctly whether the
+  // canvas covers the window (the overlay stage, a mascot window) or one slot
+  // of the page layer.
+  private onPointerMove = (e: PointerEvent) => {
+    const rect = this.canvas.getBoundingClientRect()
+
+    this.pointer.x = e.clientX - rect.left
+    this.pointer.y = e.clientY - rect.top
+  }
+
+  private onVisibilityChange = () => {
+    this.visible = !document.hidden
+  }
+
   resize() {
-    const w = window.innerWidth
-    const h = window.innerHeight
+    const { height, width } = this.viewport()
+    const w = Math.max(1, Math.round(width))
+    const h = Math.max(1, Math.round(height))
     this.renderer.setSize(w, h, false)
     // Ortho in CSS pixels; +y DOWN to match DOM coords.
     this.camera.left = 0
@@ -329,6 +355,9 @@ export class OverlayScene {
 
   dispose() {
     cancelAnimationFrame(this.raf)
+    window.removeEventListener('resize', this.onResize)
+    window.removeEventListener('pointermove', this.onPointerMove)
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
 
     for (const m of this.mascots.values()) {m.dispose()}
     this.renderer.dispose()

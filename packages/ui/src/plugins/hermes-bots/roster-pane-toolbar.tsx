@@ -14,6 +14,7 @@ import {
 import { botSourceStatus } from './data'
 import type { useBots } from './i18n'
 import type { RosterSortMode } from './live-status'
+import { BotMascotLayerButton } from './mascot-layer-button'
 import { setActivityToasts } from './roster-actions'
 import { GatewayKindGlyph } from './roster-sections'
 import type { rosterGatewayOptions } from './roster-sections'
@@ -131,6 +132,10 @@ export function renderRosterToolbar({
               <Codicon name="device-desktop" />
             </Button>
           </Tip>
+          {/* Bot mascots over the app — the browser host's own mascot layer
+              (Electron's per-bot windows have no tab equivalent). Renders
+              nothing in Electron. */}
+          <BotMascotLayerButton />
           <DropdownMenu>
             <Tip label="New…">
               <DropdownMenuTrigger asChild>
