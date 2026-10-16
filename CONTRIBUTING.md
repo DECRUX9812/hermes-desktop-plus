@@ -182,11 +182,12 @@ WebSocket routes, so the browser talks to one origin.
 `upstream-nightly.yml` runs the contract and integration suites against
 upstream `main` and the two most recent release tags. When a **new tag** passes,
 CI opens a pull request that adds the tag to `known_good` in
-`src/hermes_plus/compat/matrix.json`. To bump it by hand:
+`packages/hermes_plus/src/hermes_plus/compat/matrix.json`. To bump it by hand:
 
 1. Run the contract suite against the new tag locally.
-2. Add the version to `known_good` (and its abbreviated commit to
-   `known_good_commits` if the release is what you tested).
+2. Add the version to `known_good`, its abbreviated commit to
+   `known_good_commits`, and the tag → commit mapping to `known_good_refs` if the
+   release is what you tested.
 3. Update `tested_main` to the commit nightly should track, and `max_minor` if a
    new minor line opened.
 4. Update `HERMES_KNOWN_GOOD_TAG` in `install.sh` and `HERMES_TAG` in
