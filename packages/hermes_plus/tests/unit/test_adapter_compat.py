@@ -25,6 +25,9 @@ def test_compat_matrix_classifies_minimum_known_and_old_versions() -> None:
 def test_known_good_commit_is_supported_even_without_a_semver_stamp() -> None:
     assert check_compat(_install(None, None, "379cf12")).status == "supported"
     assert check_compat(_install(None, None, "379cf122")).status == "supported"
+    # The tracked main tip, proven against a real stock install (S38).
+    assert check_compat(_install(None, None, "607a0b0d")).status == "supported"
+    assert check_compat(_install(None, None, "607a0b0d41e07d903c0b475dd72fb6ac2b37fecc")).status == "supported"
 
 
 def test_unknown_commit_degrades_to_untested_but_keeps_running() -> None:
