@@ -43,5 +43,14 @@ Hermes Agent
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 
+noVNC
+  Source: https://github.com/novnc/noVNC
+  Version: 1.7.0 (npm package @novnc/novnc)
+  License: MPL-2.0 (Mozilla Public License 2.0, https://mozilla.org/MPL/2.0/)
+
+  The noVNC client is a runtime dependency of the web UI (the Bot Screen pane
+  in `packages/ui/`) and is bundled into the shipped build. Its files are
+  distributed unmodified under MPL-2.0; this project carries no patches to it.
+
 Hermes Agent itself is not redistributed by this project. Users install it
 separately with upstream's own installer, and this add-on never modifies it.
