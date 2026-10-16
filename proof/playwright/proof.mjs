@@ -158,35 +158,141 @@ async function sendMessage(page, text) {
   await page.keyboard.press('Enter')
 }
 
-const assistantTexts = page =>
-  page.$$eval('[data-slot="aui_assistant-message-root"]', nodes =>
-    nodes.map(node => (node.innerText || '').replace(/\s+/g, ' ').trim()))
+// The chrome inside an assistant message that is NOT the model's answer: the
+// reasoning disclosure (its "Thought …" chip and, while open, the reasoning
+// body), the turn activity/duration rows, and the tool cards. Raw `innerText`
+// of the message root is not a reply: a live turn keeps its reasoning body
+// mounted, so a phrase the model only *thought about* matches it, and after a
+// reload the same disclosure is collapsed and unmounts that body, so the same
+// phrase disappears. S39b measured both halves of that: turn 1 "passed" on
+// text that only ever existed as reasoning, then failed after the reload —
+// while the turn had in fact been aborted by this proof's own next prompt
+// (`[interrupt: no assistant output for this turn]` in the stored transcript),
+// so the session legitimately held no reply for it.
+const ANSWER_CHROME_SLOTS = [
+  // The disclosure carries the "Thought …" chip and, while it is open, the
+  // reasoning body (`aui_thinking-body` / `aui_reasoning-text`).
+  'aui_thinking-disclosure',
+  'aui_turn-activity',
+  'aui_turn-duration',
+  'aui_response-loading',
+  'tool-activity-stack',
+  'tool-block',
+  'aui_msg-actions',
+  'aui_msg-reactions',
+  'aui_message-streaming-marker',
+]
 
-async function waitForAssistant(page, needle, timeoutMs) {
-  await page.waitForFunction(
-    value => [...document.querySelectorAll('[data-slot="aui_assistant-message-root"]')]
-      .some(node => (node.innerText || '').toLowerCase().includes(value.toLowerCase())),
-    needle,
-    { timeout: timeoutMs },
-  )
-}
+/** Every assistant message's own answer text, with the chrome above removed.
+ *  Detached clones have no layout, so `textContent` is the only working read. */
+const assistantTexts = page => page.$$eval(
+  '[data-slot="aui_assistant-message-root"]',
+  (nodes, chrome) => nodes.map(node => {
+    const clone = node.cloneNode(true)
+    for (const slot of chrome) {
+      clone.querySelectorAll(`[data-slot="${slot}"]`).forEach(child => child.remove())
+    }
+    return (clone.textContent || '').replace(/\s+/g, ' ').trim()
+  }),
+  ANSWER_CHROME_SLOTS,
+)
 
-/** Wait until the transcript stops changing, so screenshots show a settled turn. */
-async function waitForSettled(page, timeoutMs = 120000) {
+/** Raw message text, reasoning and tool chrome included. Diagnostics only. */
+const messageTexts = page => page.$$eval('[data-slot="aui_assistant-message-root"]', nodes =>
+  nodes.map(node => (node.innerText || '').replace(/\s+/g, ' ').trim()))
+
+/**
+ * Wait until the current turn is settled, so screenshots show a finished turn
+ * and the next prompt cannot land inside a running one.
+ *
+ * The app's own settled-row signal is the streaming marker
+ * (`assistant-message.tsx` StreamingMarker, `data-message-streaming`); the
+ * composer's Stop button is the second half. The viewport-text comparison this
+ * used to do alone never repeats while a model streams reasoning, so it timed
+ * out mid-turn and — because callers ignored the false — the next prompt was
+ * sent into the running turn, which aborts it (S39b: that is exactly how the
+ * first session ended up with no reply to show after the reload).
+ */
+async function waitForSettled(page, timeoutMs = 300000) {
   const deadline = Date.now() + timeoutMs
-  let previous = ''
+  let idleSamples = 0
   while (Date.now() < deadline) {
-    const current = await page.evaluate(() => {
-      const viewport = document.querySelector('[data-slot="aui_thread-viewport"]')
+    const busy = await page.evaluate(() => {
+      const streaming = document.querySelectorAll(
+        '[data-slot="aui_message-streaming-marker"][data-message-streaming="true"]',
+      ).length
       const stop = document.querySelector('[data-slot="composer-root"] button[aria-label="Stop"]')
-      return `${stop ? 'busy' : 'idle'}|${viewport ? viewport.innerText.replace(/\s+/g, ' ').trim() : ''}`
+      return streaming > 0 || !!stop
     })
-    if (current === previous && current.startsWith('idle|')) {return true}
-    previous = current
-    await page.waitForTimeout(1500)
+    idleSamples = busy ? 0 : idleSamples + 1
+    // Two samples: one could land in the gap between two turns of a tool loop.
+    if (idleSamples >= 2) {return true}
+    await page.waitForTimeout(2000)
   }
   return false
 }
+
+/**
+ * The session's own stored transcript, read the way the app reads it: the
+ * sidebar row carries the stored key, the gateway's session-scoped RPCs take
+ * the runtime id `session.resume` hands back, and `session.history` is the
+ * persisted row set. Used to assert what the SESSION holds, next to what the
+ * DOM paints.
+ */
+async function storedTranscript(page, storedId) {
+  const resumed = await rpc(page, 'session.resume', { session_id: storedId })
+  const runtimeId = resumed && resumed.session_id ? String(resumed.session_id) : ''
+  const history = runtimeId
+    ? await rpc(page, 'session.history', { session_id: runtimeId })
+    : null
+  return { runtimeId, json: JSON.stringify({ resumed, history }) }
+}
+
+/** How many assistant messages the transcript holds. */
+const assistantRoots = page => page.locator('[data-slot="aui_assistant-message-root"]').count()
+
+/**
+ * Wait for the turn a prompt just started to show itself: the app marks the
+ * message running (the streaming marker) and swaps Send for Stop, and a new
+ * message root counts too, so a turn that began and ended inside one poll is
+ * still seen. Without this a settle check can pass before the turn starts, and
+ * the prompt after it would then land inside a running turn.
+ */
+async function waitForTurnStart(page, rootsBefore, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const busy = await page.evaluate(() => ({
+      streaming: document.querySelectorAll(
+        '[data-slot="aui_message-streaming-marker"][data-message-streaming="true"]',
+      ).length,
+      stop: !!document.querySelector('[data-slot="composer-root"] button[aria-label="Stop"]'),
+    }))
+    if (busy.streaming || busy.stop || (await assistantRoots(page)) > rootsBefore) {return true}
+    await page.waitForTimeout(500)
+  }
+  return false
+}
+
+/** Send a prompt, then wait for its turn to start and to settle. */
+async function sendAndSettle(page, text, sender = sendMessage, timeoutMs = 300000) {
+  const rootsBefore = await assistantRoots(page)
+  await sender(page, text)
+  if (!(await waitForTurnStart(page, rootsBefore))) {return { started: false, settled: false }}
+  return { started: true, settled: await waitForSettled(page, timeoutMs) }
+}
+
+/** The session the app is showing: the route carries its STORED key (the one
+ *  `session.list` rows report); the session-scoped RPCs take the runtime id
+ *  that `session.resume` hands back. */
+async function shownSessionId(page) {
+  return (await page.evaluate(() => window.location.hash)).replace(/^#\/?/, '').split('/')[0]
+}
+
+/** The transcript's own text (the scroll viewport), not the whole app shell. */
+const threadText = page => page.evaluate(() => {
+  const viewport = document.querySelector('[data-slot="aui_thread-viewport"]')
+  return (viewport ? viewport.innerText : '').replace(/\s+/g, ' ')
+})
 
 async function bodyText(page) {
   return (await page.evaluate(() => document.body.innerText || '')).replace(/\s+\n/g, '\n')
@@ -410,23 +516,72 @@ try {
   })
 
   // ── 3. A real chat turn ──────────────────────────────────────────────────
-  const FIRST_PROMPT = 'Reply with exactly: hello from the proof'
+  // The assertion is on the model's ANSWER, not on whatever the message root
+  // renders: matching raw message text lets a turn that only ever *reasoned*
+  // about the phrase pass (S39b). The turn must also be settled before the
+  // next prompt goes out — sending one into a running turn aborts it, which is
+  // what left the first session with nothing to show after the reload. A model
+  // that answers with no text at all is a BLOCKED turn, not a product failure
+  // (same shape as the tool-card turn below), so it gets one stricter retry.
+  const FIRST_PROMPTS = [
+    'Reply with exactly: hello from the proof',
+    'Answer with the exact text, and nothing else: hello from the proof',
+  ]
   const FIRST_REPLY = 'hello from the proof'
-  await sendMessage(page, FIRST_PROMPT)
-  try {
-    await waitForAssistant(page, FIRST_REPLY, 240000)
-    await waitForSettled(page)
+  let firstReply = null
+  // False once a turn would not settle: nothing else may be typed into it.
+  let turnSettled = true
+  for (let attempt = 0; attempt < FIRST_PROMPTS.length && !firstReply && turnSettled; attempt += 1) {
+    const turn = await sendAndSettle(page, FIRST_PROMPTS[attempt])
+    if (!turn.started) {
+      turnSettled = false
+      diagnostics.firstReplyAttempts = [
+        ...(diagnostics.firstReplyAttempts || []),
+        `attempt ${attempt + 1}: the prompt never started a turn`,
+      ]
+      await shot(page, '02-reply')
+      break
+    }
+    if (!turn.settled) {
+      turnSettled = false
+      diagnostics.firstReplyAttempts = [
+        ...(diagnostics.firstReplyAttempts || []),
+        `attempt ${attempt + 1}: the turn was still running after 5 minutes`,
+      ]
+      await shot(page, '02-reply')
+      break
+    }
+    const texts = await assistantTexts(page)
+    firstReply = texts.find(text => text.toLowerCase().includes(FIRST_REPLY)) || null
+    if (!firstReply) {
+      diagnostics.firstReplyAttempts = [
+        ...(diagnostics.firstReplyAttempts || []),
+        `attempt ${attempt + 1}: settled with no answer text (${JSON.stringify(texts.slice(-1)).slice(0, 160)})`,
+      ]
+    }
     await shot(page, '02-reply')
-    await check('chat reply streams from the configured model', async () => {
-      const texts = await assistantTexts(page)
-      const hit = texts.find(text => text.toLowerCase().includes(FIRST_REPLY))
-      return `assistant said "${hit}"`
-    })
-  } catch (error) {
-    await shot(page, '02-reply')
-    await blocked('chat reply streams from the configured model', `no reply: ${error.message}`)
   }
   diagnostics.assistantTexts = await assistantTexts(page)
+  diagnostics.messageTexts = await messageTexts(page)
+  if (firstReply) {
+    await check('chat reply streams from the configured model', () => `assistant said "${firstReply}"`)
+  } else {
+    await blocked(
+      'chat reply streams from the configured model',
+      `no answer text carrying "${FIRST_REPLY}" after ${FIRST_PROMPTS.length} prompt(s)`
+      + ` (${(diagnostics.firstReplyAttempts || ['no attempt was made']).join('; ')}): `
+      + JSON.stringify((await assistantTexts(page)).slice(-2)).slice(0, 240),
+    )
+  }
+
+  // The session the first turn opened: `session.list` is authoritative, and the
+  // route has to agree once the turn is settled.
+  let firstStoredSessionId = await shownSessionId(page)
+  if (!firstStoredSessionId) {
+    const listing = await rpc(page, 'session.list', { limit: 50 }).catch(() => null)
+    firstStoredSessionId = String(listing?.sessions?.[0]?.id || '')
+  }
+  diagnostics.firstStoredSessionId = firstStoredSessionId
 
   // ── 4. Tool card (a turn that must call a tool) ──────────────────────────
   // The card slots are the UI's own (`tool-activity-stack` for a run of tool
@@ -441,31 +596,65 @@ try {
   const TOOL_CARD_SELECTOR = '[data-slot="tool-activity-stack"], [data-slot="tool-block"]'
   const TOOL_FILE = args['tool-file'] || 'proof-token.txt'
   const TOOL_TOKEN = args['tool-token'] || ''
+  // True only when the tool turn really left the run-unique token in an ANSWER
+  // of this session: step 5 asserts the reopened session still shows it.
+  let toolTurnQuoted = false
   if (!TOOL_TOKEN) {
     await blocked('tool card rendered', 'no --tool-token given; the proof turn cannot demand a verifiable tool read')
+  } else if (!turnSettled) {
+    await blocked('tool card rendered', 'the turn before it never settled; no further prompt is sent into a running turn')
   } else {
     const TOOL_PROMPTS = [
       `Read the file ${TOOL_FILE} in the workspace root with your file-read tool, then reply with the exact token written in it. Using the tool is required; do not answer from memory.`,
       `You MUST call a tool before answering. Call your file-read tool on ${TOOL_FILE} in the workspace root and reply with the token string it contains and nothing else. A reply without a tool call is wrong.`,
     ]
     let toolDetail = null
-    for (let attempt = 0; attempt < TOOL_PROMPTS.length && !toolDetail; attempt += 1) {
-      await sendMessage(page, TOOL_PROMPTS[attempt])
-      await waitForSettled(page, 240000)
+    let unsettled = 0
+    let unstarted = 0
+    for (let attempt = 0; attempt < TOOL_PROMPTS.length && !toolDetail && !unsettled && !unstarted; attempt += 1) {
+      // A prompt must never go out while the previous turn is still running:
+      // that aborts it (S39b's first turn ended as `[interrupt: no assistant
+      // output for this turn]`). If the turn will not start or settle, there is
+      // nothing to assert — say so instead of measuring a turn still going.
+      const turn = await sendAndSettle(page, TOOL_PROMPTS[attempt])
+      if (!turn.started) {
+        unstarted = attempt + 1
+        turnSettled = false
+        break
+      }
+      if (!turn.settled) {
+        unsettled = attempt + 1
+        turnSettled = false
+        break
+      }
       const texts = await assistantTexts(page)
       const quoted = texts.some(text => text.toLowerCase().includes(TOOL_TOKEN.toLowerCase()))
       const card = await page.evaluate(selector => {
         const node = document.querySelector(selector)
         return node ? (node.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200) : ''
       }, TOOL_CARD_SELECTOR)
-      diagnostics[`toolAttempt${attempt + 1}`] = { quoted, card }
+      diagnostics[`toolAttempt${attempt + 1}`] = { quoted, card, texts: texts.slice(-2) }
       if (quoted && card) {
-        toolDetail = `token quoted, attempt ${attempt + 1}; card text: ${card}`
+        toolDetail = `token quoted in the answer, attempt ${attempt + 1}; card text: ${card}`
       }
     }
     if (toolDetail) {
+      toolTurnQuoted = true
       await shot(page, '02-tool-card')
       await check('tool card rendered', () => toolDetail)
+    } else if (unstarted) {
+      await shot(page, '02-tool-card')
+      await blocked(
+        'tool card rendered',
+        `the prompt ${unstarted} never started a turn, so there is no card or answer to assert`,
+      )
+    } else if (unsettled) {
+      await shot(page, '02-tool-card')
+      await blocked(
+        'tool card rendered',
+        `the turn after prompt ${unsettled} was still running after 5 minutes, so the card and the`
+        + ' answer cannot be asserted (the next prompt must not land inside a running turn)',
+      )
     } else {
       const texts = await assistantTexts(page)
       const last = texts.length ? texts[texts.length - 1] : '(no assistant text)'
@@ -507,19 +696,34 @@ try {
 
   await composer(page)
   await page.waitForTimeout(1500)
-  await sendMessage(page, SECOND_PROMPT)
-  try {
-    await waitForAssistant(page, 'session two ok', 240000)
-    await waitForSettled(page)
-    await shot(page, '03-second-session')
-    await check('second session reply', async () => {
+  // Never type into a turn that is still running (see step 3): with an earlier
+  // turn unsettled there is no honest verdict here, so the check says so.
+  let secondSettled = false
+  let secondStarted = false
+  let secondReply = null
+  if (turnSettled) {
+    const turn = await sendAndSettle(page, SECOND_PROMPT)
+    secondStarted = turn.started
+    secondSettled = turn.settled
+    if (secondSettled) {
       const texts = await assistantTexts(page)
-      const hit = texts.find(text => text.toLowerCase().includes('session two ok'))
-      return `assistant said "${hit}"`
-    })
-  } catch (error) {
-    await shot(page, '03-second-session')
-    await blocked('second session reply', `no reply: ${error.message}`)
+      secondReply = texts.find(text => text.toLowerCase().includes('session two ok')) || null
+    }
+  }
+  await shot(page, '03-second-session')
+  if (secondReply) {
+    await check('second session reply', () => `assistant said "${secondReply}"`)
+  } else if (!turnSettled) {
+    await blocked('second session reply', 'an earlier turn never settled; nothing was sent into a running turn')
+  } else if (!secondStarted) {
+    await blocked('second session reply', 'the prompt never started a turn')
+  } else if (!secondSettled) {
+    await blocked('second session reply', 'the turn was still running after 5 minutes')
+  } else {
+    await blocked(
+      'second session reply',
+      `settled with no answer text: ${JSON.stringify((await assistantTexts(page)).slice(-1)).slice(0, 200)}`,
+    )
   }
 
   await page.reload({ waitUntil: 'domcontentloaded' })
@@ -568,33 +772,62 @@ try {
     // route resume for the session it was on still settling (`use-route-resume`
     // retries a stranded resume with backoff). A click that lands while that is
     // in flight can be re-navigated away, so the click is retried — the
-    // assertion below is what decides, and a stale resume cannot satisfy it.
+    // assertions below are what decide, and a stale resume cannot satisfy them.
+    //
+    // What has to hold, measured rather than assumed: the reopened route is the
+    // FIRST session's own stored key, that session's first prompt is on screen,
+    // the tool turn's answer (the run-unique token, which no model can quote
+    // without the tool read) is on screen again, and the stored transcript read
+    // back the way the app reads it (session.resume → session.history) still
+    // carries both. The first turn's reply is asserted the same way when step 3
+    // got one — a model that settles without answering blocks step 3 instead of
+    // failing this check, which is what S39 got wrong: it typed the tool prompt
+    // into a running first turn, the turn was stored as
+    // `[interrupt: no assistant output for this turn]`, and this check then
+    // failed for the only correct reason — the session had no reply to hold.
+    const has = (texts, needle) => texts.some(text => text.toLowerCase().includes(String(needle).toLowerCase()))
+    let stored = null
+    let routeId = ''
     let texts = []
+    let visible = ''
+    let mismatch = ''
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const clicked = await clickSessionByTitle(page, firstTitle.slice(0, 12))
       if (!clicked) {
         throw new Error(`could not click the first session row "${firstTitle}": ${JSON.stringify(railTitles).slice(0, 200)}`)
       }
-      try {
-        await waitForAssistant(page, FIRST_REPLY, 90000)
-        await waitForSettled(page)
-        texts = await assistantTexts(page)
-        break
-      } catch (error) {
-        if (attempt === 2) {
-          texts = await assistantTexts(page)
-          break
-        }
-        await page.waitForTimeout(3000)
+      await waitForSettled(page, 120000)
+      await page.waitForTimeout(3000)
+      routeId = await shownSessionId(page)
+      texts = await assistantTexts(page)
+      visible = await threadText(page)
+      stored = await storedTranscript(page, routeId).catch(error => ({ json: '', error: String(error) }))
+      const problems = []
+      if (firstStoredSessionId && routeId !== firstStoredSessionId) {
+        problems.push(`route is ${routeId}, expected the first session ${firstStoredSessionId}`)
       }
+      if (!visible.includes(FIRST_PROMPTS[0])) { problems.push("the first turn's prompt is not on screen") }
+      if (toolTurnQuoted && !has(texts, TOOL_TOKEN)) { problems.push('the tool turn\'s stored answer (the token) is not on screen') }
+      if (firstReply && !has(texts, FIRST_REPLY)) { problems.push(`the first reply "${FIRST_REPLY}" is not on screen`) }
+      if (!stored.json.includes(FIRST_PROMPTS[0])) { problems.push('the stored transcript no longer holds the first prompt') }
+      if (toolTurnQuoted && !stored.json.includes(TOOL_TOKEN)) { problems.push('the stored transcript no longer holds the tool answer') }
+      mismatch = problems.join('; ')
+      if (!problems.length) { break }
+      await page.waitForTimeout(3000)
+    }
+    diagnostics.firstSessionReopened = {
+      routeId, firstStoredSessionId, firstReply, toolTurnQuoted,
+      answerTexts: texts, storedTranscriptBytes: (stored?.json || '').length, storedError: stored?.error,
     }
     await shot(page, '03-sessions')
-    if (!texts.some(text => text.toLowerCase().includes(FIRST_REPLY))) {
-      throw new Error(`reopened session shows: ${JSON.stringify(texts).slice(0, 300)}`
-        + ` (route ${await page.evaluate(() => window.location.hash)},`
-        + ` rail ${JSON.stringify(railTitles).slice(0, 200)})`)
+    if (mismatch) {
+      throw new Error(`reopened session: ${mismatch}`
+        + ` (route ${routeId}, answers ${JSON.stringify(texts).slice(0, 300)},`
+        + ` stored transcript ${stored?.error ? `unreadable: ${String(stored.error).slice(0, 200)}` : `${(stored.json || '').length} bytes`})`)
     }
-    return `reopened "${firstTitle}" and its reply is on screen`
+    return `reopened "${firstTitle}" (${routeId}): its first prompt`
+      + `${firstReply ? ' and reply' : ''}${toolTurnQuoted ? ' and the tool answer' : ''} are on screen,`
+      + ` and the stored transcript still holds them (${stored?.runtimeId || 'resumed'})`
   })
 
   // ── 6. Bot team ──────────────────────────────────────────────────────────
@@ -1148,25 +1381,38 @@ try {
       ]
       let attachmentReply = null
       let attachmentPromptError = null
+      let attachmentUnsettled = 0
       for (let attempt = 0; attempt < ATTACHMENT_PROMPTS.length && !attachmentReply; attempt += 1) {
         try {
-          await sendMessageStable(page, ATTACHMENT_PROMPTS[attempt])
-          await waitForSettled(page, 240000)
+          // Same rule as every other turn here: the next prompt only goes out
+          // once this one has started and settled, or it would abort the turn
+          // in flight.
+          const turn = await sendAndSettle(page, ATTACHMENT_PROMPTS[attempt], sendMessageStable)
+          if (!turn.started || !turn.settled) {
+            attachmentUnsettled = attempt + 1
+            break
+          }
         } catch (error) {
           attachmentPromptError = error
           break
         }
         const texts = await assistantTexts(page)
-        const quoted = texts.some(text => text.toLowerCase().includes(ATTACHMENT_TOKEN.toLowerCase()))
+        const quoted = texts.find(text => text.toLowerCase().includes(ATTACHMENT_TOKEN.toLowerCase())) || null
         diagnostics[`attachmentAttempt${attempt + 1}`] = {
-          quoted, last: texts.length ? texts[texts.length - 1].slice(0, 200) : '',
+          quoted: !!quoted, last: texts.length ? texts[texts.length - 1].slice(0, 200) : '',
         }
-        if (quoted) {attachmentReply = texts[texts.length - 1]}
+        if (quoted) {attachmentReply = quoted}
       }
       await shot(page, '08-attachment-reply')
       if (attachmentReply) {
         await check('a prompt carrying the attachment gets a reply that quotes it', () =>
           `the reply quoted the file's token: "${attachmentReply.slice(0, 160)}"`)
+      } else if (attachmentUnsettled) {
+        await blocked(
+          'a prompt carrying the attachment gets a reply that quotes it',
+          `the turn after prompt ${attachmentUnsettled} was still running after 5 minutes,`
+          + ' so this check cannot be asserted (and no prompt is sent into a running turn)',
+        )
       } else if (attachmentPromptError) {
         record(
           'a prompt carrying the attachment gets a reply that quotes it',
