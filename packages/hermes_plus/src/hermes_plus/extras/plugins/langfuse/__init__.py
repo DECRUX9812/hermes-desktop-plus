@@ -1,10 +1,12 @@
 """langfuse — Hermes plugin tracing conversations, LLM calls and tool usage to Langfuse.
 
 Activated via ``plugins.enabled``; hooks are inert without the ``langfuse`` SDK
-and credentials. Env: HERMES_LANGFUSE_PUBLIC_KEY / SECRET_KEY (required),
-BASE_URL, ENV, RELEASE, SAMPLE_RATE, MAX_CHARS (12000), MAX_DEPTH (4), DEBUG, and CAPTURE =
-metadata (sizes/ids/usage only) | sanitized (default: secret redaction +
-truncation) | full (truncated raw content). See README.md.
+and credentials. Tuning knobs live in Settings > Plugins (``config_schema`` in
+plugin.yaml, read via ``ctx.get_config``); credentials are ``secret`` keys read
+through the profile secret scope. The legacy HERMES_LANGFUSE_* env vars still
+work (deprecated, lowest precedence). Capture = metadata (sizes/ids/usage only)
+| sanitized (default: secret redaction + truncation) | full (truncated raw
+content). See README.md.
 """
 from __future__ import annotations
 
@@ -47,6 +49,10 @@ class TraceState:
 
 
 _STATE_LOCK = threading.Lock()
+# Captured at register() time: tuning knobs are read at hook time, outside register, and
+# hooks receive no ctx. ``ctx.get_config`` re-reads config.yaml on every call, so edits
+# made in Settings > Plugins (or `hermes config set`) apply without a restart.
+_PLUGIN_CTX: Any = None
 _TRACE_STATE: dict[str, TraceState] = {}
 # Ceiling on live trace state (per turn_id): turns that never reach _finish_trace
 # would leak forever, so over the cap the least-recently-updated are evicted.
@@ -88,6 +94,51 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
+# Tuning knobs: setting key (plugins.entries.langfuse.settings.<key>) → legacy env var.
+# Each env var is deprecated, kept as the middle read for homes configured before the
+# plugin declared its config_schema.
+_KNOB_ENV_VARS: dict[str, str] = {
+    "base_url": "HERMES_LANGFUSE_BASE_URL",
+    "environment": "HERMES_LANGFUSE_ENV",
+    "release": "HERMES_LANGFUSE_RELEASE",
+    "sample_rate": "HERMES_LANGFUSE_SAMPLE_RATE",
+    "max_chars": "HERMES_LANGFUSE_MAX_CHARS",
+    "max_depth": "HERMES_LANGFUSE_MAX_DEPTH",
+    "capture": "HERMES_LANGFUSE_CAPTURE",
+    "debug": "HERMES_LANGFUSE_DEBUG",
+}
+# Knobs whose legacy source went through the profile secret scope (.env) rather than the
+# process environment; of these, base_url/environment/release also honoured the native
+# LANGFUSE_* spellings, kept here as a fallback.
+_KNOB_SCOPE_KNOBS = frozenset({"base_url", "environment", "release", "sample_rate"})
+_KNOB_SHORT_ENV_KNOBS = frozenset({"base_url", "environment", "release"})
+
+
+def _setting(name: str, default: Any = None) -> Any:
+    """``plugins.entries.langfuse.settings.<name>`` through the ctx captured at register
+    time, or ``default`` when register has not run (hooks are inert without it anyway)."""
+    if _PLUGIN_CTX is None:
+        return default
+    try:
+        return _PLUGIN_CTX.get_config(name, default)
+    except Exception:  # pragma: no cover - a broken host must not kill a hook
+        return default
+
+
+def _knob(name: str, default: str = "") -> str:
+    """String knob read order: plugin setting → legacy env var (deprecated) → default."""
+    value = _setting(name)
+    if value is not None and str(value).strip():
+        return str(value).strip()
+    env_var = _KNOB_ENV_VARS[name]
+    if name in _KNOB_SCOPE_KNOBS:
+        legacy = _secret(env_var)
+        if not legacy and name in _KNOB_SHORT_ENV_KNOBS:
+            legacy = _secret(env_var.replace("HERMES_LANGFUSE_", "LANGFUSE_"))
+        return legacy or default
+    return _env(env_var, default)
+
+
 def _secret(name: str) -> str:
     """Credential read through the profile secret scope. A scope-less multiplex caller raises
     (``UnscopedSecretError``): that is a spawn-site bug, and reading ``os.environ`` instead would
@@ -98,7 +149,10 @@ def _secret(name: str) -> str:
 
 
 def _debug(message: str) -> None:
-    if _env("HERMES_LANGFUSE_DEBUG").lower() in {"1", "true", "yes", "on"}:
+    value = _setting("debug")
+    if not isinstance(value, bool):
+        value = _knob("debug").lower() in {"1", "true", "yes", "on"}
+    if value:
         logger.info("Langfuse tracing: %s", message)
 
 
@@ -121,15 +175,15 @@ def _capture_mode() -> str:
     can flip modes. Invalid values warn once and fall back to the default (never
     capture more than the operator intended)."""
     global _warned_invalid_capture
-    value = _env("HERMES_LANGFUSE_CAPTURE").lower()
+    value = _knob("capture").lower()
     if not value or value in _CAPTURE_MODES:
         return value or _DEFAULT_CAPTURE_MODE
     if not _warned_invalid_capture:
         _warned_invalid_capture = True
         logger.warning(
-            "Langfuse plugin: invalid HERMES_LANGFUSE_CAPTURE=%r, falling back "
-            "to %r (valid: %s)",
-            value, _DEFAULT_CAPTURE_MODE, ", ".join(_CAPTURE_MODES),
+            "Langfuse plugin: invalid capture mode %r (from setting %r or "
+            "HERMES_LANGFUSE_CAPTURE), falling back to %r (valid: %s)",
+            value, _setting("capture"), _DEFAULT_CAPTURE_MODE, ", ".join(_CAPTURE_MODES),
         )
     return _DEFAULT_CAPTURE_MODE
 
@@ -270,17 +324,18 @@ def _build_client() -> Optional[Langfuse]:
         return None
 
     kwargs: dict[str, Any] = {"public_key": public_key, "secret_key": secret_key}
-    for key, name, default in (("base_url", "BASE_URL", "https://cloud.langfuse.com"), ("environment", "ENV", ""),
-                               ("release", "RELEASE", "")):
-        value = _secret(f"HERMES_LANGFUSE_{name}") or _secret(f"LANGFUSE_{name}") or default
+    for key, name, default in (("base_url", "base_url", "https://cloud.langfuse.com"),
+                               ("environment", "environment", ""),
+                               ("release", "release", "")):
+        value = _knob(name, default)
         if value:
             kwargs[key] = value
-    sample_rate = _secret("HERMES_LANGFUSE_SAMPLE_RATE")
+    sample_rate = _knob("sample_rate")
     if sample_rate:
         try:
             kwargs["sample_rate"] = float(sample_rate)
         except ValueError:
-            logger.warning("Invalid HERMES_LANGFUSE_SAMPLE_RATE=%r", sample_rate)
+            logger.warning("Invalid sample_rate=%r (setting or HERMES_LANGFUSE_SAMPLE_RATE)", sample_rate)
 
     try:
         return Langfuse(**kwargs)
@@ -386,24 +441,24 @@ def _normalize_payload(value: Any, *, tool_name: str = "", args: Any = None) -> 
 
 @functools.lru_cache(maxsize=8)
 def _resolve_max_depth(configured_depth: str) -> int:
-    """Parse ``HERMES_LANGFUSE_MAX_DEPTH``; an invalid value warns ONCE per distinct value.
+    """Parse the max_depth knob; an invalid value warns ONCE per distinct value.
     Cached on the raw string (not at import) so a long-lived process still picks up a changed
-    env var, while a bad value no longer logs one warning per captured prompt/tool payload."""
+    setting, while a bad value no longer logs one warning per captured prompt/tool payload."""
     try:
         max_depth = int(configured_depth)
         if max_depth < 0:
             raise ValueError
         return max_depth
     except ValueError:
-        logger.warning("Invalid HERMES_LANGFUSE_MAX_DEPTH=%r; use a non-negative integer. Falling back to 4.", configured_depth)
+        logger.warning("Invalid max_depth=%r (setting or HERMES_LANGFUSE_MAX_DEPTH); use a non-negative integer. Falling back to 4.", configured_depth)
         return 4
 
 
 def _safe_value(value: Any, *, max_chars: Optional[int] = None, depth: int = 0,
                 parse_json_strings: bool = False, max_depth: Optional[int] = None) -> Any:
-    max_chars = max_chars if max_chars is not None else int(_env("HERMES_LANGFUSE_MAX_CHARS", "12000") or "12000")
+    max_chars = max_chars if max_chars is not None else int(_knob("max_chars", "12000") or "12000")
     if max_depth is None:
-        max_depth = _resolve_max_depth(_env("HERMES_LANGFUSE_MAX_DEPTH", "4") or "4")
+        max_depth = _resolve_max_depth(_knob("max_depth", "4") or "4")
     if depth > max_depth:
         return "<max-depth>"
     if value is None or isinstance(value, (int, float, bool)):
@@ -1030,6 +1085,9 @@ def on_subagent_stop(*, parent_turn_id: str = "", child_session_id: Any = None, 
 
 
 def register(ctx) -> None:
+    global _PLUGIN_CTX
+    # Knobs are read at hook time through this captured ctx (hooks get no ctx of their own).
+    _PLUGIN_CTX = ctx
     # Both hook-name variants so the plugin works across Hermes versions:
     # *_api_request fire per API call (preferred); *_llm_call once per turn.
     hooks = (
