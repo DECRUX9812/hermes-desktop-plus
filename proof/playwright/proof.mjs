@@ -367,21 +367,53 @@ try {
   }
   diagnostics.assistantTexts = await assistantTexts(page)
 
-  // ── 4. Tool cards (only when the turn actually used a tool) ──────────────
+  // ── 4. Tool card (a turn that must call a tool) ──────────────────────────
   // The card slots are the UI's own (`tool-activity-stack` for a run of tool
   // calls, `tool-block` for a single one). Nothing else counts: a "More tools"
   // chrome button is not a tool card, and reporting one as such would be a
-  // false pass.
+  // false pass. The turn is deterministic by construction: run-proof.sh drops
+  // a file holding a run-unique token into the session workspace, and the
+  // prompt demands reading it — the token cannot be quoted without a tool. If
+  // the model still answers bare, the turn is retried once with a stricter
+  // instruction; a second bare answer is BROKEN, not BLOCKED (the S28
+  // plain-reply turn could silently drop the check on model whim).
   const TOOL_CARD_SELECTOR = '[data-slot="tool-activity-stack"], [data-slot="tool-block"]'
-  const toolCardText = await page.evaluate(selector => {
-    const node = document.querySelector(selector)
-    return node ? (node.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200) : ''
-  }, TOOL_CARD_SELECTOR)
-  if (toolCardText) {
-    await shot(page, '02-tool-card')
-    await check('tool card rendered', () => `card text: ${toolCardText}`)
+  const TOOL_FILE = args['tool-file'] || 'proof-token.txt'
+  const TOOL_TOKEN = args['tool-token'] || ''
+  if (!TOOL_TOKEN) {
+    await blocked('tool card rendered', 'no --tool-token given; the proof turn cannot demand a verifiable tool read')
   } else {
-    await blocked('tool card rendered', 'the proof turn used no tools, so the transcript holds no tool card')
+    const TOOL_PROMPTS = [
+      `Read the file ${TOOL_FILE} in the workspace root with your file-read tool, then reply with the exact token written in it. Using the tool is required; do not answer from memory.`,
+      `You MUST call a tool before answering. Call your file-read tool on ${TOOL_FILE} in the workspace root and reply with the token string it contains and nothing else. A reply without a tool call is wrong.`,
+    ]
+    let toolDetail = null
+    for (let attempt = 0; attempt < TOOL_PROMPTS.length && !toolDetail; attempt += 1) {
+      await sendMessage(page, TOOL_PROMPTS[attempt])
+      await waitForSettled(page, 240000)
+      const texts = await assistantTexts(page)
+      const quoted = texts.some(text => text.toLowerCase().includes(TOOL_TOKEN.toLowerCase()))
+      const card = await page.evaluate(selector => {
+        const node = document.querySelector(selector)
+        return node ? (node.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200) : ''
+      }, TOOL_CARD_SELECTOR)
+      diagnostics[`toolAttempt${attempt + 1}`] = { quoted, card }
+      if (quoted && card) {
+        toolDetail = `token quoted, attempt ${attempt + 1}; card text: ${card}`
+      }
+    }
+    if (toolDetail) {
+      await shot(page, '02-tool-card')
+      await check('tool card rendered', () => toolDetail)
+    } else {
+      const texts = await assistantTexts(page)
+      const last = texts.length ? texts[texts.length - 1] : '(no assistant text)'
+      record(
+        'tool card rendered',
+        'broken',
+        `no token quote plus tool card after ${TOOL_PROMPTS.length} prompt(s); last assistant text: ${last.slice(0, 200)}`,
+      )
+    }
   }
 
   // ── 5. Sessions survive a reload ─────────────────────────────────────────
@@ -647,15 +679,37 @@ try {
       throw new Error(`identity did not round-trip: ${JSON.stringify(read).slice(0, 200)}`)
     }
     // The bot pane is the plugin pane registered as `hermes-bots:pane`; its
-    // command-palette row is labelled "Bots" and opens it (the `/roster` route
-    // is the fleet-run roster, a different surface).
+    // command-palette row is labelled "Bots" (the `/roster` route is the
+    // fleet-run roster, a different surface). The pane's roster container
+    // carries `data-slot="bots-roster"` (`roster-pane-content.tsx`) — unique
+    // to this pane, and invisible while the pane sits hidden as a keep-alive
+    // tab — so a VISIBLE roster container is the open pane.
+    const BOTS_ROSTER_SELECTOR = '[data-slot="bots-roster"]'
     await page.keyboard.press('Control+k')
     await page.waitForTimeout(1200)
     await page.keyboard.type('Bots')
     await page.waitForTimeout(1200)
     await shot(page, '05-bot-palette')
     await page.keyboard.press('Enter')
-    await page.waitForTimeout(4000)
+    await page.waitForTimeout(800)
+    // Enter can leave the palette row un-activated (S28 saw it still open
+    // seconds later); fold whatever remains so it cannot photobomb the shot.
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500)
+    await check('bot pane opens', async () => {
+      const roster = page.locator(BOTS_ROSTER_SELECTOR)
+      if (!(await roster.isVisible().catch(() => false))) {
+        // The user path the roster's own rail button owns (the same toggle the
+        // Bot Room overlay flow uses): click it only when the pane is closed,
+        // because the rail entry is a toggle, not a reveal.
+        const railBots = page.locator('button[data-rail-entry="hermes-bots:pane"]').first()
+        await railBots.waitFor({ state: 'visible', timeout: 30000 })
+        await railBots.click()
+      }
+      await roster.waitFor({ state: 'visible', timeout: 30000 })
+      return 'the Bots pane roster (data-slot bots-roster) is on screen'
+    })
+    await page.waitForTimeout(2500)
     await shot(page, '05-bot')
     diagnostics.botPane = (await bodyText(page)).slice(0, 1500)
     await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' })

@@ -242,8 +242,14 @@ say "a neutral workspace for the shots"
 DEMO_PROJECT="$WORK/demo-project"
 mkdir -p "$DEMO_PROJECT"
 printf '# demo-project\n\nThrowaway repository for the proof screenshots.\n' >"$DEMO_PROJECT/README.md"
+# The tool-card turn needs something only a tool can reveal: a run-unique
+# token in a file inside the session workspace (serve's cwd). The model cannot
+# quote it from memory, so a reply carrying the token proves a tool ran.
+TOOL_FILE=proof-token.txt
+TOOL_TOKEN="hp-$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+printf 'The proof token is %s.\n' "$TOOL_TOKEN" >"$DEMO_PROJECT/$TOOL_FILE"
 git -C "$DEMO_PROJECT" init -q -b main
-git -C "$DEMO_PROJECT" add README.md
+git -C "$DEMO_PROJECT" add README.md "$TOOL_FILE"
 if git -C "$DEMO_PROJECT" commit -q -m "demo project" >"$LOG_DIR/demo-project.log" 2>&1; then
   verdict "neutral workspace" 0 \
     "$DEMO_PROJECT on branch $(git -C "$DEMO_PROJECT" rev-parse --abbrev-ref HEAD) is serve's cwd"
@@ -280,6 +286,8 @@ if [ -n "$LOGIN_URL" ]; then
     --token-url "$LOGIN_URL" \
     --out "$SHOTS_DIR" \
     --chrome "$CHROME" \
+    --tool-file "$TOOL_FILE" \
+    --tool-token "$TOOL_TOKEN" \
     --json "$WORK/browser-report.json" 2>&1 | tee "$LOG_DIR/browser.log"
   browser_rc=${PIPESTATUS[0]}
   verdict "browser proof" "$browser_rc" "see $SHOTS_DIR and $WORK/browser-report.json"
