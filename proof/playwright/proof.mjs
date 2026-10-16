@@ -728,6 +728,10 @@ if (diagnostics.failedRequests && diagnostics.failedRequests.length) {
     console.log(`  - ${item.status || item.error} ${item.method} ${item.url} (${item.resourceType})`)
   }
 }
+if (diagnostics.consoleErrors && diagnostics.consoleErrors.length) {
+  console.log('console errors:')
+  for (const text of diagnostics.consoleErrors) {console.log(`  - ${text}`)}
+}
 if (broken.length) {
   console.log('broken:')
   for (const item of broken) {console.log(`  - ${item.name}: ${item.detail}`)}
