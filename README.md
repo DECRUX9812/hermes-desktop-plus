@@ -158,7 +158,20 @@ browser ──> hermes-plus sidecar :9129  (our process, our venv, our auth)
 
 ## Screenshots
 
-SCREENSHOTS_PLACEHOLDER
+Captured by the clean-install proof on stock Hermes
+(`proof/run-proof.sh`):
+
+![Fresh boot: profiles, bots and the composer](docs/screenshots/chat.png)
+
+![A streamed chat reply](docs/screenshots/chat-reply.png)
+
+![A second session created from the UI; both sessions listed](docs/screenshots/second-session.png)
+
+![Session details: workspace, branch, model and stats](docs/screenshots/session-details.png)
+
+![Team mode: org chart, goals and activity](docs/screenshots/team.png)
+
+![Plugins: the bridge plugin enabled, plus the plugin catalog](docs/screenshots/plugins.png)
 
 ## FAQ
 
