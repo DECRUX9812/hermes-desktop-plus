@@ -1,6 +1,12 @@
 {
   "name": "hermes-desktop-plus-ui",
   "private": true,
+  "description": "Hermes Desktop Plus: the browser-served desktop app for stock Hermes Agent.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DECRUX9812/hermes-desktop-plus.git"
+  },
   "workspaces": [
     "packages/ui",
     "packages/shared"
