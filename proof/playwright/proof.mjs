@@ -809,8 +809,13 @@ try {
       if (!visible.includes(FIRST_PROMPTS[0])) { problems.push("the first turn's prompt is not on screen") }
       if (toolTurnQuoted && !has(texts, TOOL_TOKEN)) { problems.push('the tool turn\'s stored answer (the token) is not on screen') }
       if (firstReply && !has(texts, FIRST_REPLY)) { problems.push(`the first reply "${FIRST_REPLY}" is not on screen`) }
-      if (!stored.json.includes(FIRST_PROMPTS[0])) { problems.push('the stored transcript no longer holds the first prompt') }
-      if (toolTurnQuoted && !stored.json.includes(TOOL_TOKEN)) { problems.push('the stored transcript no longer holds the tool answer') }
+      if (stored.error) {
+        // A transport failure is not a lost message: name it as itself.
+        problems.push(`the stored transcript could not be read: ${String(stored.error).slice(0, 160)}`)
+      } else {
+        if (!stored.json.includes(FIRST_PROMPTS[0])) { problems.push('the stored transcript no longer holds the first prompt') }
+        if (toolTurnQuoted && !stored.json.includes(TOOL_TOKEN)) { problems.push('the stored transcript no longer holds the tool answer') }
+      }
       mismatch = problems.join('; ')
       if (!problems.length) { break }
       await page.waitForTimeout(3000)
