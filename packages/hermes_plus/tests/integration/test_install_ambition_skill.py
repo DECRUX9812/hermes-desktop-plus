@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from hermes_resolve import resolve_stock_hermes
+from support import share_installs
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SHIPPED_SKILL_DIR = (
@@ -95,6 +96,7 @@ def installed_home(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """One real ``hermes-plus install`` into a temp HERMES_HOME (cold homes take ~40s)."""
     _require_tools()
     home = tmp_path_factory.mktemp("ambition-home")
+    share_installs(home)
     result = _install(home)
     assert result.returncode == 0, (
         f"hermes-plus install failed (exit {result.returncode})\n"
