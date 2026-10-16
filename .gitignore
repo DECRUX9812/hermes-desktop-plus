@@ -19,3 +19,5 @@ packages/ui/dist-webapp/
 .hermes/
 .personal-data-patterns
 devloop/
+.env
+*.whl
