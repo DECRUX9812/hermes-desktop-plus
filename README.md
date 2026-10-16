@@ -77,6 +77,11 @@ Put **Cloudflare Access** (Zero Trust SSO/MFA) in front of the hostname. The
 sidecar is the only process reachable from the internet; stock Hermes stays on
 loopback.
 
+Before exposing it to anything, read **[docs/security.md](docs/security.md)**:
+what the front door protects, what a share link or the host terminal exposes, and
+what to configure on a tunnel (`--auth password`, `--trust-proxy-headers`,
+`X-Forwarded-Host`, `HERMES_PLUS_ALLOWED_ORIGINS`).
+
 ## Docker
 
 ```sh

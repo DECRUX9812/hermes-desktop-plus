@@ -74,6 +74,21 @@ To keep a host Hermes home instead, replace the volume with a bind mount:
 ### Recommended Security: Cloudflare Access
 Pair Cloudflare Tunnel with Cloudflare Access (Zero Trust SSO / MFA) in front of your public hostname. With `HERMES_PLUS_TRUST_PROXY_HEADERS=1`, authenticated identity headers are preserved.
 
+Two things the sidecar checks that a tunnel must satisfy (both are in
+[`docs/security.md`](../docs/security.md)):
+
+- **`X-Forwarded-Host` must reach the container.** On unsafe methods and
+  WebSocket upgrades the sidecar refuses a browser `Origin` whose host/port does
+  not match the `Host` it was reached at. With `HERMES_PLUS_TRUST_PROXY_HEADERS=1`
+  it also accepts the host named in `X-Forwarded-Host`, which is what keeps a
+  tunnel that rewrites `Host` to `127.0.0.1:9129` working. If your proxy forwards
+  neither, name the public origin in `HERMES_PLUS_ALLOWED_ORIGINS`
+  (e.g. `HERMES_PLUS_ALLOWED_ORIGINS=https://desktop.example.com`).
+- **The host terminal stays off in the container.** It is enabled only when the
+  sidecar binds to a loopback address, and this container binds `0.0.0.0`;
+  `HERMES_PLUS_HOST_TERMINAL=1` turns it back on, which hands a browser tab a
+  shell in the container.
+
 ## 3. Changing the Hermes version
 
 `HERMES_TAG` selects the official base image tag and is what the sidecar is

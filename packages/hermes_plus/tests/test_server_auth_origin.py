@@ -1,9 +1,11 @@
-"""Front-door policy units: the Origin check, exact public paths, and the
-address the login limiter counts against. No mocks: the policy is pure and the
-scopes are the ASGI scopes the server really sees."""
+"""Front-door and surface policy units: the Origin check, exact public paths,
+the address the login limiter counts against, and where a host shell is
+allowed. No mocks: the policy is pure and the scopes are the ASGI scopes the
+server really sees."""
 
 from __future__ import annotations
 
+from hermes_plus.http import host_terminal
 from hermes_plus.server import auth as auth_module
 from hermes_plus.server.auth import ALLOWED_ORIGINS_ENV, FrontDoorAuth
 from hermes_plus.settings import ServeSettings
@@ -130,3 +132,14 @@ def test_the_login_limiter_uses_the_rightmost_forwarded_address():
     assert trusted.client_address(_scope(headers=spoofed)) == "10.0.0.1"
     plain = FrontDoorAuth(ServeSettings(trust_proxy_headers=False))
     assert plain.client_address(_scope(headers=headers)) == "127.0.0.1"
+
+
+def test_the_host_terminal_is_off_unless_the_bind_is_loopback():
+    """The browser's host shell follows the bind address, not a wish."""
+    assert ServeSettings(host="127.0.0.1").host_terminal is True
+    assert ServeSettings(host="localhost").host_terminal is True
+    assert ServeSettings(host="0.0.0.0").host_terminal is False
+    assert ServeSettings(host="192.0.2.10").host_terminal is False
+    assert ServeSettings(host="0.0.0.0", host_terminal=True).host_terminal is True
+    assert host_terminal.request_allowed(ServeSettings(host="0.0.0.0")) is False
+    assert host_terminal.request_allowed(ServeSettings(host="127.0.0.1")) is True
