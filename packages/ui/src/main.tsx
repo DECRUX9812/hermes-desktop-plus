@@ -14,9 +14,9 @@ import './store/user-bubble-transparency'
 import './store/ui-look'
 // Side-effect: restores chat typography before the first conversation paints.
 import './store/chat-text-scale'
-// Bot Room controller — self-wires the overlay's IPC control channel in the
-// main window (skipped for `?win=` kinds by the store itself).
-import './store/botroom'
+// Bot Room controller — `wireBotRoomControl()` below subscribes the overlay's
+// IPC control channel in the main window (the store skips `?win=` kinds).
+import { wireBotRoomControl } from './store/botroom'
 // Dev-only render/state churn counters. MUST precede the `react-dom` import
 // below: react-dom captures the devtools hook at module init, so bippy has to
 // install during THIS import's evaluation or every commit goes unseen
@@ -47,6 +47,12 @@ installClipboardShim()
 // theme's computed colors inlined; without this guard a dark-theme selection
 // pastes as near-white text into light-background targets.
 installSelectionCopyColorGuard()
+// The Bot Room store is a shared chunk (the in-page bot mascot layer imports it
+// too), so the bundler may evaluate it before the browser host bridge above
+// exists — its own module body is the wrong place to subscribe the overlay's
+// control channel. Wire it here, in `main.tsx`'s body, where the bridge is
+// guaranteed to be installed. No-op in `?win=` documents.
+wireBotRoomControl()
 
 // The perf probe ships in dev, and in a production build ONLY when explicitly
 // opted in (VITE_PERF_PROBE=1) — this lets the perf harness measure a real,

@@ -105,16 +105,29 @@ function wireControl(): void {
   window.hermesDesktop.botroom.onControl((msg) => void handleControl(msg))
 }
 
-// Self-wire in the MAIN renderer only (every window kind imports this store,
-// including `?win=botroom` itself — the overlay window has no business
-// answering its own control channel). Importing the module is enough; no
-// call site needed.
-if (
-  typeof window !== 'undefined' &&
-  window.hermesDesktop?.botroom &&
-  !new URLSearchParams(window.location.search).has('win')
-) {
-  wireControl()
+/**
+ * Wire the overlay's control channel in the MAIN renderer.
+ *
+ * Called from `main.tsx`'s own body rather than here at module-evaluation time:
+ * this store is a SHARED chunk (the in-page bot mascot layer imports it too), so
+ * the bundler is free to evaluate it before `lib/browser-desktop-bridge-install`
+ * — imported earlier by `main.tsx` — has put `window.hermesDesktop` in place. A
+ * self-wire that ran then would find no bridge, quietly never subscribe, and
+ * leave the Bot Room overlay (whose toolbar button opens the window straight
+ * through the bridge) waiting forever for its roster.
+ *
+ * Every window kind imports this store, including `?win=botroom` itself — the
+ * overlay window has no business answering its own control channel — so `?win=`
+ * documents are skipped. Idempotent.
+ */
+export function wireBotRoomControl(): void {
+  if (typeof window === 'undefined' || new URLSearchParams(window.location.search).has('win')) {
+    return
+  }
+
+  if (window.hermesDesktop?.botroom) {
+    wireControl()
+  }
 }
 
 function push(payload: BotRoomStatePayload): void {

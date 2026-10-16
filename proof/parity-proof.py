@@ -378,12 +378,11 @@ async def main() -> int:
         await report.check("the pairing code exchanges for a session token", mobile_pair_exchange)
 
         async def mobile_write_routes() -> str:
-            # Row 25's two write routes. A real reply would run another model
-            # turn, so the check drives the doors themselves: both require the
-            # session credential (they are the paired phone's authenticated
-            # surface, unlike /api/mobile/pair), both refuse an empty body, and a
-            # reply for a session the gateway does not hold maps to 404 instead
-            # of leaking.
+            # Row 25's two write routes, the paired phone's authenticated surface
+            # (unlike /api/mobile/pair). Both are driven for real: a reply with
+            # no credential is refused, an empty body is refused, an over-long
+            # reply is refused, and a reply naming a live session is accepted and
+            # reaches that session's transcript.
             anonymous = httpx.Client(base_url=base, timeout=HTTP_TIMEOUT, follow_redirects=False)
             try:
                 unauthenticated = anonymous.post("/api/mobile/reply", json={})
@@ -391,8 +390,6 @@ async def main() -> int:
                 anonymous.close()
             empty_reply = http.post("/api/mobile/reply", json={})
             empty_respond = http.post("/api/mobile/respond", json={})
-            unknown = http.post(
-                "/api/mobile/reply", json={"session_id": "proof-does-not-exist", "text": "hello"})
             if unauthenticated.status_code != 401:
                 raise RuntimeError(
                     f"an unauthenticated reply answered HTTP {unauthenticated.status_code}, expected 401")
@@ -400,12 +397,40 @@ async def main() -> int:
                 raise RuntimeError(
                     f"an empty body answered HTTP {empty_reply.status_code} / {empty_respond.status_code},"
                     " expected 400 from both")
-            if unknown.status_code != 404:
+            overlong = http.post(
+                "/api/mobile/reply", json={"session_id": session_id, "text": "x" * 40000})
+            if overlong.status_code != 413:
                 raise RuntimeError(
-                    f"a reply for an unknown session answered HTTP {unknown.status_code}: {unknown.text[:200]}")
+                    f"a 40000-character reply answered HTTP {overlong.status_code}, expected 413")
+            if not session_id:
+                raise RuntimeError("no live session to reply into")
+            marker = f"mobile-proof-{random.randrange(16**6):06x}"
+            reply = http.post("/api/mobile/reply", json={"session_id": session_id, "text": marker})
+            if reply.status_code != 200:
+                if not model_expected:
+                    report.record("the mobile reply and respond routes answer", "blocked",
+                                  f"no model provider in this run: the reply answered"
+                                  f" HTTP {reply.status_code} {reply.text[:120]}")
+                    return None
+                raise RuntimeError(
+                    f"a reply into session {session_id} answered HTTP {reply.status_code}: {reply.text[:200]}")
+            # The phone's reply really reached the session: the prompt is in the
+            # session's own transcript, read back through the gateway.
+            deadline = asyncio.get_running_loop().time() + 45
+            transcript = ""
+            while asyncio.get_running_loop().time() < deadline:
+                history = await rpc.call("session.history", {"session_id": session_id})
+                transcript = json.dumps(history or {})
+                if marker in transcript:
+                    break
+                await asyncio.sleep(1.5)
+            if marker not in transcript:
+                raise RuntimeError(
+                    f"the reply text never reached session {session_id}: {transcript[:250]}")
             return ("POST /api/mobile/reply and /api/mobile/respond require the session credential"
-                    f" (no header -> 401) and validate their input"
-                    f" (empty body -> 400, unknown session -> {unknown.status_code})")
+                    f" (no header -> 401), validate their input (empty body -> 400,"
+                    f" over-long reply -> 413), and a reply landed in session {session_id}"
+                    f" as {marker}")
 
         await report.check("the mobile reply and respond routes answer", mobile_write_routes)
 
@@ -437,7 +462,6 @@ async def main() -> int:
             return f"window ticket minted and exchanged for a token (replay -> HTTP {replay.status_code})"
 
         await report.check("a webapp window ticket exchanges for a window session", webapp_window)
-
         # ── 21. Host terminal (WS) ──────────────────────────────────────────
         async def host_terminal() -> str:
             marker = f"hp-proof-{random.randrange(16**8):08x}"
@@ -547,12 +571,28 @@ async def main() -> int:
 
         await report.check("fork.onboarding.state answers", onboarding_state)
 
+        async def reset_setup_profile() -> dict[str, Any]:
+            """The onboarding page's own "start over" action.
+
+            A home that never had a setup profile answers 4072 ("no setup
+            profile to reset"), which is not a failure — there is nothing to
+            reset yet — so this makes one first, exactly like a user who opens
+            onboarding on a fresh install.
+            """
+            try:
+                return await rpc.call("fork.onboarding.reset_setup_profile", {})
+            except RuntimeError as exc:
+                if "4072" not in str(exc):
+                    raise
+            await rpc.call("fork.onboarding.ensure_setup_profile", {})
+            return await rpc.call("fork.onboarding.reset_setup_profile", {})
+
         async def onboarding_setup_profile() -> str:
             # The setup profile is the real onboarding side effect: a profile the
             # adapter creates through the stock CLI, idempotently. The reset call
             # first is the onboarding page's own "start over" action, and it makes
             # this check independent of whether the home already had one.
-            await rpc.call("fork.onboarding.reset_setup_profile", {})
+            await reset_setup_profile()
             first = await rpc.call("fork.onboarding.ensure_setup_profile", {})
             if not first.get("name") or not first.get("path") or first.get("created") is not True:
                 raise RuntimeError(f"ensure_setup_profile answered {json.dumps(first)[:250]}")
@@ -771,7 +811,7 @@ async def main() -> int:
             failed = await rpc.call("fork.onboarding.record_failed_start", {})
             if not isinstance(failed, dict) or not isinstance(failed.get("failed_starts"), int):
                 raise RuntimeError(f"fork.onboarding.record_failed_start answered {json.dumps(failed)[:250]}")
-            reset = await rpc.call("fork.onboarding.reset_setup_profile", {})
+            reset = await reset_setup_profile()
             if not isinstance(reset, dict) or reset.get("reset") is not True or not reset.get("name"):
                 raise RuntimeError(f"fork.onboarding.reset_setup_profile answered {json.dumps(reset)[:250]}")
             setup = await rpc.call("fork.onboarding.ensure_setup_session", {})
@@ -846,8 +886,9 @@ async def main() -> int:
             listed = http.get("/api/share/list", params={"session_id": stored})
             if listed.status_code != 200 or not any(
                     # The list route is a management view: it returns a masked
-                    # `token_preview`, never the token itself.
-                    str(row.get("token_preview")) == token[:6] for row in listed.json().get("shares", [])):
+                    # `token_preview` — the token's LAST characters — never the
+                    # token itself.
+                    str(row.get("token_preview")) == token[-6:] for row in listed.json().get("shares", [])):
                 raise RuntimeError(f"GET /api/share/list does not hold the grant: {listed.text[:250]}")
             revoked = http.post("/api/share/revoke", json={"token": token})
             if revoked.status_code != 200 or revoked.json().get("revoked") is not True:
@@ -872,20 +913,6 @@ async def main() -> int:
                     f" ({len(launch.text)} and {len(window.text)} bytes)")
 
         await report.check("the webapp launcher and child-window pages render", webapp_pages)
-
-        async def worktree_merge() -> str:
-            # Row 28's other half: merging a session worktree back.
-            worktree_path = Path(args.worktree_path)
-            if not worktree_path.is_dir():
-                raise RuntimeError("no worktree: the ensure step did not complete")
-            response = http.post("/api/git/worktree/merge", json={
-                "path": args.demo_project, "worktreePath": str(worktree_path)})
-            if response.status_code not in (200, 409):
-                raise RuntimeError(f"POST /api/git/worktree/merge -> HTTP {response.status_code}: {response.text[:200]}")
-            return (f"POST /api/git/worktree/merge answered HTTP {response.status_code}"
-                    f" ({json.dumps(response.json())[:140]})")
-
-        await report.check("POST /api/git/worktree/merge answers", worktree_merge)
 
         async def git_worktree() -> str:
             worktree_path = Path(args.worktree_path)
@@ -912,6 +939,21 @@ async def main() -> int:
                     f"under {Path(str(result['repoRoot'])).name}, then reported restored:false")
 
         await report.check("POST /api/git/worktree/ensure restores a session worktree", git_worktree)
+
+        async def worktree_merge() -> str:
+            # Row 28's other half: merging a session worktree back. It runs after
+            # the ensure check, which is what leaves a worktree to merge.
+            worktree_path = Path(args.worktree_path)
+            if not worktree_path.is_dir():
+                raise RuntimeError("no worktree: the ensure step did not complete")
+            response = http.post("/api/git/worktree/merge", json={
+                "path": args.demo_project, "worktreePath": str(worktree_path)})
+            if response.status_code not in (200, 409):
+                raise RuntimeError(f"POST /api/git/worktree/merge -> HTTP {response.status_code}: {response.text[:200]}")
+            return (f"POST /api/git/worktree/merge answered HTTP {response.status_code}"
+                    f" ({json.dumps(response.json())[:140]})")
+
+        await report.check("POST /api/git/worktree/merge answers", worktree_merge)
 
         # ── 5/6. session.ask and session.predict_next ───────────────────────
         async def session_ask() -> str:

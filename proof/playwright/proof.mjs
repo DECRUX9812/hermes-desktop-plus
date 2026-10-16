@@ -564,16 +564,35 @@ try {
   })
 
   await check('the first session still holds its messages after a reload', async () => {
-    const clicked = await clickSessionByTitle(page, firstTitle.slice(0, 12))
-    if (!clicked) {
-      throw new Error(`could not click the first session row "${firstTitle}": ${JSON.stringify(railTitles).slice(0, 200)}`)
+    // Reopening a session is a route change, and a reload leaves the app's own
+    // route resume for the session it was on still settling (`use-route-resume`
+    // retries a stranded resume with backoff). A click that lands while that is
+    // in flight can be re-navigated away, so the click is retried — the
+    // assertion below is what decides, and a stale resume cannot satisfy it.
+    let texts = []
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const clicked = await clickSessionByTitle(page, firstTitle.slice(0, 12))
+      if (!clicked) {
+        throw new Error(`could not click the first session row "${firstTitle}": ${JSON.stringify(railTitles).slice(0, 200)}`)
+      }
+      try {
+        await waitForAssistant(page, FIRST_REPLY, 90000)
+        await waitForSettled(page)
+        texts = await assistantTexts(page)
+        break
+      } catch (error) {
+        if (attempt === 2) {
+          texts = await assistantTexts(page)
+          break
+        }
+        await page.waitForTimeout(3000)
+      }
     }
-    await waitForAssistant(page, FIRST_REPLY, 120000)
-    await waitForSettled(page)
     await shot(page, '03-sessions')
-    const texts = await assistantTexts(page)
     if (!texts.some(text => text.toLowerCase().includes(FIRST_REPLY))) {
-      throw new Error(`reopened session shows: ${JSON.stringify(texts).slice(0, 300)}`)
+      throw new Error(`reopened session shows: ${JSON.stringify(texts).slice(0, 300)}`
+        + ` (route ${await page.evaluate(() => window.location.hash)},`
+        + ` rail ${JSON.stringify(railTitles).slice(0, 200)})`)
     }
     return `reopened "${firstTitle}" and its reply is on screen`
   })
@@ -822,11 +841,203 @@ try {
   // proof runner calls right after this browser pass with the same session
   // credential this page holds.
   //
-  // ── S34 INSERTION POINT ──────────────────────────────────────────────────
-  // S34 owns the bot mascots and the 3D Pane opener. Its proof recipe goes
-  // here, ahead of the sections below, so its screenshots keep their own
-  // numbering and its checks read as one block.
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── S34: the 3D Pane opener and the bot mascots (merged from master) ─────
+  // Two feat/hermes-next surfaces are separate OS windows in Electron, opened
+  // by the MAIN process (`apps/desktop/electron/pane3d-ipc.ts`,
+  // `botroom-mascots.ts`), so the shared renderer has no user gesture to
+  // mirror. The browser host renders both itself — a same-origin popup tab for
+  // `?win=pane3d`, an in-page layer for the mascots — and carries its own doors
+  // for them: the palette rows `app/contrib/browser-window-commands.ts`
+  // registers (browser host only, so Electron's palette is unchanged) and the
+  // roster toolbar's eye button. The steps below walk the user path through
+  // those doors and assert the surfaces, not the registration.
+
+  /**
+   * Commit a command-palette row with the keyboard.
+   *
+   * The palette list is `pointer-events: none` until the pointer actually
+   * moves (`usePointerQuiet`), so a Playwright click on a row is intercepted by
+   * `cmdk-root`. Walking the selection with `ArrowDown` and pressing `Enter` is
+   * the path a keyboard user takes, and the only one that works headless.
+   */
+  async function commitPaletteRow(target, label) {
+    await target.keyboard.press('Control+k')
+    const input = target.locator('[data-slot="command-input"]').first()
+    await input.waitFor({ state: 'visible', timeout: 30000 })
+    await input.fill(label)
+    await target.locator('[data-slot="command-item"]').filter({ hasText: label }).first()
+      .waitFor({ state: 'visible', timeout: 30000 })
+    for (let press = 0; press < 40; press += 1) {
+      const selected = target.locator('[data-slot="command-item"][data-selected="true"]').first()
+      const text = (await selected.count()) ? ((await selected.innerText()) || '') : ''
+      if (text.includes(label)) {return}
+      await target.keyboard.press('ArrowDown')
+      await target.waitForTimeout(120)
+    }
+    const rows = await target.locator('[data-slot="command-item"]').allInnerTexts()
+    throw new Error(`the palette never selected a row reading ${JSON.stringify(label)};`
+      + ` rows: ${JSON.stringify(rows).slice(0, 300)}`)
+  }
+
+  /**
+   * Bring the Bots pane's roster on screen.
+   *
+   * The rail entry is a toggle, not a reveal: it is `data-active` while its pane
+   * tab is the open one, and a click then folds the pane away. So the loop reads
+   * that flag, waits out a tab that is already active but still hydrating, and
+   * retries the click (a click can also be swallowed by a re-mount).
+   */
+  async function openBotsPane(target) {
+    const roster = target.locator('[data-slot="bots-roster"]')
+    const entry = target.locator('button[data-rail-entry="hermes-bots:pane"]').first()
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (await roster.isVisible().catch(() => false)) {return}
+      await entry.waitFor({ state: 'visible', timeout: 30000 })
+      if ((await entry.getAttribute('data-active')) === 'true') {
+        await target.waitForTimeout(3000)
+        if (await roster.isVisible().catch(() => false)) {return}
+      }
+      await clickStable(entry, target)
+      await target.waitForTimeout(2500)
+    }
+    if (!(await roster.isVisible().catch(() => false))) {
+      throw new Error('the Bots pane roster (data-slot bots-roster) never became visible')
+    }
+  }
+
+  // A. The palette's `Open 3D Pane` row opens the pane as a popup tab, and the  //    tab paints real avatars. The pane is idle by design (it waits for a
+  //    state), so the check drives its own dev door — the same
+  //    `hermesDesktop.pane3d.playDemo` the Electron pane answers — and asserts
+  //    the painted scene.
+  await check('the command palette opens the 3D Pane in a browser tab', async () => {
+    await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' })
+    await composer(page)
+    // A fresh home blocks the whole app behind the first-run picker
+    // (`z-(--z-onboarding)`), so nothing else is clickable until it is
+    // dismissed the way its own button does.
+    const later = page.getByRole('button', { name: "I'll choose a provider later" })
+    if (await later.count()) {
+      await later.first().click().catch(() => {})
+      await page.waitForTimeout(2000)
+    }
+    await commitPaletteRow(page, 'Open 3D Pane')
+    await shot(page, '06a-palette-3d-pane')
+    const [pane] = await Promise.all([
+      page.waitForEvent('popup', { timeout: 60000 }),
+      page.keyboard.press('Enter'),
+    ])
+    await pane.waitForLoadState('domcontentloaded')
+    const url = pane.url()
+    if (!/win=pane3d/.test(url)) {
+      throw new Error(`the palette opened ${url}, expected a ?win=pane3d tab`)
+    }
+    const demo = await page.evaluate(() => window.hermesDesktop.pane3d.playDemo('launch'))
+    await pane.locator('[data-avatar-id]').first().waitFor({ state: 'attached', timeout: 60000 })
+    const canvases = await pane.locator('canvas').count()
+    const avatar = await pane.locator('[data-avatar-id]').first().getAttribute('data-avatar-id')
+    await pane.waitForTimeout(2500)
+    await shot(pane, '06b-pane3d-demo')
+    await pane.close()
+    if (demo?.ok !== true) {
+      throw new Error(`pane3d.playDemo answered ${JSON.stringify(demo)}`)
+    }
+    if (canvases < 1) {
+      throw new Error(`the pane tab painted no canvas (avatar ${avatar})`)
+    }
+    return `the row opened ${url.replace(BASE, '')} and the launch demo painted avatar "${avatar}"`
+      + ` on ${canvases} canvas`
+  })
+
+  // B. The roster toolbar's mascot button floats the in-page layer: one real
+  //    bot slot (the roster's own `profiles.list` rows, relayed over the
+  //    `botroomMascot` bridge) with a live three.js canvas, and the slot's
+  //    action dot opens the task pill at the size Electron's window uses.
+  await check('the roster toolbar floats the bot mascots and their task pill', async () => {
+    try {
+      await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' })
+      await composer(page)
+      await openBotsPane(page)
+      const toggle = page.getByRole('button', { name: 'Bot mascots over the app' }).first()
+      await toggle.waitFor({ state: 'visible', timeout: 30000 })
+      await clickStable(toggle, page)
+      const slot = page.locator('.hr-layer-slot[data-bot-id]').first()
+      await slot.waitFor({ state: 'attached', timeout: 30000 })
+      const botId = await slot.getAttribute('data-bot-id')
+      const name = ((await slot.locator('.hr-mw-name').first().innerText()) || '').trim()
+      const canvas = await slot.locator('canvas').first().evaluate(node => ({
+        height: node.getAttribute('height'), width: node.getAttribute('width'),
+      }))
+      await page.waitForTimeout(1200)
+      await shot(page, '06c-mascot-layer')
+      if (!/^profile:.+/.test(botId || '')) {
+        throw new Error(`the layer's first slot is ${JSON.stringify(botId)}, expected a profile: bot id`)
+      }
+      if (name !== botId.replace(/^profile:/, '')) {
+        throw new Error(`the slot for ${botId} is labelled ${JSON.stringify(name)}`)
+      }
+      if (canvas.width !== '150' || canvas.height !== '165') {
+        throw new Error(`the mascot canvas is ${canvas.width}x${canvas.height}, expected 150x165`)
+      }
+      // Liveness: the canvas is a live three.js scene, so two frames of the same
+      // slot cannot be byte-identical.
+      const first = await slot.screenshot()
+      await page.waitForTimeout(900)
+      const second = await slot.screenshot()
+      await shot(page, '06d-mascot-slot')
+      if (first.equals(second)) {
+        throw new Error('the mascot canvas did not change between frames (a still, not a live scene)')
+      }
+      // The pill: the slot's action dot is its only door.
+      await slot.hover()
+      await clickStable(slot.locator('.hr-mw-dot').first(), page)
+      const pill = page.locator('.hr-layer-pill[data-bot-id]').first()
+      await pill.waitFor({ state: 'attached', timeout: 30000 })
+      const pillBot = await pill.getAttribute('data-bot-id')
+      const box = await pill.boundingBox()
+      const viewport = page.viewportSize()
+      await page.waitForTimeout(800)
+      await shot(page, '06e-mascot-pill')
+      if (pillBot !== botId) {
+        throw new Error(`the pill is for ${JSON.stringify(pillBot)}, expected ${JSON.stringify(botId)}`)
+      }
+      if (!box || Math.round(box.width) !== 320 || Math.round(box.height) !== 132) {
+        throw new Error(`the pill box is ${box ? `${Math.round(box.width)}x${Math.round(box.height)}` : 'unmeasurable'},`
+          + ' expected 320x132')
+      }
+      if (box.x < 0 || box.y < 0 || box.x + box.width > viewport.width || box.y + box.height > viewport.height) {
+        throw new Error(`the pill at ${Math.round(box.x)},${Math.round(box.y)} is not fully inside`
+          + ` the ${viewport.width}x${viewport.height} viewport`)
+      }
+      await page.keyboard.press('Escape')
+      await pill.waitFor({ state: 'detached', timeout: 15000 })
+      // Off again through the palette toggle: the layer unmounts and the app
+      // keeps running.
+      await commitPaletteRow(page, 'Bot mascots over the app')
+      await page.keyboard.press('Enter')
+      await page.locator('.hr-layer').waitFor({ state: 'detached', timeout: 30000 })
+      await shot(page, '06f-mascot-layer-off')
+      return `the layer floated ${botId} ("${name}", canvas 150x165, live),`
+        + ` its dot opened the 320x132 pill at ${Math.round(box.x)},${Math.round(box.y)},`
+        + ' and the palette toggle took the layer back off'
+    } catch (error) {
+      // A bare `locator.waitFor` timeout says nothing about what the pane or the
+      // layer looked like; the dump is what makes a failure actionable.
+      const state = await page.evaluate(() => ({
+        buttons: [...document.querySelectorAll('button[aria-label]')]
+          .map(node => node.getAttribute('aria-label')).filter(Boolean).slice(0, 40),
+        hrLayer: document.querySelectorAll('.hr-layer').length,
+        hrSlots: document.querySelectorAll('.hr-layer-slot').length,
+        railEntries: [...document.querySelectorAll('[data-rail-entry]')]
+          .map(node => node.getAttribute('data-rail-entry')),
+        roster: document.querySelectorAll('[data-slot="bots-roster"]').length,
+        route: location.hash,
+        text: (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 300),
+      })).catch(() => null)
+      diagnostics.mascots = state
+      await shot(page, '06c-mascot-failure').catch(() => {})
+      throw new Error(`${error && error.message ? error.message : error}; page state ${JSON.stringify(state)}`)
+    }
+  })
 
   // (a) The bundled extras skills are real, installed skills: the Skills tab
   //     of the Capabilities page renders one toggle row per installed skill,
@@ -1227,8 +1438,12 @@ try {
         await shot(page, '12-desktop-plugin')
         const switches = await page.locator('[data-slot="switch"]')
           .evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))
+        // The inventory labels a row by the plugin's TITLE, not its directory
+        // id (`hello-runtime` is listed as `Desktop: Hello Runtime`), so the id
+        // is humanized before matching.
+        const humanized = DESKTOP_PLUGIN.replace(/[-_]+/g, ' ').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const listed = switches.filter(label => /(desktop|agent)/i.test(label || '')
-          && new RegExp(`: ${DESKTOP_PLUGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i').test(label || ''))
+          && new RegExp(`: ${humanized}$`, 'i').test(label || ''))
         const text = await bodyText(page)
         diagnostics.desktopPlugin = { id: DESKTOP_PLUGIN, switches: listed, marker, statusText }
         if (!listed.length) {
