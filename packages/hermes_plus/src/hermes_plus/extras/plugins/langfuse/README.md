@@ -17,12 +17,12 @@ For manual source-checkout setup, see the
 
 ## Required credentials
 
-Set these in `~/.hermes/.env` (or via `hermes tools`):
+Set these in **Settings → Plugins → Langfuse** (the gear on the plugin row;
+values are stored in `.env`), or in `~/.hermes/.env` directly:
 
 ```bash
 HERMES_LANGFUSE_PUBLIC_KEY=pk-lf-...
 HERMES_LANGFUSE_SECRET_KEY=sk-lf-...
-HERMES_LANGFUSE_BASE_URL=https://cloud.langfuse.com   # or your self-hosted URL
 ```
 
 Without the SDK or credentials the hooks no-op silently — the plugin fails
@@ -37,26 +37,37 @@ hermes chat -q "hello"              # then check Langfuse for a "Hermes turn" tr
 
 Generation observations include the Hermes system prompt when the provider
 uses a separate `system` param (Anthropic Messages API). Open an **LLM call**
-child span to inspect `role: system` (truncated via `HERMES_LANGFUSE_MAX_CHARS`).
+child span to inspect `role: system` (truncated via the `max_chars` setting).
 
 ## Optional tuning
 
-```bash
-HERMES_LANGFUSE_ENV=production       # environment tag
-HERMES_LANGFUSE_RELEASE=v1.0.0       # release tag
-HERMES_LANGFUSE_SAMPLE_RATE=0.5      # sample 50% of traces
-HERMES_LANGFUSE_MAX_CHARS=12000      # max chars per field (default: 12000)
-HERMES_LANGFUSE_MAX_DEPTH=4          # max payload depth (default: 4)
-HERMES_LANGFUSE_CAPTURE=sanitized    # content capture mode (see below)
-HERMES_LANGFUSE_DEBUG=true           # verbose plugin logging
-```
+Tuning knobs live in **Settings → Plugins → Langfuse** (or `hermes config set
+plugins.entries.langfuse.settings.<key> <value>`): `base_url`,
+`environment`, `release`, `sample_rate`, `max_chars`, `max_depth`,
+`capture`, `debug` — each with the type, description and default shown in the
+settings form.
 
-`HERMES_LANGFUSE_MAX_DEPTH` controls nested payload capture in both `sanitized`
+| setting | default | replaces (deprecated env var) |
+|---------|---------|-------------------------------|
+| `base_url` | `https://cloud.langfuse.com` | `HERMES_LANGFUSE_BASE_URL` |
+| `environment` | (empty) | `HERMES_LANGFUSE_ENV` |
+| `release` | (empty) | `HERMES_LANGFUSE_RELEASE` |
+| `sample_rate` | `1.0` | `HERMES_LANGFUSE_SAMPLE_RATE` |
+| `max_chars` | `12000` | `HERMES_LANGFUSE_MAX_CHARS` |
+| `max_depth` | `4` | `HERMES_LANGFUSE_MAX_DEPTH` |
+| `capture` | `sanitized` | `HERMES_LANGFUSE_CAPTURE` |
+| `debug` | `false` | `HERMES_LANGFUSE_DEBUG` |
+
+The `HERMES_LANGFUSE_*` env vars above are **deprecated** but still honoured
+for homes configured before the settings form existed: the plugin setting wins
+when set, then the env var, then the default.
+
+`max_depth` controls nested payload capture in both `sanitized`
 and `full` modes, including tool arguments and JSON tool results. The root is
 depth 0; each dictionary value or array element adds one level. Values beyond
 the limit become `<max-depth>`, including scalars. For deeper MCP responses,
-set it to a higher non-negative integer (for example, `10`) in the Hermes
-process environment. Unset or blank values default to `4`; invalid or negative
+set it to a higher non-negative integer (for example, `10`) in the settings
+form. Unset or blank values default to `4`; invalid or negative
 values log a warning and fall back to `4`. `0` keeps only the root level.
 Increasing the depth exports more content and may produce larger traces;
 secret redaction, string-length limits, and the 50-item collection limit remain
@@ -64,7 +75,7 @@ unchanged. `metadata` mode still omits content.
 
 ## Capture modes
 
-`HERMES_LANGFUSE_CAPTURE` controls how much *content* (prompts, responses,
+The `capture` setting controls how much *content* (prompts, responses,
 tool arguments/results) is exported. Structural metadata — IDs, roles, tool
 names, token usage, cost, timing — is always captured in every mode.
 

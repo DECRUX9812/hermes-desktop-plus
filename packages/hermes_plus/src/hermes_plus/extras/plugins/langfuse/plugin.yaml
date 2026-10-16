@@ -10,11 +10,54 @@ config_schema:
   public_key:
     type: secret
     env: HERMES_LANGFUSE_PUBLIC_KEY
+    label: "Public key"
     description: "Langfuse public key (pk-lf-...); stored in .env, read through the profile secret scope."
   secret_key:
     type: secret
     env: HERMES_LANGFUSE_SECRET_KEY
+    label: "Secret key"
     description: "Langfuse secret key (sk-lf-...); stored in .env, read through the profile secret scope."
+  base_url:
+    type: str
+    label: "Base URL"
+    description: "Langfuse server URL — the cloud default or your self-hosted instance."
+    default: "https://cloud.langfuse.com"
+  environment:
+    type: str
+    label: "Environment tag"
+    description: "Environment tag attached to every trace (e.g. production, staging)."
+    default: ""
+  release:
+    type: str
+    label: "Release tag"
+    description: "Release identifier attached to every trace (e.g. v1.0.0)."
+    default: ""
+  sample_rate:
+    type: float
+    label: "Sample rate"
+    description: "Fraction of traces sampled, between 0 (none) and 1 (all)."
+    default: 1.0
+  max_chars:
+    type: int
+    label: "Max chars per field"
+    description: "Maximum characters exported per string field before truncation."
+    default: 12000
+  max_depth:
+    type: int
+    label: "Max payload depth"
+    description: "Maximum nesting depth for exported payloads; deeper values become <max-depth>."
+    default: 4
+  capture:
+    type: str
+    label: "Capture mode"
+    description: "How much content is exported: metadata (shapes/sizes only), sanitized (secret-pattern redaction + truncation) or full (raw content, truncated only)."
+    choices: [metadata, sanitized, full]
+    default: sanitized
+  debug:
+    type: bool
+    label: "Debug logging"
+    description: "Verbose plugin logging to the Hermes log."
+    default: false
 provides_hooks:
   - pre_api_request
   - post_api_request
