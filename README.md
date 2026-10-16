@@ -17,6 +17,10 @@ environment, copies the bridge plugin into your Hermes home, and finishes with
 `HERMES_PLUS_INSTALL_HERMES=1`, the installer runs upstream's installer pinned to
 Hermes Agent `v0.22.1`.
 
+On a machine that already runs stock Hermes, the first install takes about three
+minutes (nearly all of it downloading the sidecar's Python dependencies) and about
+ten seconds after that; Hermes itself is never rebuilt.
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DECRUX9812/hermes-desktop-plus/v0.1.0/install.sh | sh
 ```
