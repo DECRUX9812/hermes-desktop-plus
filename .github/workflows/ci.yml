@@ -33,7 +33,7 @@ jobs:
       - name: Create the venv and install the package
         run: |
           set -euo pipefail
-          uv venv .venv --python ${{ matrix.python-version }}
+          uv venv --clear .venv --python ${{ matrix.python-version }}
           uv pip install --python .venv/bin/python -e 'packages/hermes_plus[test]'
       - name: Unit and integration tests
         # Contract tests need a stock Hermes (the `contract` job); model tests
@@ -85,7 +85,7 @@ jobs:
       - name: Create the venv and install the package
         run: |
           set -euo pipefail
-          uv venv .venv --python 3.11
+          uv venv --clear .venv --python 3.11
           uv pip install --python .venv/bin/python -e 'packages/hermes_plus[test]'
       - name: Provision stock Hermes at the pinned tag
         # The real install layout: <root>/hermes-agent with HERMES_HOME=<root>.
