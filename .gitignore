@@ -1,10 +1,4 @@
-.oc/*
-!.oc/SHIP-PLAN.md
-!.oc/QUEUE.md
-!.oc/SHIP-PROGRESS.md
-!.oc/SHIP-DONE.md
-!.oc/research/
-!.oc/reports/
+.oc/
 node_modules/
 __pycache__/
 *.pyc
