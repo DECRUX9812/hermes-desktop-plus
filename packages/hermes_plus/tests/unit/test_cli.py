@@ -237,11 +237,16 @@ def test_wheel_build_filename_matches_version() -> None:
     assert match, "Could not find version in pyproject.toml"
     expected_version = match.group(1)
 
-    # Build the wheel
+    # Build the wheel. Skip the web UI build: this test only checks the
+    # wheel filename/version, so building the UI would be wasted work.
+    build_env = dict(os.environ)
+    build_env["HERMES_PLUS_SKIP_UI_BUILD"] = "1"
+    build_env["HERMES_PLUS_ALLOW_NO_UI"] = "1"
     with tempfile.TemporaryDirectory() as tmpdir:
         result = subprocess.run(
             ["uv", "build", "--wheel", "packages/hermes_plus", "--out-dir", tmpdir],
             cwd=repo_root,
+            env=build_env,
             capture_output=True,
             text=True,
             timeout=120,
