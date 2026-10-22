@@ -6,12 +6,9 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { seedExistingInstall } from '@/test/jsdom'
-
 describe('$layoutEditRevealsHidden', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    seedExistingInstall()
     vi.resetModules()
   })
 

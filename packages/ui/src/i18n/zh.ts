@@ -3,19 +3,12 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 import { defineLocale, type TranslationOverrides } from './define-locale'
 import { introZh } from './intro-zh'
 import { zhAuxTasks } from './zh_aux_tasks'
-import { zhCatalogInstall } from './zh_catalog_install'
-import { zhClarify } from './zh_clarify'
-import { zhConnectorCard } from './zh_connector_card'
-import { zhFirstRun } from './zh_first_run'
 import { zhLocalModels } from './zh_local_models'
 import { zhModelMenu } from './zh_model_menu'
 import { zhNotices } from './zh_notices'
 import { zhOnboarding } from './zh_onboarding'
 import { zhProjects } from './zh_projects'
 import { zhSharedMetrics } from './zh_shared_metrics'
-import { zhThemePicker } from './zh_theme_picker'
-import { zhToolCards } from './zh_tool_cards'
-import { zhUpdateChannel } from './zh_update_channel'
 
 export const zhOverrides = {
   externalOpenFailed: {
@@ -25,7 +18,6 @@ export const zhOverrides = {
     close: '关闭'
   },
   sharedMetrics: zhSharedMetrics,
-  firstRun: zhFirstRun,
   intro: introZh,
   catalog: {
     add: '添加',
@@ -87,7 +79,6 @@ export const zhOverrides = {
     back: '返回结果'
   },
   connectors: {
-    ...zhConnectorCard,
     title: '连接你的应用',
     connect: '连接',
     skip: '暂不连接',
@@ -371,15 +362,6 @@ export const zhOverrides = {
 
   ...zhNotices,
 
-  billingBlock: {
-    titleNous: 'Nous 额度已用尽',
-    titleProvider: provider => `额度已用尽 — ${provider}`,
-    fallbackMessage: '您的账户额度已用尽。请充值以继续使用。',
-    openBilling: '打开账单',
-    addCredits: '添加额度',
-    dismiss: '忽略'
-  },
-
   sendDiagnostics: {
     title: '向 Nous 发送诊断信息',
     privacyNotice:
@@ -409,7 +391,6 @@ export const zhOverrides = {
     search: '搜索',
     searchTitle: '搜索会话、视图与操作',
     swapSidebarSides: '交换侧边栏位置',
-    moreTools: '更多工具',
     hideRightSidebar: '隐藏右侧栏',
     showRightSidebar: '显示右侧栏',
     unreadSessions: count => (count === 1 ? '1 个未读会话' : `${count} 个未读会话`),
@@ -497,9 +478,7 @@ export const zhOverrides = {
       'view.terminalPaste': '粘贴到终端',
       'view.closeTab': '关闭标签',
       'view.reopenTab': '重新打开已关闭的标签',
-      'view.splitSession': '拆分为新会话',
       'view.flipPanes': '交换侧边栏位置',
-      'view.sessionOverview': '会话总览',
       'view.findInPage': '页面内查找',
       'view.findNext': '查找下一个',
       'view.findPrevious': '查找上一个',
@@ -747,7 +726,6 @@ export const zhOverrides = {
         desktopOnlyNote: '仅桌面包不会安装后端智能体插件。',
         insecureWarning: '此 URL 使用了不安全的本地 scheme。生产环境请优先使用 https:// 或 git@。',
         securityIntro: '请仅安装你信任的来源 — 如需了解将添加的内容，可先查看下方仓库。',
-        securityHeading: '安全审查',
         sourceHeading: '源代码',
         viewRepository: '查看仓库',
         viewPluginFiles: '查看插件文件',
@@ -769,20 +747,7 @@ export const zhOverrides = {
         agentFailed: '智能体插件安装失败',
         installUncertain: 'Hermes 已停止等待安装结果，但插件可能仍在安装。关闭此窗口并刷新插件列表，然后再尝试安装。',
         desktopFailed: '桌面插件安装失败',
-        missingEnv: (_name, vars) => `缺少环境变量：${vars}。请在设置 → 密钥中添加。`,
-        verified: '已验证',
-        unverified: '未验证',
-        reviewedByNous: '已由 Nous 审核。',
-        installsAndEnables: profile => `安装到 ${profile}，并立即启用。`,
-        installsOnly: profile => `安装到 ${profile}。`,
-        advanced: '高级',
-        versionLabel: '版本',
-        reviewedPin: sha => (sha ? `已审核的固定提交 ${sha}` : '已审核的固定提交'),
-        reviewedHeading: '已审核的目录条目',
-        reviewedIntro: '此条目已在其固定提交处经过人工审核。你仍可在下方检查确切代码。',
-        catalogPinned: (name, sha) => `Hermes 目录条目「${name}」— agent 部分将安装在经过审核的固定提交${sha ? ` ${sha}` : ''}，而不是分支最新代码。`,
-        latestCommit: '最新提交',
-        nothingToInstall: '此包在这里没有可安装的内容。'
+        missingEnv: (_name, vars) => `缺少环境变量：${vars}。请在设置 → 密钥中添加。`
       }
     },
     notifications: {
@@ -1385,7 +1350,9 @@ export const zhOverrides = {
       screenRecording: '屏幕录制',
       driverHealth: '驱动健康状态'
     },
-    about: { updates: '更新', channel: zhUpdateChannel },
+    about: {
+      updates: '更新'
+    },
     config: {
       minimizeToTrayTitle: '最小化到托盘',
       minimizeToTrayDesc:
@@ -1434,12 +1401,7 @@ export const zhOverrides = {
       voiceShortcutHintTitle: '语音录制快捷键',
       voiceShortcutHintDesc:
         '请在“设置 → 键盘快捷键”中设置语音录制快捷键（“开始 / 停止语音对话”）。voice.record_key 配置项仅适用于 CLI 和 TUI。',
-      showOptions: '显示选项',
-      developerTitle: '开发者',
-      resetOnboardingTitle: '重置初始设置',
-      resetOnboardingDesc: '清除初始设置状态并重新运行首次设置。',
-      resetOnboardingAction: '重置',
-      resetOnboardingFailed: '重置初始设置失败'
+      showOptions: '显示选项'
     },
     hudModifier: {
       title: '轻按唤出 HUD',
@@ -2329,8 +2291,6 @@ export const zhOverrides = {
       catalogProvenance: (sha: string) => `从 Hermes 目录安装${sha ? `，固定提交 ${sha}` : ''}。`,
       pinnedProvenance: (sha: string) => `已固定到提交 ${sha}。重新固定前将拒绝更新。`,
       pinnedBadge: (sha: string) => `固定 @ ${sha}`,
-      tierOfficial: '官方',
-      tierCommunity: '社区',
       updateToPin: (sha: string) => `更新到 ${sha}`,
       updateFailed: (name: string) => `无法更新 ${name}`,
       updated: (name: string) => `${name} 已更新到当前目录固定提交。重启网关后生效。`,
@@ -3065,7 +3025,6 @@ export const zhOverrides = {
     switchToConnection: name => `切换到 ${name}`,
     switchConnectionFailed: name => `无法连接到 ${name}`,
     manageProfiles: '管理配置档案…',
-    railMore: '更多配置档案操作',
     connectGateway: '管理网关…',
     fleet: {
       allOnGateway: '此网关上的全部配置档案',
@@ -3521,7 +3480,6 @@ export const zhOverrides = {
     },
     nav: {
       'new-session': '新建会话',
-      activity: '活动',
       capabilities: '技能与工具',
       messaging: '消息平台',
       artifacts: '产物',
@@ -3537,8 +3495,6 @@ export const zhOverrides = {
     },
     searchAria: '搜索会话',
     railAria: '应用导航',
-    railPlugins: '插件',
-    railPluginsHint: '插件：打开或安装',
     searchPlaceholder: '搜索会话…',
     clearSearch: '清除搜索',
     noMatch: query => `没有会话匹配"${query}"。`,
@@ -3614,7 +3570,6 @@ export const zhOverrides = {
       needsInput: '需要你输入',
       waitingForAnswer: '正在等待你的回答',
       finishedUnread: '已完成 — 未读',
-      progressRing: (done, total) => `已完成 ${done}/${total} 步`,
       backgroundRunning: '后台任务运行中',
       draftSession: '草稿 — 尚未发送',
       continueOnPhone: '在手机上继续',
@@ -3720,7 +3675,6 @@ export const zhOverrides = {
       thisMonth: '本月'
     },
     statusDivider: {
-      needsYou: '需要你',
       working: '进行中',
       done: '已完成'
     },
@@ -3738,19 +3692,9 @@ export const zhOverrides = {
       profile: '配置文件',
       source: '来源',
       started: '开始时间',
-      updated: '更新时间',
-      lastTool: '上次工具',
-      planFraction: (done, total) => `${done}/${total}`,
-      more: count => `还有 ${count} 项`,
-      stopFailed: '无法停止会话'
+      updated: '更新时间'
     },
     markAllRead: '全部标记为已读'
-  },
-
-  sessionOverview: {
-    title: '会话总览',
-    empty: '没有正在进行的会话',
-    newSession: '新建会话'
   },
 
   composer: {
@@ -3785,24 +3729,6 @@ export const zhOverrides = {
     steerTurn: '引导当前回合',
     stop: '停止',
     send: '发送',
-    broadcastTip: '发送到所有窗格',
-    broadcastNote: '仅发送文本——附件保留在此窗格',
-    broadcastOn: '所有窗格',
-    broadcastSummary: (sent, queued, skipped, failed) => {
-      const extras: string[] = []
-
-      if (skipped > 0) {
-        extras.push(`${skipped} 个已跳过`)
-      }
-
-      if (failed > 0) {
-        extras.push(`${failed} 个失败`)
-      }
-
-      return extras.length > 0
-        ? `已发送到 ${sent + queued} 个窗格，${extras.join('，')}`
-        : `已发送到 ${sent + queued} 个窗格`
-    },
     speaking: '讲话中',
     transcribing: '转写中',
     thinking: '思考中',
@@ -4174,7 +4100,6 @@ export const zhOverrides = {
       heartbeatEveryHours: hours => `每 ${hours} 小时`,
       heartbeatEverySeconds: seconds => `每 ${seconds} 秒`,
       heartbeatNext: time => `下次 ${time}`,
-      heartbeatDueWaitingForIdle: '已到期，等待会话空闲',
       heartbeatActions: '心跳操作',
       pauseHeartbeat: '暂停心跳',
       resumeHeartbeat: '恢复心跳',
@@ -4964,8 +4889,6 @@ export const zhOverrides = {
     closeToRight: '关闭右侧',
     closeAll: '全部关闭',
     newSessionTab: '新建会话标签',
-    splitSession: '拆分会话',
-    splitSessionCapped: '最多可并排显示 4 个会话',
     newTab: '新建标签页',
     pluginDisabled: pluginId => `插件“${pluginId}”已禁用`,
     pluginDisabledBody: '在 技能与工具 → 插件 中重新启用即可恢复面板。',
@@ -5100,6 +5023,10 @@ export const zhOverrides = {
         ssl_cert_verification: {
           title: '安全连接失败',
           body: provider => `Hermes 无法验证与 ${provider} 的安全连接。请检查网络或代理设置，或切换服务商后重新发送。`
+        },
+        cron_session_read_only: {
+          title: '此聊天属于一个定时任务',
+          body: '它只运行该任务，因此你的消息未被执行。请新建聊天后再发送。'
         }
       },
       errorLayers: {
@@ -5163,11 +5090,6 @@ export const zhOverrides = {
       command: '命令',
       moreOptions: '更多审批选项',
       allowSession: '允许本会话',
-      allowOnce: '允许一次',
-      alwaysAllowHere: '在此始终允许',
-      deny: '拒绝',
-      cardTitle: '允许运行此命令？',
-      cardDetailsTitle: '检查此更改',
       alwaysAllowMenu: '始终允许…',
       jumpToApproval: '需要审批',
       reject: '拒绝',
@@ -5176,10 +5098,45 @@ export const zhOverrides = {
         `这会将“${pattern}”模式加入永久允许列表 (~/.hermes/config.yaml)。Hermes 对类似命令将不再询问，包括当前会话和未来会话。`,
       alwaysAllow: '始终允许'
     },
-    clarify: zhClarify,
-    toolCards: zhToolCards,
-    themePicker: zhThemePicker,
-    catalogInstall: zhCatalogInstall,
+    clarify: {
+      notReady: '澄清请求尚未就绪',
+      gatewayDisconnected: 'Hermes 网关未连接',
+      sendFailed: '无法发送澄清响应',
+      loadingQuestion: '正在加载问题…',
+      other: '其他 (输入你的答案)',
+      placeholder: '输入你的答案…',
+      skip: '跳过',
+      skipped: '已跳过',
+      noAnswer: '未回答',
+      confirmAndContinueLabel: '确认并继续',
+      singleSelectHint: '选一个',
+      multiSelectHint: '可多选',
+      oneQuestion: '1 个问题',
+      questionProgress: (answered, total) => `已回答 ${answered}/${total}`,
+      notDelivered: '此问题未送达应用，无法在此回答。请按停止结束本轮，然后在聊天中回复。'
+    },
+    catalogInstall: {
+      preparing: '正在准备安装…',
+      install: '安装',
+      advanced: '高级',
+      skip: '跳过',
+      installing: '正在安装…',
+      installed: '已安装',
+      notInstalled: '未安装',
+      failed: '失败',
+      showNames: '显示名称',
+      hideNames: '隐藏名称',
+      skill: name => `技能 ${name}`,
+      kind: { plugin: '插件', skill: '技能' },
+      tier: { official: '官方', community: '社区' },
+      targetProfile: profile => `安装到你的 ${profile} 配置文件`,
+      sendFailed: '无法发送你的回复，请重试。',
+      commitLabel: '提交',
+      subdirLabel: '文件夹',
+      scan: { passed: '扫描通过', warnings: '扫描发现警告', failed: '扫描未通过' },
+      requirementsLabel: '要求',
+      credentialsHeading: '凭据'
+    },
     mcpSetup: {
       installTitle: '添加 MCP 服务器',
       enableTitle: '启用 MCP 服务器',

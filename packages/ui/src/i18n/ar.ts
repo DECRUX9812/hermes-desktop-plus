@@ -8,13 +8,11 @@ import { arCommandCenter } from './ar_command_center'
 import { arCommon } from './ar_common'
 import { arConnectors } from './ar_connectors'
 import { arDiagnostics } from './ar_diagnostics'
-import { arFirstRun } from './ar_first_run'
 import { arSettings } from './ar_settings'
 import { defineLocale, type TranslationOverrides } from './define-locale'
 
 export const arOverrides = {
   sharedMetrics: arCommon.sharedMetrics,
-  firstRun: arFirstRun,
   externalOpenFailed: arChrome.externalOpenFailed,
   sessionImport: arConnectors.sessionImport,
   sendDiagnostics: arDiagnostics.sendDiagnostics,
@@ -40,12 +38,6 @@ export const arOverrides = {
   artifactPreview: arArtifacts.artifactPreview,
   sidebar: arChrome.sidebar,
   composer: arChat.composer,
-
-  sessionOverview: {
-    title: 'نظرة عامة على الجلسات',
-    empty: 'لا توجد جلسات نشطة',
-    newSession: 'جلسة جديدة'
-  },
   statusStack: arChat.statusStack,
   updates: arBoot.updates,
   install: arBoot.install,
@@ -95,15 +87,6 @@ export const arOverrides = {
   },
 
   connectors: {
-    directory: {
-      suggested: 'مقترحة',
-      allApps: 'كل التطبيقات',
-      receiptConnected: apps => `متصلة: ${apps}`,
-      receiptNone: 'لم يتم ربط تطبيقات جديدة',
-      receiptTimedOut: 'أُغلقت بعد 5 دقائق',
-      finishInBrowser: 'أكمل في المتصفح',
-      signInFailed: 'تعذّر الاتصال. انقر لإعادة المحاولة'
-    },
     title: 'اربط تطبيقاتك',
     connect: 'ربط',
     skip: 'ليس الآن',

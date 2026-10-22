@@ -32,7 +32,6 @@ export const arChrome = {
     search: 'بحث',
     searchTitle: 'البحث في الجلسات والعروض والإجراءات',
     swapSidebarSides: 'تبديل جانبي الأشرطة',
-    moreTools: 'أدوات أخرى',
     hideRightSidebar: 'إخفاء الشريط الأيمن',
     showRightSidebar: 'إظهار الشريط الأيمن',
     unreadSessions: count => (count === 1 ? 'جلسة واحدة غير مقروءة' : `${count} جلسات غير مقروءة`),
@@ -114,9 +113,7 @@ export const arChrome = {
       'view.selectionToComposer': 'إرسال التحديد إلى المحرّر',
       'view.terminalCopy': 'نسخ تحديد الطرفية',
       'view.terminalPaste': 'لصق في الطرفية',
-      'view.splitSession': 'تقسيم إلى جلسة جديدة',
       'view.flipPanes': 'تبديل جانبي الشريط الجانبي',
-      'view.sessionOverview': 'نظرة عامة على الجلسات',
       'appearance.toggleMode': 'تبديل الفاتح / الداكن',
       'profile.default': 'الانتقال إلى الملف الشخصي الافتراضي',
       'profile.switch.1': 'الانتقال إلى الملف الشخصي 1',
@@ -168,11 +165,7 @@ export const arChrome = {
       profile: 'الملف الشخصي',
       source: 'المصدر',
       started: 'بدأ',
-      updated: 'آخر تحديث',
-      lastTool: 'آخر أداة',
-      planFraction: (done, total) => `${done} من ${total}`,
-      more: count => `+${count} المزيد`,
-      stopFailed: 'تعذّر إيقاف الجلسة'
+      updated: 'آخر تحديث'
     },
     markAllRead: 'وضع علامة مقروء على الكل',
     filter: {
@@ -219,7 +212,6 @@ export const arChrome = {
     },
     nav: {
       'new-session': 'جلسة جديدة',
-      activity: 'النشاط',
       capabilities: 'المهارات',
       messaging: 'المراسلة',
       artifacts: 'العناصر',
@@ -237,8 +229,6 @@ export const arChrome = {
       toSimple: 'العودة إلى الواجهة المبسّطة المركّزة على المحادثة.'
     },
     searchAria: 'البحث في الجلسات',
-    railPlugins: 'الإضافات',
-    railPluginsHint: 'الإضافات: فتح أو تثبيت',
     searchPlaceholder: 'البحث في الجلسات...',
     clearSearch: 'مسح البحث',
     noMatch: query => `لا توجد جلسات تطابق "${query}"`,
@@ -358,11 +348,6 @@ export const arChrome = {
     loading: 'جار التحميل...',
     loadMore: 'تحميل المزيد',
     loadCount: step => `تحميل ${step} أخرى`,
-    statusDivider: {
-      needsYou: 'يحتاج إليك',
-      working: 'قيد التنفيذ',
-      done: 'مكتملة'
-    },
     row: {
       pin: 'تثبيت',
       unpin: 'إلغاء التثبيت',
@@ -389,7 +374,6 @@ export const arChrome = {
       backgroundRunning: 'تعمل في الخلفية',
       draftSession: 'مسودة — لم تُرسل بعد',
       finishedUnread: 'اكتملت وفيها جديد',
-      progressRing: (done, total) => `${done} من ${total} خطوات مكتملة`,
       hideTabBar: 'إخفاء شريط التبويبات',
       openInNewTab: 'فتح في تبويب جديد',
       openInSplit: 'فتح في تقسيم',
@@ -433,7 +417,7 @@ export const arChrome = {
       favorites: 'المفضلة',
       addFavorite: 'إضافة إلى المفضلة',
       removeFavorite: 'إزالة من المفضلة',
-      favoownerortcut: '⇧ نقرة',
+      favoriteShortcut: '⇧ نقرة',
       fast: 'سريع',
       free: 'مجاني',
       cacheRead: 'قراءة من الذاكرة المؤقتة',
@@ -619,8 +603,6 @@ export const arChrome = {
     closeOthers: 'إغلاق الأخرى',
     closeToRight: 'إغلاق ما على اليمين',
     closeAll: 'إغلاق الكل',
-    splitSession: 'تقسيم الجلسة',
-    splitSessionCapped: 'حتى 4 جلسات جنبًا إلى جنب',
     pluginDisabled: pluginId => `الإضافة "${pluginId}" معطلة`,
     pluginDisabledBody: 'أعد تفعيلها من القدرات ← الإضافات لإرجاع اللوحة.',
     missingPane: paneId => `لوحة مفقودة: ${paneId}`,

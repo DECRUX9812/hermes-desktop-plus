@@ -23,14 +23,14 @@ describe('pet gallery pet.info sync', () => {
     vi.restoreAllMocks()
   })
 
-  it('uses pet.info.meta and keeps the cached spdemoeet when the revision is current', async () => {
+  it('uses pet.info.meta and keeps the cached spritesheet when the revision is current', async () => {
     setPetInfo({
       enabled: true,
       slug: 'boba',
       displayName: 'Old Boba',
       scale: 0.33,
-      spdemoeetBase64: 'large-sprite-payload',
-      spdemoeetRevision: '100:2048',
+      spritesheetBase64: 'large-sprite-payload',
+      spritesheetRevision: '100:2048',
       frameW: 192,
       frameH: 208
     })
@@ -46,7 +46,7 @@ describe('pet gallery pet.info sync', () => {
           slug: 'boba',
           displayName: 'Boba',
           scale: 0.5,
-          spdemoeetRevision: '100:2048'
+          spritesheetRevision: '100:2048'
         }
       }
 
@@ -69,21 +69,21 @@ describe('pet gallery pet.info sync', () => {
       slug: 'boba',
       displayName: 'Boba',
       scale: 0.5,
-      spdemoeetBase64: 'large-sprite-payload',
-      spdemoeetRevision: '100:2048',
+      spritesheetBase64: 'large-sprite-payload',
+      spritesheetRevision: '100:2048',
       frameW: 192,
       frameH: 208
     })
   })
 
-  it('fetches full pet.info when metadata reports a new spdemoeet revision', async () => {
+  it('fetches full pet.info when metadata reports a new spritesheet revision', async () => {
     setPetInfo({
       enabled: true,
       slug: 'boba',
       displayName: 'Boba',
       scale: 0.33,
-      spdemoeetBase64: 'old-sprite-payload',
-      spdemoeetRevision: '100:2048'
+      spritesheetBase64: 'old-sprite-payload',
+      spritesheetRevision: '100:2048'
     })
 
     const requestMock = vi.fn(async (method: string) => {
@@ -97,7 +97,7 @@ describe('pet gallery pet.info sync', () => {
           slug: 'boba',
           displayName: 'Boba',
           scale: 0.33,
-          spdemoeetRevision: '101:4096'
+          spritesheetRevision: '101:4096'
         }
       }
 
@@ -107,8 +107,8 @@ describe('pet gallery pet.info sync', () => {
           slug: 'boba',
           displayName: 'Boba',
           scale: 0.33,
-          spdemoeetBase64: 'new-sprite-payload',
-          spdemoeetRevision: '101:4096'
+          spritesheetBase64: 'new-sprite-payload',
+          spritesheetRevision: '101:4096'
         }
       }
 
@@ -122,8 +122,8 @@ describe('pet gallery pet.info sync', () => {
     const methods = requestMock.mock.calls.map(([method]) => method)
     expect(methods).toContain('pet.info.meta')
     expect(methods).toContain('pet.info')
-    expect($petInfo.get().spdemoeetBase64).toBe('new-sprite-payload')
-    expect($petInfo.get().spdemoeetRevision).toBe('101:4096')
+    expect($petInfo.get().spritesheetBase64).toBe('new-sprite-payload')
+    expect($petInfo.get().spritesheetRevision).toBe('101:4096')
   })
 
   it('falls back to full pet.info when an older gateway lacks metadata', async () => {
@@ -142,8 +142,8 @@ describe('pet gallery pet.info sync', () => {
           slug: 'boba',
           displayName: 'Boba from legacy gateway',
           scale: 0.4,
-          spdemoeetBase64: 'legacy-full-payload',
-          spdemoeetRevision: '99:1024'
+          spritesheetBase64: 'legacy-full-payload',
+          spritesheetRevision: '99:1024'
         }
       }
 
@@ -161,8 +161,8 @@ describe('pet gallery pet.info sync', () => {
       enabled: true,
       slug: 'boba',
       displayName: 'Boba from legacy gateway',
-      spdemoeetBase64: 'legacy-full-payload',
-      spdemoeetRevision: '99:1024'
+      spritesheetBase64: 'legacy-full-payload',
+      spritesheetRevision: '99:1024'
     })
   })
 
@@ -173,8 +173,8 @@ describe('pet gallery pet.info sync', () => {
       slug: 'boba',
       displayName: 'Boba',
       scale: 0.33,
-      spdemoeetBase64: 'large-sprite-payload',
-      spdemoeetRevision: '100:2048'
+      spritesheetBase64: 'large-sprite-payload',
+      spritesheetRevision: '100:2048'
     })
 
     const requestMock = vi.fn(async (method: string) => {
@@ -188,7 +188,7 @@ describe('pet gallery pet.info sync', () => {
           slug: 'boba',
           displayName: 'Boba',
           scale: 0.33,
-          spdemoeetRevision: '100:2048'
+          spritesheetRevision: '100:2048'
         }
       }
 
@@ -205,6 +205,6 @@ describe('pet gallery pet.info sync', () => {
 
     const methods = requestMock.mock.calls.map(([method]) => method)
     expect(methods).toEqual(['pet.select', 'pet.info.meta'])
-    expect($petInfo.get().spdemoeetBase64).toBe('large-sprite-payload')
+    expect($petInfo.get().spritesheetBase64).toBe('large-sprite-payload')
   })
 })

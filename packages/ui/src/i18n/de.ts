@@ -2,28 +2,51 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { deAuxTasks } from './de_aux_tasks'
 import { deBoot } from './de_boot'
-import { deCatalogInstall } from './de_catalog_install'
-import { deClarify } from './de_clarify'
-import { deConnectorAccounts } from './de_connector_accounts'
-import { deConnectorCard } from './de_connector_card'
-import { deFirstRun } from './de_first_run'
 import { deLocalModels } from './de_local_models'
 import { deModelMenu } from './de_model_menu'
 import { deNotices } from './de_notices'
 import { deOnboarding } from './de_onboarding'
+import { dePluginUpdate } from './de_plugin_update'
 import { deProjects } from './de_projects'
 import { deSharedMetrics } from './de_shared_metrics'
-import { deThemePicker } from './de_theme_picker'
-import { deToolCards } from './de_tool_cards'
-import { deUpdateChannel } from './de_update_channel'
 import { defineLocale, type TranslationOverrides } from './define-locale'
 import { introDe } from './intro-de'
 
 export const deOverrides = {
   sharedMetrics: deSharedMetrics,
-  firstRun: deFirstRun,
   intro: introDe,
-  connectors: deConnectorCard,
+  connectors: {
+    title: 'Verbinden Sie Ihre Apps',
+    connect: 'Verbinden',
+    skip: 'Nicht jetzt',
+    cancel: 'Warten beenden',
+    retry: 'Erneut versuchen',
+    grant: 'Neu verbinden',
+    connected: 'Verbunden',
+    checking: 'Ihre Apps werden geprüft…',
+    notConnected: 'Verbindung fehlgeschlagen',
+    skipped: 'Übersprungen',
+    disabled: 'Nicht verfügbar',
+    failed: 'Verbindung fehlgeschlagen',
+    needsAuth: 'Zugriff abgelaufen',
+    opening: 'Anmeldung wird geöffnet…',
+    waiting: 'Schließen Sie die Verbindung im Browser ab…',
+    timeout: 'Freigabe steht noch aus.',
+    refresh: 'Status aktualisieren',
+    connectError: 'Freigabe konnte nicht gestartet werden. Versuchen Sie es erneut.',
+    connectErrorFor: app => `Die Freigabe für ${app} konnte nicht gestartet werden.`,
+    unavailable: 'Verbindungen sind für diese Session nicht verfügbar.',
+    ownerMissing: 'Öffnen Sie diese Konversation erneut, um ihre Verbindungen zu verwalten.',
+    search: 'App finden',
+    empty: 'Keine passende App',
+    disclaimer: 'Das Verbinden ist freiwillig. Geben Sie nur den Apps Zugriff, die Hermes verwenden soll.',
+    execution: 'Verbindungs-Tools',
+    setup: server => `${server} einrichten`,
+    openInBrowser: 'Im Browser öffnen',
+    setupCancel: 'Abbrechen',
+    authorizedToolsUnavailable: 'Autorisiert. Tools nicht verfügbar.',
+    required: 'Erforderlich'
+  },
   connectorsPage: {
     title: 'Konnektoren',
     searchPlaceholder: (count: number) => `${count} Apps durchsuchen`,
@@ -180,9 +203,6 @@ export const deOverrides = {
       advanced: 'Erweitert',
       advancedHint: 'der mcp.json-Eintrag und die Logs'
     },
-
-    accounts: deConnectorAccounts,
-
     tools: {
       title: 'Tools',
       notInstalledBody: 'Installieren Sie ihn auf diesem Gerät, um seine Tools zu sehen.',
@@ -508,14 +528,6 @@ export const deOverrides = {
     }
   },
   ...deNotices,
-  billingBlock: {
-    titleNous: 'Keine Nous-Credits mehr',
-    titleProvider: provider => `Keine Credits mehr — ${provider}`,
-    fallbackMessage: 'Auf Ihrem Konto sind keine Credits mehr übrig. Fügen Sie Credits hinzu, um fortzufahren.',
-    openBilling: 'Billing öffnen',
-    addCredits: 'Credits hinzufügen',
-    dismiss: 'Schließen'
-  },
   sendDiagnostics: {
     title: 'Diagnosedaten an Nous senden',
     privacyNotice:
@@ -545,7 +557,6 @@ export const deOverrides = {
     search: 'Suchen',
     searchTitle: 'Sessions, Ansichten und Aktionen durchsuchen',
     swapSidebarSides: 'Sidebar-Seiten tauschen',
-    moreTools: 'Weitere Werkzeuge',
     hideRightSidebar: 'Rechte Sidebar ausblenden',
     showRightSidebar: 'Rechte Sidebar einblenden',
     unreadSessions: count => (count === 1 ? '1 ungelesene Session' : `${count} ungelesene Sessions`),
@@ -636,9 +647,7 @@ export const deOverrides = {
       'view.terminalPaste': 'In Terminal einfügen',
       'view.closeTab': 'Tab schließen',
       'view.reopenTab': 'Geschlossenen Tab wieder öffnen',
-      'view.splitSession': 'In neue Sitzung teilen',
       'view.flipPanes': 'Sidebar-Seiten tauschen',
-      'view.sessionOverview': 'Sitzungsübersicht',
       'view.findInPage': 'Auf Seite suchen',
       'view.findNext': 'Nächsten Treffer suchen',
       'view.findPrevious': 'Vorherigen Treffer suchen',
@@ -828,7 +837,6 @@ export const deOverrides = {
           'Diese URL verwendet ein unsicheres oder lokales Schema. Für Produktionsinstallationen bevorzuge https:// oder git@.',
         securityIntro:
           'Installieren Sie nur aus Quellen, denen Sie vertrauen – prüfen Sie das Repository unten, wenn Sie sehen möchten, was hinzugefügt wird.',
-        securityHeading: 'Sicherheitsprüfung',
         sourceHeading: 'Quellcode',
         viewRepository: 'Repository ansehen',
         viewPluginFiles: 'Plugin-Dateien ansehen',
@@ -853,20 +861,7 @@ export const deOverrides = {
           'Hermes wartet nicht mehr auf das Installationsergebnis, aber das Plugin wird möglicherweise noch installiert. Schließe dieses Fenster und aktualisiere die Pluginliste, bevor du die Installation erneut startest.',
         desktopFailed: 'Installation des Desktop-Plugins fehlgeschlagen',
         missingEnv: (name, vars) =>
-          `${name} ist installiert, benötigt aber einen Schlüssel, um zu funktionieren: ${vars}. Fügen Sie ihn jetzt hinzu, sonst schlagen die Tools des Plugins fehl.`,
-        verified: 'Verifiziert',
-        unverified: 'Nicht verifiziert',
-        reviewedByNous: 'Von Nous geprüft.',
-        installsAndEnables: profile => `Wird für ${profile} installiert und sofort eingeschaltet.`,
-        installsOnly: profile => `Wird für ${profile} installiert.`,
-        advanced: 'Erweitert',
-        versionLabel: 'Version',
-        reviewedPin: sha => (sha ? `Geprüfter Pin ${sha}` : 'Geprüfter Pin'),
-        reviewedHeading: 'Geprüfter Katalogeintrag',
-        reviewedIntro: 'Dieser Eintrag wurde am gepinnten Commit von einem Menschen geprüft. Du kannst den genauen Code unten trotzdem inspizieren.',
-        catalogPinned: (name, sha) => `Hermes-Katalogeintrag "${name}" — installiert die geprüfte Agent-Komponente am ${sha ? sha : 'gepinnten Commit'}, nicht den Branch-Head.`,
-        latestCommit: 'Neuester Commit',
-        nothingToInstall: 'Dieses Paket hat hier nichts zu installieren.'
+          `${name} ist installiert, benötigt aber einen Schlüssel, um zu funktionieren: ${vars}. Fügen Sie ihn jetzt hinzu, sonst schlagen die Tools des Plugins fehl.`
       }
     },
     vault: {
@@ -1616,7 +1611,9 @@ export const deOverrides = {
       screenRecording: 'Bildschirmaufnahme',
       driverHealth: 'Treiberstatus'
     },
-    about: { updates: 'Updates', channel: deUpdateChannel },
+    about: {
+      updates: 'Updates'
+    },
     config: {
       minimizeToTrayTitle: 'In den Infobereich minimieren',
       minimizeToTrayDesc:
@@ -1663,11 +1660,6 @@ export const deOverrides = {
       attachmentSizeUnit: 'MB',
       attachmentSizeLabel: 'Maximale Vorschau-/Bildladegröße in Megabyte',
       showOptions: 'Optionen anzeigen',
-      developerTitle: 'Entwickler',
-      resetOnboardingTitle: 'Ersteinrichtung zurücksetzen',
-      resetOnboardingDesc: 'Zustand der Ersteinrichtung löschen und den Ersteinrichtungs-Assistenten erneut ausführen.',
-      resetOnboardingAction: 'Zurücksetzen',
-      resetOnboardingFailed: 'Zurücksetzen der Ersteinrichtung fehlgeschlagen'
     },
     hudModifier: {
       title: 'Tippen, um das HUD aufzurufen',
@@ -2682,16 +2674,7 @@ export const deOverrides = {
       pinnedProvenance: sha =>
         `An Commit ${sha} gepinnt. Updates werden abgelehnt, bis es mit einem neuen Pin neu installiert wird.`,
       pinnedBadge: sha => `gepinnt @ ${sha}`,
-      tierOfficial: 'offiziell',
-      tierCommunity: 'Community',
-      updateToPin: sha => `Auf ${sha} aktualisieren`,
-      updateFailed: name => `${name} konnte nicht aktualisiert werden`,
-      updated: name =>
-        `${name} wurde auf den aktuellen Katalog-Pin aktualisiert. Starten Sie das Gateway neu, damit es wirksam wird.`,
-      updateConsentTitle: (name: string) => `${name} fordert mehr an`,
-      updateConsentBody: (name: string, sha: string) =>
-        `Der neue Katalog-Pin von ${name} (${sha}) fügt Oberflächen hinzu, die die installierte Version nicht hat. Wenden Sie ihn nur an, wenn Sie ihnen vertrauen:`,
-      updateConsentConfirm: 'Update anwenden',
+      ...dePluginUpdate,
       uninstall: 'Deinstallieren',
       uninstallTip: (name: string, profile: string) => `${name} aus ${profile} deinstallieren`,
       uninstallConfirmTitle: (name: string) => `${name} deinstallieren?`,
@@ -3532,7 +3515,6 @@ export const deOverrides = {
     switchToConnection: name => `Zu ${name} wechseln`,
     switchConnectionFailed: name => `Keine Verbindung zu ${name} möglich`,
     manageProfiles: 'Profile verwalten…',
-    railMore: 'Weitere Profilaktionen',
     connectGateway: 'Gateways verwalten…',
     fleet: {
       allOnGateway: 'Alle Profile auf diesem Gateway',
@@ -4006,7 +3988,6 @@ export const deOverrides = {
     profileRail: 'Profil-Leiste',
     nav: {
       'new-session': 'Neue Session',
-      activity: 'Aktivität',
       capabilities: 'Fähigkeiten',
       messaging: 'Messaging',
       artifacts: 'Artefakte',
@@ -4015,8 +3996,6 @@ export const deOverrides = {
     },
     searchAria: 'Sessions durchsuchen',
     railAria: 'App-Navigation',
-    railPlugins: 'Plugins',
-    railPluginsHint: 'Plugins: öffnen oder installieren',
     searchPlaceholder: 'Sessions durchsuchen…',
     clearSearch: 'Suche löschen',
     noMatch: query => `Keine Sessions passen zu “${query}”.`,
@@ -4099,7 +4078,6 @@ export const deOverrides = {
       needsInput: 'Braucht Ihre Eingabe',
       waitingForAnswer: 'Wartet auf Ihre Antwort',
       finishedUnread: 'Abgeschlossen – ungelesen',
-      progressRing: (done, total) => `${done} von ${total} Schritten erledigt`,
       backgroundRunning: 'Hintergrundaufgabe läuft',
       draftSession: 'Entwurf – noch nichts gesendet',
       continueOnPhone: 'Auf dem Handy fortfahren',
@@ -4207,7 +4185,6 @@ export const deOverrides = {
       thisMonth: 'Diesen Monat früher'
     },
     statusDivider: {
-      needsYou: 'Braucht dich',
       working: 'In Arbeit',
       done: 'Erledigt'
     },
@@ -4225,19 +4202,9 @@ export const deOverrides = {
       profile: 'Profil',
       source: 'Quelle',
       started: 'Gestartet',
-      updated: 'Aktualisiert',
-      lastTool: 'Letztes Tool',
-      planFraction: (done, total) => `${done} von ${total}`,
-      more: count => `+${count} weitere`,
-      stopFailed: 'Sitzung konnte nicht gestoppt werden'
+      updated: 'Aktualisiert'
     },
     markAllRead: 'Alle als gelesen markieren'
-  },
-
-  sessionOverview: {
-    title: 'Sitzungsübersicht',
-    empty: 'Keine aktiven Sitzungen',
-    newSession: 'Neue Sitzung'
   },
   composer: {
     message: 'Nachricht',
@@ -4271,26 +4238,6 @@ export const deOverrides = {
     steerTurn: 'Turn steuern',
     stop: 'Stopp',
     send: 'Senden',
-    broadcastTip: 'An alle Bereiche senden',
-    broadcastNote: 'Nur Text — Anhänge bleiben in diesem Bereich',
-    broadcastOn: 'Alle Bereiche',
-    broadcastSummary: (sent, queued, skipped, failed) => {
-      const delivered = sent + queued
-      const panes = delivered === 1 ? 'Bereich' : 'Bereiche'
-      const extras: string[] = []
-
-      if (skipped > 0) {
-        extras.push(`${skipped} übersprungen`)
-      }
-
-      if (failed > 0) {
-        extras.push(`${failed} fehlgeschlagen`)
-      }
-
-      return extras.length > 0
-        ? `An ${delivered} ${panes} gesendet, ${extras.join(', ')}`
-        : `An ${delivered} ${panes} gesendet`
-    },
     speaking: 'Spricht',
     transcribing: 'Transkribiert',
     thinking: 'Denkt',
@@ -4666,7 +4613,6 @@ export const deOverrides = {
       heartbeatEveryHours: hours => `alle ${hours}h`,
       heartbeatEverySeconds: seconds => `alle ${seconds}s`,
       heartbeatNext: time => `nächstes ${time}`,
-      heartbeatDueWaitingForIdle: 'fällig — wartet auf Ruhezustand',
       heartbeatActions: 'Heartbeat-Aktionen',
       pauseHeartbeat: 'Heartbeat pausieren',
       resumeHeartbeat: 'Heartbeat fortsetzen',
@@ -5491,8 +5437,6 @@ export const deOverrides = {
     closeToRight: 'Nach rechts schließen',
     closeAll: 'Alle schließen',
     newSessionTab: 'Neuer Session-Tab',
-    splitSession: 'Sitzung teilen',
-    splitSessionCapped: 'Bis zu 4 Sitzungen nebeneinander',
     newTab: 'Neuer Tab',
     pluginDisabled: pluginId => `Plugin "${pluginId}" deaktiviert`,
     pluginDisabledBody: 'Aktivieren Sie es wieder unter Einstellungen → Plugins, um das Panel zurückzuholen.',
@@ -5710,6 +5654,10 @@ export const deOverrides = {
           title: 'Hermes ist in einer Schleife hängen geblieben',
           body: 'Die Antwort hat dieselben Schritte wiederholt, daher hat Hermes sie gestoppt. Versuchen Sie es erneut oder starten Sie einen neuen Chat, wenn es wieder passiert.'
         },
+        cron_session_read_only: {
+          title: 'Dieser Chat gehört zu einer geplanten Aufgabe',
+          body: 'Er führt nur diese Aufgabe aus, daher wurde Ihre Nachricht nicht ausgeführt. Starten Sie einen neuen Chat, um sie zu senden.'
+        },
         SESSION_NOT_OWNED: {
           title: 'Dieser Chat ist woanders offen',
           body: 'Dieser Chat ist gerade in einem anderen Hermes-Fenster oder Terminal geöffnet. Schließen Sie ihn dort und senden Sie Ihre Nachricht erneut, oder starten Sie hier einen neuen Chat.'
@@ -5823,11 +5771,6 @@ export const deOverrides = {
       command: 'Befehl',
       moreOptions: 'Weitere Genehmigungsoptionen',
       allowSession: 'Diese Session erlauben',
-      allowOnce: 'Einmal erlauben',
-      alwaysAllowHere: 'Hier immer erlauben',
-      deny: 'Ablehnen',
-      cardTitle: 'Diesen Befehl ausführen lassen?',
-      cardDetailsTitle: 'Diese Änderung prüfen',
       alwaysAllowMenu: 'Immer erlauben…',
       jumpToApproval: 'Genehmigung erforderlich',
       reject: 'Ablehnen',
@@ -5836,10 +5779,56 @@ export const deOverrides = {
         `Dies fügt das Muster „${pattern}“ Ihrer dauerhaften Zulassungsliste hinzu (~/.hermes/config.yaml). Hermes fragt bei solchen Befehlen nicht mehr nach – weder in dieser noch in zukünftigen Sessions.`,
       alwaysAllow: 'Immer erlauben'
     },
-    clarify: deClarify,
-    toolCards: deToolCards,
-    themePicker: deThemePicker,
-    catalogInstall: deCatalogInstall,
+    clarify: {
+      notReady: 'Klärungsanfrage ist noch nicht bereit',
+      gatewayDisconnected: 'Hermes-Gateway ist nicht verbunden',
+      sendFailed: 'Klärungsantwort konnte nicht gesendet werden',
+      loadingQuestion: 'Frage wird geladen…',
+      other: 'Anderes (Antwort eingeben)',
+      placeholder: 'Geben Sie Ihre Antwort ein…',
+      skip: 'Überspringen',
+      skipped: 'Übersprungen',
+      noAnswer: 'Keine Antwort',
+      confirmAndContinueLabel: 'Bestätigen und fortfahren',
+      singleSelectHint: 'Eines auswählen',
+      multiSelectHint: 'Alle Treffer auswählen',
+      oneQuestion: '1 Frage',
+      questionProgress: (answered, total) => `${answered} von ${total} beantwortet`,
+      notDelivered:
+        'Diese Frage hat die App nicht erreicht und kann hier nicht beantwortet werden. Klicken Sie auf Stopp, um den Durchgang zu beenden, und antworten Sie dann im Chat.'
+    },
+    catalogInstall: {
+      preparing: 'Installation wird vorbereitet…',
+      install: 'Installieren',
+      advanced: 'Erweitert',
+      skip: 'Überspringen',
+      installing: 'Wird installiert…',
+      installed: 'Installiert',
+      notInstalled: 'Nicht installiert',
+      failed: 'Fehlgeschlagen',
+      showNames: 'Namen anzeigen',
+      hideNames: 'Namen ausblenden',
+      skill: (name: string) => `Skill ${name}`,
+      kind: {
+        plugin: 'Plugin',
+        skill: 'Skill'
+      },
+      tier: {
+        official: 'offiziell',
+        community: 'Community'
+      },
+      targetProfile: (profile: string) => `Wird in Ihr Profil ${profile} installiert`,
+      sendFailed: 'Ihre Antwort konnte nicht gesendet werden. Versuchen Sie es erneut.',
+      commitLabel: 'Commit',
+      subdirLabel: 'Ordner',
+      scan: {
+        passed: 'Scan bestanden',
+        warnings: 'Scan hat Warnungen gefunden',
+        failed: 'Scan fehlgeschlagen'
+      },
+      requirementsLabel: 'Erfordert',
+      credentialsHeading: 'Zugangsdaten'
+    },
     mcpSetup: {
       installTitle: 'MCP-Server hinzufügen',
       enableTitle: 'MCP-Server aktivieren',

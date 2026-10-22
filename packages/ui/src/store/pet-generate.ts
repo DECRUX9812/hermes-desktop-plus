@@ -538,7 +538,7 @@ export async function hatchSelected(request: GatewayRequest, options: HatchOptio
       return false
     }
 
-    if (!result?.ok || !result.pet?.spdemoeetBase64) {
+    if (!result?.ok || !result.pet?.spritesheetBase64) {
       throw new Error('hatch produced no preview')
     }
 

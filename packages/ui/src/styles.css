@@ -3,8 +3,6 @@
 @import 'tw-shimmer';
 @import 'katex/dist/katex.min.css';
 @import '@vscode/codicons/dist/codicon.css';
-@import './design/tokens.css';
-@import './design/motion.css';
 
 /* Titlebar clusters: 24×24 hit targets, 13.9px glyphs. codicon.css is
    unlayered (`font: 16px/1`); Tailwind utilities in @layer lose that fight. */
@@ -226,22 +224,19 @@
     --theme-mix-card: 22%;
     --theme-mix-elevated: 28%;
     --theme-mix-bubble: 0%;
-    /* Neutral-first chrome: fills, strokes and row states carry only a trace
-       of the accent, so the accent itself stays meaningful (selection, the
-       one primary action, focus) instead of tinting every surface. */
-    --theme-fill-primary-accent-mix: 8%;
-    --theme-fill-secondary-accent-mix: 5%;
-    --theme-fill-tertiary-accent-mix: 3%;
-    --theme-fill-quaternary-accent-mix: 2%;
-    --theme-fill-quinary-accent-mix: 1%;
-    --theme-stroke-primary-accent-mix: 10%;
-    --theme-stroke-secondary-accent-mix: 6%;
-    --theme-stroke-tertiary-accent-mix: 4%;
-    --theme-stroke-quaternary-accent-mix: 2%;
-    --theme-row-hover-accent-mix: 1.5%;
-    --theme-row-active-accent-mix: 5%;
-    --theme-control-hover-accent-mix: 2%;
-    --theme-control-active-accent-mix: 5%;
+    --theme-fill-primary-accent-mix: 16%;
+    --theme-fill-secondary-accent-mix: 11%;
+    --theme-fill-tertiary-accent-mix: 8%;
+    --theme-fill-quaternary-accent-mix: 5%;
+    --theme-fill-quinary-accent-mix: 3%;
+    --theme-stroke-primary-accent-mix: 24%;
+    --theme-stroke-secondary-accent-mix: 16%;
+    --theme-stroke-tertiary-accent-mix: 10%;
+    --theme-stroke-quaternary-accent-mix: 6%;
+    --theme-row-hover-accent-mix: 4%;
+    --theme-row-active-accent-mix: 8%;
+    --theme-control-hover-accent-mix: 6%;
+    --theme-control-active-accent-mix: 8%;
 
     --ui-base: var(--theme-foreground);
     --ui-accent: var(--theme-midground);
@@ -483,7 +478,7 @@
     --dt-user-bubble-border: var(--ui-stroke-tertiary);
 
     --dt-font-sans:
-      'Inter', 'Segoe WPC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif,
+      'Segoe WPC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif,
       'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', emoji;
     /* Key caps always use the native UI face — never theme typography overrides. */
     --dt-font-kbd: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
@@ -1233,27 +1228,6 @@
     scroll-fade-bottom linear both;
   /* After the shorthand: it resets the timeline. */
   animation-timeline: scroll(self y), scroll(self y);
-  animation-range:
-    0 calc(var(--scroll-fade-pad) + var(--scroll-fade-size)),
-    calc(100% - var(--scroll-fade-pad) - var(--scroll-fade-size)) 100%;
-}
-
-/* The same fade for a horizontal scroller (left edge = top, right = bottom). */
-@utility scroll-fade-x {
-  --scroll-fade-size: 1.25rem;
-  --scroll-fade-pad: 0px;
-
-  mask-image: linear-gradient(
-    to right,
-    transparent calc(var(--scroll-fade-pad) * var(--scroll-fade-top)),
-    #000 calc((var(--scroll-fade-pad) + var(--scroll-fade-size)) * var(--scroll-fade-top)),
-    #000 calc(100% - (var(--scroll-fade-pad) + var(--scroll-fade-size)) * var(--scroll-fade-bottom)),
-    transparent calc(100% - var(--scroll-fade-pad) * var(--scroll-fade-bottom))
-  );
-  animation:
-    scroll-fade-top linear both,
-    scroll-fade-bottom linear both;
-  animation-timeline: scroll(self x), scroll(self x);
   animation-range:
     0 calc(var(--scroll-fade-pad) + var(--scroll-fade-size)),
     calc(100% - var(--scroll-fade-pad) - var(--scroll-fade-size)) 100%;
@@ -2080,6 +2054,14 @@ body.guest-pointer-lock :is(webview, iframe) {
   translate: none;
 }
 
+[data-slot='aui_intro'] p:last-child {
+  max-width: 34rem;
+  margin-inline: auto;
+  color: var(--ui-text-tertiary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
 .fit-text {
   --fit-captured-length: initial;
   --fit-support-sentinel: var(--fit-captured-length, 9999px);
@@ -2155,20 +2137,6 @@ body.guest-pointer-lock :is(webview, iframe) {
   padding-inline: 5px;
 }
 
-/* Tuning pills keep their space at rest and fade in on focus or hover, so the
-   row never reflows. Opacity, not display: a hidden control must stay focusable. */
-[data-slot='composer-reveal'] {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--dur-fast) ease-out;
-}
-
-[data-slot='composer-root']:is(:hover, :focus-within) [data-slot='composer-reveal'],
-[data-slot='composer-reveal']:has([data-state='open']) {
-  opacity: 1;
-  pointer-events: auto;
-}
-
 /* Popped-out (floating) composer: compact width + an even 5px transparent grab
    platform. The higher-specificity selector resets the base rule's padding-bottom
    so the inset is equal on all four sides (not 5px sides / shell-pad bottom). */
@@ -2211,14 +2179,7 @@ body.guest-pointer-lock :is(webview, iframe) {
 [data-chat-surface] {
   transition:
     opacity 75ms ease-out,
-    filter 75ms ease-out,
-    box-shadow var(--dur-fast) var(--ease-standard);
-}
-
-/* Which chat pane has the keyboard, once there is more than one to choose from.
-   Inset, so the hairline never sits outside the zone's own edge. */
-[data-chat-surface][data-chat-focused] {
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--theme-primary) 45%, transparent);
+    filter 75ms ease-out;
 }
 
 /* Drag-region hatch — a diagonal ///// pattern (Photoshop-style) that fades into
@@ -2252,12 +2213,7 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 [data-slot='composer-surface'] {
-  border-color: var(--color-line) !important;
-  box-shadow: var(--shadow-e1);
-}
-
-[data-slot='composer-root']:focus-within [data-slot='composer-surface'] {
-  border-color: var(--color-line-strong) !important;
+  border-color: var(--ui-stroke-secondary) !important;
 }
 
 /* A docked stack (background tasks, subagents, queue, todos) sits directly on
@@ -2304,7 +2260,7 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 [data-slot='composer-root'] {
-  --composer-fill: var(--color-surface-raised);
+  --composer-fill: color-mix(in srgb, var(--dt-card) 88%, transparent);
 }
 
 [data-slot='composer-root'][data-thread-scrolled-up] {
@@ -2816,15 +2772,60 @@ button[data-slot='aui_msg-reactions'] svg {
   }
 }
 
-/* Floating "jump to bottom" control (see scroll-to-bottom-button.tsx): a fade
-   only, so the pill never moves while it appears or leaves. */
+/* Floating "jump to bottom" control (see scroll-to-bottom-button.tsx).
+   Directional scale: it contracts toward 1 as it arrives (from 1.1) and keeps
+   contracting to 0.9 as it leaves — always shrinking in the direction of
+   travel, so the motion reads as a soft settle / recede rather than a pop. The
+   X half-offset stays baked into every transform so `left-1/2` centering holds
+   through the animation. */
 .thread-jump-button {
   opacity: 0;
-  transition: opacity var(--dur-fast) ease-out;
+  transform: translateX(-50%) translateY(0.3rem) scale(0.9);
 }
 
 .thread-jump-button[data-state='in'] {
-  opacity: 1;
+  animation: thread-jump-in 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.thread-jump-button[data-state='out'] {
+  animation: thread-jump-out 180ms ease-in forwards;
+}
+
+@keyframes thread-jump-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0.3rem) scale(1.1);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes thread-jump-out {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0.3rem) scale(0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thread-jump-button[data-state='in'],
+  .thread-jump-button[data-state='out'] {
+    animation: none;
+    transition: opacity 120ms linear;
+  }
+
+  .thread-jump-button[data-state='in'] {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
 }
 
 @keyframes code-card-stream-glow {

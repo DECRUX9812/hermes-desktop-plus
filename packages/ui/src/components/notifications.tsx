@@ -34,14 +34,13 @@ function userDismiss(id: string) {
 }
 
 const tone: Record<NotificationKind, { icon: IconComponent; iconClass: string; variant: ToneVariant }> = {
-  error: { icon: AlertCircle, iconClass: 'text-danger', variant: 'destructive' },
-  warning: { icon: AlertTriangle, iconClass: 'text-warning', variant: 'warning' },
-  info: { icon: Info, iconClass: 'text-fg-muted', variant: 'default' },
-  success: { icon: CheckCircle2, iconClass: 'text-success', variant: 'success' }
+  error: { icon: AlertCircle, iconClass: 'text-destructive', variant: 'destructive' },
+  warning: { icon: AlertTriangle, iconClass: 'text-primary', variant: 'warning' },
+  info: { icon: Info, iconClass: 'text-muted-foreground', variant: 'default' },
+  success: { icon: CheckCircle2, iconClass: 'text-primary', variant: 'success' }
 }
 
-const STACK_SURFACE =
-  'toast-enter pointer-events-auto rounded-panel border border-line bg-surface-raised px-3 py-2.5 text-ui-sm shadow-e2'
+const STACK_SURFACE = 'pointer-events-auto border border-(--stroke-nous) bg-popover/95 shadow-nous backdrop-blur-md'
 
 function partitionNotifications(notifications: AppNotification[]) {
   const defaultStack: AppNotification[] = []
@@ -138,7 +137,7 @@ function TopCenterStack({
     >
       <NotificationDeck expanded={expanded} notifications={notifications} />
       {older.length > 0 && (
-        <div className="pointer-events-auto flex min-h-8 items-center justify-between px-3 text-ui-xs">
+        <div className="pointer-events-auto flex min-h-8 items-center justify-between px-3 text-xs">
           <Button className="-ml-2" onClick={onToggleExpanded} size="xs" type="button" variant="text">
             {expanded ? copy.hide : copy.show} {copy.more(older.length)}
           </Button>
@@ -189,7 +188,7 @@ function BottomRightStack({
       role="region"
     >
       {older.length > 0 && (
-        <div className="pointer-events-auto flex items-center justify-between px-2 text-ui-xs">
+        <div className="pointer-events-auto flex items-center justify-between px-2 text-xs">
           <Button onClick={() => setExpanded(value => !value)} size="xs" variant="text">
             {expanded ? copy.hide : copy.show} {copy.more(older.length)}
           </Button>
@@ -215,19 +214,15 @@ export function NotificationDeck({
   notifications: AppNotification[]
   expanded?: boolean
 }) {
-  // At most 3 cards visible; the "+N more" expander covers the rest (an
-  // explicitly expanded deck shows everything the person asked to see).
-  const visible = expanded ? notifications : notifications.slice(0, 3)
-
   return (
     <CardStack
       expanded={expanded}
       getKey={notification => notification.id}
-      items={visible}
+      items={notifications}
       onSwipe={(notification, _side, action) => {
         void action.depart(() => userDismiss(notification.id))
       }}
-      surfaceClassName={STACK_SURFACE}
+      surfaceClassName={cn(STACK_SURFACE, 'rounded-lg')}
       swipeDirections={['left', 'right']}
     >
       {(notification, action) => <NotificationItem notification={notification} stack={action} />}
@@ -275,15 +270,14 @@ function NotificationItem({ notification, stack }: { notification: AppNotificati
 
   // Nudge the icon down to sit on the first text line, in `ch` so it tracks the
   // toast's font size instead of a fixed rem. `accentColor` (when set) tints the
-  // icon + message as a severity ramp, overriding the kind's default color —
-  // a dynamic backend value, so no token applies (kept as an inline style).
+  // icon + message as a severity ramp, overriding the kind's default color.
   const accent = notification.accentColor
   const iconStyle: CSSProperties = { marginTop: '0.42ch', ...(accent ? { color: accent } : {}) }
 
   return (
     <Alert
       aria-live={!stack.active ? 'off' : notification.kind === 'error' ? 'assertive' : 'polite'}
-      className="grid-cols-[auto_minmax(0,1fr)_auto] border-0 bg-transparent pr-2.5 text-ui-sm shadow-none"
+      className="grid-cols-[auto_minmax(0,1fr)_auto] border-0 bg-transparent pr-2.5 text-xs shadow-none"
       role={notification.kind === 'error' ? 'alert' : 'status'}
       variant={styles.variant}
     >
@@ -300,7 +294,7 @@ function NotificationItem({ notification, stack }: { notification: AppNotificati
         )}
         <AlertDescription className="col-start-auto">
           <p className="m-0 wrap-break-word">{renderMessage(notification.message, accent)}</p>
-          {notification.meta && <p className="m-0 text-ui-xs text-fg-muted tabular-nums">{notification.meta}</p>}
+          {notification.meta && <p className="m-0 text-xs text-muted-foreground tabular-nums">{notification.meta}</p>}
           {hasDetail && <NotificationDetail detail={notification.detail || ''} />}
           {(notification.action || notification.secondaryAction) && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -342,7 +336,7 @@ function NotificationItem({ notification, stack }: { notification: AppNotificati
       </div>
       <Button
         aria-label={copy.dismiss}
-        className="col-start-3 -mr-1 text-fg-muted"
+        className="col-start-3 -mr-1 text-muted-foreground"
         disabled={stack.busy || !stack.active}
         onClick={() => {
           void stack.depart(() => userDismiss(notification.id))
@@ -362,18 +356,18 @@ function NotificationDetail({ detail }: { detail: string }) {
   const copy = t.notifications
 
   return (
-    <details className="mt-2 text-ui-xs text-fg-muted">
-      <summary className="select-none font-medium text-fg-muted hover:text-fg">{copy.details}</summary>
-      <div className="mt-1 rounded-card bg-surface-sunken p-2">
+    <details className="mt-2 text-xs text-muted-foreground">
+      <summary className="select-none font-medium text-muted-foreground hover:text-foreground">{copy.details}</summary>
+      <div className="mt-1 rounded-md bg-background/65 p-2">
         <pre
-          className="max-h-32 overflow-y-auto pe-1 whitespace-pre-wrap wrap-break-word font-mono text-ui-2xs leading-relaxed"
+          className="max-h-32 overflow-y-auto pe-1 whitespace-pre-wrap wrap-break-word font-mono text-[0.6875rem] leading-relaxed"
           data-selectable-text="true"
         >
           {detail}
         </pre>
         <CopyButton
           appearance="inline"
-          className="mt-1 rounded px-1.5 py-0.5 text-ui-2xs"
+          className="mt-1 rounded px-1.5 py-0.5 text-[0.6875rem]"
           errorMessage={copy.copyDetailFailed}
           iconClassName="size-3"
           label={copy.copyDetail}

@@ -66,6 +66,7 @@ async function loadHost(webapp: boolean) {
     () =>
       useStatusbarItems({
         agentsOpen: false,
+        changeSessionCwd: async () => {},
         chatOpen: true,
         commandCenterOpen: false,
         extraLeftItems: [],
@@ -77,8 +78,7 @@ async function loadHost(webapp: boolean) {
         openCommandCenterSection: noop,
         requestGateway: async () => undefined as never,
         statusSnapshot: null,
-        toggleCommandCenter: noop,
-        changeSessionCwd: async () => {}
+        toggleCommandCenter: noop
       }),
     { wrapper: MemoryRouter }
   )

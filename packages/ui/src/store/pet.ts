@@ -7,7 +7,7 @@ import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 /**
  * Petdex mascot state for the desktop floating pet.
  *
- * The spdemoeet payload comes from the gateway `pet.info` RPC (shared with
+ * The spritesheet payload comes from the gateway `pet.info` RPC (shared with
  * the TUI). The animation *state* is derived here from the same activity
  * signals the chat already tracks, mirroring the priority order documented in
  * `agent/pet/state.py` so the Python and TS surfaces never drift.
@@ -20,10 +20,10 @@ export interface PetInfo {
   slug?: string
   displayName?: string
   mime?: string
-  spdemoeetBase64?: string
+  spritesheetBase64?: string
   // Stable sheet revision (`mtime_ns:size`) from the gateway; lets the desktop
   // skip full sprite payload refreshes when the active pet hasn't changed.
-  spdemoeetRevision?: string
+  spritesheetRevision?: string
   frameW?: number
   frameH?: number
   framesPerState?: number
@@ -44,17 +44,17 @@ export interface PetInfoMeta {
   slug?: string
   displayName?: string
   scale?: number
-  spdemoeetRevision?: string
+  spritesheetRevision?: string
 }
 
 export function hasPetSpriteForMeta(info: PetInfo, meta: PetInfoMeta): boolean {
   return (
     meta.enabled &&
     info.enabled &&
-    Boolean(info.spdemoeetBase64) &&
+    Boolean(info.spritesheetBase64) &&
     info.slug === meta.slug &&
-    Boolean(info.spdemoeetRevision) &&
-    info.spdemoeetRevision === meta.spdemoeetRevision
+    Boolean(info.spritesheetRevision) &&
+    info.spritesheetRevision === meta.spritesheetRevision
   )
 }
 
@@ -71,7 +71,7 @@ export function mergePetInfoMeta(info: PetInfo, meta: PetInfoMeta): PetInfo {
     info.slug === meta.slug &&
     info.displayName === meta.displayName &&
     info.scale === meta.scale &&
-    info.spdemoeetRevision === meta.spdemoeetRevision
+    info.spritesheetRevision === meta.spritesheetRevision
   ) {
     return info
   }
@@ -82,7 +82,7 @@ export function mergePetInfoMeta(info: PetInfo, meta: PetInfoMeta): PetInfo {
     slug: meta.slug,
     displayName: meta.displayName,
     scale: meta.scale,
-    spdemoeetRevision: meta.spdemoeetRevision
+    spritesheetRevision: meta.spritesheetRevision
   }
 }
 
@@ -139,8 +139,8 @@ export function derivePetState(activity: PetActivity): PetState {
 export const $petInfo = atom<PetInfo>({ enabled: false })
 export const $petActivity = atom<PetActivity>({})
 
-/** Pet installed + enabled with a loaded spdemoeet (ready to show/react). */
-export const $petActive = computed($petInfo, info => info.enabled && Boolean(info.spdemoeetBase64))
+/** Pet installed + enabled with a loaded spritesheet (ready to show/react). */
+export const $petActive = computed($petInfo, info => info.enabled && Boolean(info.spritesheetBase64))
 
 /**
  * Profile the pet RPCs should resolve against. Pets are per-profile — the active

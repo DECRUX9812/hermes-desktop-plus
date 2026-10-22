@@ -281,7 +281,7 @@ describe('resolveNewSessionCwd', () => {
     $sessions.set([
       {
         archived: false,
-        cwd: 'C:\\Users\\Me',
+        cwd: 'C:\\Users\\sonny',
         ended_at: null,
         id: 'sess-a',
         input_tokens: 0,

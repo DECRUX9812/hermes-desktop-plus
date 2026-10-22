@@ -1,4 +1,3 @@
-import { arThemePicker } from './ar_theme_picker'
 import type { TranslationOverrides } from './define-locale'
 
 export const arAssistant = {
@@ -21,7 +20,6 @@ export const arAssistant = {
       sendFailed: 'تعذّر إرسال ردك. حاول مرة أخرى.',
       commitLabel: 'الإيداع',
       subdirLabel: 'المجلد',
-      securityHeading: 'الأمان',
       scan: { passed: 'نجح الفحص', warnings: 'وجد الفحص تحذيرات', failed: 'فشل الفحص' },
       requirementsLabel: 'المتطلبات',
       credentialsHeading: 'بيانات الاعتماد'
@@ -55,6 +53,12 @@ export const arAssistant = {
         provider: 'خطأ من المزوّد',
         runtime: 'خطأ في بيئة التشغيل المحلية',
         streaming: 'خطأ في اتصال البث'
+      },
+      errorCodes: {
+        cron_session_read_only: {
+          title: 'هذه المحادثة تابعة لمهمة مجدولة',
+          body: 'إنها تشغّل تلك المهمة فقط، لذا لم تُنفَّذ رسالتك. ابدأ محادثة جديدة لإرسالها.'
+        }
       },
       errorRetry: 'إعادة المحاولة',
       errorLimitResets: time => `يُعاد ضبط الحد عند ${time}`,
@@ -106,133 +110,6 @@ export const arAssistant = {
         runtime: 'واجه Hermes مشكلة داخلية أثناء بدء هذا الرد. أعد إرسال رسالتك؛ إن تكرر الأمر فأرسل التشخيصات.',
         streaming: 'انقطع الاتصال قبل اكتمال الرد. أعد المحاولة لإرساله مجددًا.'
       },
-      errorCodes: {
-        auth: {
-          title: provider => `رفض ${provider} تسجيل دخولك`,
-          body: provider =>
-            `لم تُقبل بيانات الاعتماد المحفوظة لـ${provider}. صحّحها في الإعدادات أو بدّل المزوّد ثم أعد إرسال رسالتك.`
-        },
-        auth_permanent: {
-          title: provider => `رفض ${provider} تسجيل دخولك`,
-          body: provider =>
-            `بيانات الاعتماد المحفوظة لـ${provider} غير صالحة أو أُلغيت. حدّثها أو بدّل المزوّد ثم أعد إرسال رسالتك.`
-        },
-        billing: {
-          title: 'نفدت الأرصدة',
-          body: provider => `لا أرصدة متبقية في حساب ${provider} لديك. اشحن رصيدك أو بدّل المزوّد ثم أعد الإرسال.`
-        },
-        rate_limit: {
-          title: 'خدمة الذكاء الاصطناعي مشغولة',
-          body: provider => `يحدّ ${provider} من الطلبات حاليًا. انتظر دقيقة ثم أعد المحاولة.`
-        },
-        upstream_rate_limit: {
-          title: 'خدمة الذكاء الاصطناعي مشغولة',
-          body: provider => `يحدّ ${provider} من الطلبات حاليًا. انتظر دقيقة ثم أعد المحاولة.`
-        },
-        overloaded: {
-          title: 'خدمة الذكاء الاصطناعي مثقلة',
-          body: provider => `يواجه ${provider} مشاكل حاليًا. أعد المحاولة بعد لحظة أو بدّل المزوّد.`
-        },
-        server_error: {
-          title: 'حدثت مشكلة في خدمة الذكاء الاصطناعي',
-          body: provider => `أعاد ${provider} خطأ خادم. أعد المحاولة بعد لحظة أو بدّل المزوّد.`
-        },
-        timeout: {
-          title: 'انتهت مهلة الرد',
-          body: provider => `لم يردّ ${provider} في الوقت المحدد. أعد المحاولة لإرساله مجددًا.`
-        },
-        stream_drop: {
-          title: 'انقطع الرد',
-          body: 'انقطع الاتصال قبل اكتمال الرد. أعد المحاولة لإرساله مجددًا.'
-        },
-        upstream_blocked: {
-          title: 'حجب جدار ناري الطلب',
-          body: provider =>
-            `حجب جدار ناري أو CDN أمام ${provider} الطلب قبل وصوله إلى النموذج — مفتاحك سليم على الأرجح. اضبط ترويسة User-Agent عبر extra_headers للمزوّد في الإعدادات، أو بدّل المزوّد، ثم أعد إرسال رسالتك.`
-        },
-        ssl_cert_verification: {
-          title: 'فشل الاتصال الآمن',
-          body: provider =>
-            `تعذّر على Hermes التحقق من الاتصال الآمن بـ${provider}. تحقق من إعدادات الشبكة أو الوكيل، أو بدّل المزوّد، ثم أعد إرسال رسالتك.`
-        },
-        context_overflow: {
-          title: 'هذه المحادثة طويلة جدًا',
-          body: 'لم تعد المحادثة تسع في النموذج. اضغطها أو ابدأ محادثة جديدة ثم أعد الإرسال.'
-        },
-        payload_too_large: {
-          title: 'هذه الرسالة كبيرة جدًا',
-          body: 'كان الطلب كبيرًا على النموذج. اضغط المحادثة أو ابدأ محادثة جديدة ثم أعد الإرسال.'
-        },
-        model_not_found: {
-          title: 'هذا النموذج غير متاح',
-          body: provider => `لا يوفّر ${provider} هذا النموذج على حسابك. اختر نموذجًا آخر ثم أعد إرسال رسالتك.`
-        },
-        provider_policy_blocked: {
-          title: 'هذا النموذج محظور بإعدادات حسابك',
-          body: provider =>
-            `لن يوجّه ${provider} هذا الطلب بموجب إعدادات البيانات أو الخصوصية في حسابك. اختر نموذجًا آخر أو بدّل المزوّد.`
-        },
-        content_policy_blocked: {
-          title: 'رفضت خدمة الذكاء الاصطناعي هذا الطلب',
-          body: provider => `لن يجيب ${provider} على هذه الرسالة. عدّلها وأعد الإرسال.`
-        },
-        format_error: {
-          title: 'رفضت خدمة الذكاء الاصطناعي الطلب',
-          body: provider => `لم يقبل ${provider} كيفية بناء هذا الطلب. بدّل المزوّد أو أرسل التشخيصات لننظر في الأمر.`
-        },
-        truncated: {
-          title: 'اقتُطع الرد',
-          body: 'توقف النموذج قبل الإتمام. أعد المحاولة للحصول على رد كامل.'
-        },
-        invalid_response: {
-          title: 'أرسلت خدمة الذكاء الاصطناعي ردًا غير مقروء',
-          body: provider => `أعاد ${provider} شيئًا لم يستطع Hermes قراءته. أعد المحاولة بعد لحظة.`
-        },
-        empty_response: {
-          title: 'أرسلت خدمة الذكاء الاصطناعي ردًا فارغًا',
-          body: provider => `لم يُعد ${provider} شيئًا لهذه الرسالة. أعد المحاولة بعد لحظة.`
-        },
-        loop_error: {
-          title: 'علق Hermes في حلقة',
-          body: 'ظل الرد يكرر الخطوات نفسها فأوقفه Hermes. أعد المحاولة، أو ابدأ محادثة جديدة إن تكرر الأمر.'
-        },
-        SESSION_NOT_OWNED: {
-          title: 'هذه المحادثة مفتوحة في مكان آخر',
-          body: 'هذه المحادثة مفتوحة حاليًا في نافذة أو طرفية Hermes أخرى. أغلقها هناك وأعد إرسال رسالتك، أو ابدأ محادثة جديدة هنا.'
-        },
-        disk_full: {
-          title: 'القرص ممتلئ',
-          body: 'القرص ممتلئ فتعذّر على Hermes حفظ هذه المحادثة. وفّر مساحة ثم أعد المحاولة.'
-        },
-        free_tier_disabled: {
-          title: 'استخدام Hermes دون تسجيل الدخول متوقف حاليًا',
-          body: 'سجّل الدخول بحساب Nous لمتابعة المحادثة، إنه مجاني.'
-        },
-        free_tier_rate_limited: {
-          title: 'استنفدت حصة المحادثة دون تسجيل الدخول',
-          body: 'ستتجدد قريبًا. سجّل الدخول بحساب Nous لحصة أكبر، إنه مجاني.'
-        },
-        free_tier_at_capacity: {
-          title: 'المحادثة دون تسجيل الدخول مزدحمة جدًا حاليًا',
-          body: 'سجّل الدخول لتخطي الطابور مجانًا، أو أعد المحاولة بعد قليل.'
-        },
-        free_tier_model_not_free: {
-          title: 'هذا النموذج غير متاح دون تسجيل الدخول',
-          body: 'يستخدم Hermes النموذج المجاني الآن. سجّل الدخول بحساب Nous لمزيد من النماذج، إنه مجاني.'
-        },
-        free_tier_route: {
-          title: 'تعذّر على Hermes الوصول إلى النموذج المجاني عبر هذا المسار',
-          body: 'سجّل الدخول بحساب Nous مجانًا، أو تحقق من إعداد NOUS_INFERENCE_BASE_URL.'
-        },
-        free_tier_outage: {
-          title: 'يواجه النموذج المجاني مشكلة في الرد حاليًا',
-          body: 'حاول إرسال رسالتك مجددًا بعد دقيقة.'
-        },
-        free_tier_refused: {
-          title: 'تعذّر على Hermes إرسال ذلك دون تسجيل الدخول',
-          body: 'تسجيل الدخول بحساب Nous مجاني.'
-        }
-      },
       errorAuthKinds: {
         api_key: {
           title: provider => `رفض ${provider} مفتاح API لديك`,
@@ -262,11 +139,6 @@ export const arAssistant = {
       command: 'الأمر',
       moreOptions: 'خيارات إضافية',
       allowSession: 'السماح لهذه الجلسة',
-      allowOnce: 'السماح مرة واحدة',
-      alwaysAllowHere: 'السماح دائما هنا',
-      deny: 'رفض',
-      cardTitle: 'هل تسمح بتشغيل هذا الأمر؟',
-      cardDetailsTitle: 'راجع هذا التغيير',
       alwaysAllowMenu: 'السماح دائما',
       jumpToApproval: 'الموافقة مطلوبة',
       reject: 'رفض',
@@ -278,63 +150,6 @@ export const arAssistant = {
         'انتهت مهلة الموافقة — لم يُنفَّذ الأمر. اطلب من Hermes إعادة المحاولة، أو ارفع الحد في الإعدادات ← الأمان ← مهلة الموافقة.',
       openSafetySettings: 'فتح إعدادات الأمان',
       commandDetails: 'تفاصيل الأمر'
-    },
-    toolCards: {
-      activityLabel: 'نشاط الأدوات',
-      families: {
-        browser: 'المتصفح',
-        code: 'الشيفرة',
-        files: 'الملفات',
-        generic: 'أداة',
-        mcp: 'موصّل',
-        search: 'البحث',
-        terminal: 'الطرفية',
-        web: 'الويب'
-      },
-      names: {
-        memory: 'الذاكرة',
-        message: 'الرسائل',
-        schedule: 'الجدولة',
-        skills: 'المهارات',
-        vision: 'الرؤية'
-      },
-      usedTimes: (name, count) => `استُخدم ${name} ×${count}`,
-      working: 'جارٍ العمل…',
-      awaitingApproval: 'في انتظار موافقتك',
-      reviewApproval: 'مراجعة',
-      failed: 'فشل',
-      stopped: 'توقّف',
-      statuses: {
-        browser_back: { done: 'عاد للخلف', pending: 'يعود للخلف' },
-        browser_console: { done: 'قرأ وحدة تحكم الصفحة', pending: 'يقرأ وحدة تحكم الصفحة' },
-        browser_get_images: { done: 'جمع صور الصفحة', pending: 'يجمع صور الصفحة' },
-        browser_press: { done: 'ضغط على مفتاح', pending: 'يضغط على مفتاح' },
-        browser_scroll: { done: 'مرر الصفحة', pending: 'يمرر الصفحة' },
-        browser_vision: { done: 'نظر إلى الصفحة', pending: 'ينظر إلى الصفحة' }
-      },
-      details: {
-        request: 'الطلب',
-        output: 'المخرجات',
-        duration: 'المدة',
-        noOutput: 'لا توجد مخرجات'
-      },
-      argLabels: {
-        code: 'الشيفرة',
-        command: 'الأمر',
-        input: 'الإدخال',
-        path: 'الملف',
-        query: 'البحث',
-        target: 'الهدف',
-        text: 'النص',
-        url: 'العنوان'
-      },
-      viewer: {
-        title: name => `خطوات ${name}`,
-        step: (index, total) => `الخطوة ${index} من ${total}`,
-        noScreenshot: 'لا توجد لقطة شاشة لهذه الخطوة',
-        previous: 'الخطوة السابقة',
-        next: 'الخطوة التالية'
-      }
     },
     clarify: {
       notReady: 'غير جاهز',
@@ -350,7 +165,6 @@ export const arAssistant = {
       oneQuestion: 'سؤال واحد',
       questionProgress: (answered, total) => `تمت الإجابة على ${answered} من ${total}`
     },
-    themePicker: arThemePicker,
     tool: {
       copyCode: 'نسخ الكود',
       renderingImage: 'جار عرض الصورة...',

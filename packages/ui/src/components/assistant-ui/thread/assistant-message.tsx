@@ -41,7 +41,6 @@ import { ActionsMenu, renderActionItem } from '@/components/ui/actions-menu'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { CopyButton } from '@/components/ui/copy-button'
-import { startManualProviderOAuth } from '@/fork/store/onboarding'
 import { useI18n } from '@/i18n'
 import { writeClipboardText } from '@/lib/clipboard'
 import {
@@ -77,6 +76,7 @@ import { playSpeechText, stopVoicePlayback } from '@/lib/voice-playback'
 import { DESKTOP_BUTTON_ACTIONS, recordAction } from '@/store/desktop-metrics'
 import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
 import { notifyError } from '@/store/notifications'
+import { startManualProviderOAuth } from '@/store/onboarding'
 import { $activeGatewayProfile, normalizeProfileKey, requestFreshSession } from '@/store/profile'
 import { sessionApprovalRequest } from '@/store/prompts'
 import { requestSendDiagnostics } from '@/store/send-diagnostics'
@@ -608,6 +608,16 @@ const useErrorText = () =>
     return status?.type === 'incomplete' && typeof status.error === 'string' ? status.error : ''
   })
 
+// When the failure was recorded: the settled bubble's completion (the terminal frame's time), else the
+// row's own timestamp for a hydrated card. Never `createdAt`, whose fallback is render time.
+const useErrorFailedAt = () =>
+  useAuiState(s => {
+    const custom = s.message.metadata?.custom as { timelineCompletedAt?: unknown; timelineTimestamp?: unknown }
+    const at = custom?.timelineCompletedAt ?? custom?.timelineTimestamp
+
+    return typeof at === 'number' && Number.isFinite(at) && at > 0 ? at : undefined
+  })
+
 const ErrorCardHeadline: FC = () => {
   const { t } = useI18n()
   const surface = useErrorSurface()
@@ -842,6 +852,7 @@ const ErrorRecoveryActions: FC = () => {
   const copy = t.assistant.thread
   const surface = useErrorSurface()
   const errorText = useErrorText()
+  const failedAt = useErrorFailedAt()
 
   // useNavigate() would throw here when no Router is above us; the deep-link
   // children mount only when one is (see SettingsLinkAction).
@@ -927,10 +938,11 @@ const ErrorRecoveryActions: FC = () => {
     () =>
       formatErrorDiagnostics({
         errorText,
+        failedAt,
         model: model || undefined,
         surface
       }),
-    [errorText, model, surface]
+    [errorText, failedAt, model, surface]
   )
 
   const startNewSession = useCallback(() => {

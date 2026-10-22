@@ -29,7 +29,7 @@ const PET = {
   frameH: 208,
   frameW: 192,
   scale: 0.33,
-  spdemoeetBase64: 'stub'
+  spritesheetBase64: 'stub'
 }
 
 // Each test gets its own plugin id, so per-plugin rate windows never leak

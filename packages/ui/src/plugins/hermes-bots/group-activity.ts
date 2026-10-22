@@ -76,9 +76,9 @@ export function currentGroupActivity(group: string) {
  *  must keep classifying it as transient (never a roster badge). */
 export const GROUP_SLOT_WAIT_REASON = 'slot_wait_timeout'
 
-/** Stable coordinator phrase (`pool-spawn-coordinator.ts`), the
- *  cross-process discriminator — same shape as `isLocalBackendSlotWaitTimeout`
- *  in `store/pool-limits.ts`, kept local because the plugin fence cannot
+/** Stable phrase older Desktop hosts' local backend pool raised on a slot-wait
+ *  timeout (a renderer can still be served by one across an upgrade); same
+ *  shape as the store's classifier, kept local because the plugin fence cannot
  *  import the store. Match narrowly so other backend failures keep their path. */
 export function isGroupSlotWaitTimeoutText(text: unknown): boolean {
   return typeof text === 'string' && text.includes('timed out while waiting for a free slot')
@@ -154,12 +154,6 @@ export function groupActivityLabel(event: GroupActivityEntry, group?: null | str
     return axis ? `paused at the ${axis} cap — send a message to keep going` : base
   }
 
-  if (kind === 'member-stopped') {
-    const who = event?.member === 'You' ? 'You' : groupSpeakerLabel(event?.member || 'A bot', group)
-
-    return `Stopped ${who}`
-  }
-
   const who = event?.member === 'You' ? 'You' : groupSpeakerLabel(event?.member || 'A bot', group)
   const reason = kind === 'failed' ? String(event?.reason || '').trim() : ''
 
@@ -183,7 +177,6 @@ const GROUP_ACTIVITY_LABELS: Record<GroupActivityKind, string> = {
   safety: 'safety brake stopped a runaway turn',
   delivered: 'delivered a late reply',
   held: 'is held (stopped by you) — @mention it or say resume to release',
-  'member-stopped': 'stopped by you — held until resumed',
   stopped: 'stopped the room — remaining turns are held until resumed'
 }
 
@@ -208,7 +201,6 @@ export const GROUP_ACTIVITY_GLYPHS: Record<GroupActivityKind, string> = {
   safety: 'debug-stop',
   delivered: 'mail-read',
   held: 'debug-pause',
-  'member-stopped': 'debug-stop',
   stopped: 'debug-stop'
 }
 

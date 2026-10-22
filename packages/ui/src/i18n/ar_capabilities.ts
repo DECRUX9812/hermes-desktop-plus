@@ -64,8 +64,6 @@ export const arCapabilities = {
       catalogProvenance: (sha: string) => `ثُبّت من كتالوج Hermes${sha ? ` عند التثبيت ${sha}` : ''}.`,
       pinnedProvenance: (sha: string) => `مثبّت على الـcommit ${sha}. تُرفض التحديثات حتى يُعاد تثبيته بتثبيت جديد.`,
       pinnedBadge: (sha: string) => `مثبّت @ ${sha}`,
-      tierOfficial: 'رسمي',
-      tierCommunity: 'مجتمع',
       updateToPin: (sha: string) => `تحديث إلى ${sha}`,
       updateFailed: (name: string) => `تعذّر تحديث ${name}`,
       updated: (name: string) => `حُدّث ${name} إلى تثبيت الكتالوج الحالي. أعد تشغيل البوابة لتطبيقه.`,

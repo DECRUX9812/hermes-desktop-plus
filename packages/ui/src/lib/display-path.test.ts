@@ -4,8 +4,8 @@ import { displayPath, normalizeDisplayPath, pathLeaf } from './display-path'
 
 describe('displayPath', () => {
   it('collapses a macOS home prefix to ~', () => {
-    expect(displayPath('/Users/me/www/hermes-agent')).toBe('~/www/hermes-agent')
-    expect(displayPath('/Users/me')).toBe('~')
+    expect(displayPath('/Users/brooklyn/www/hermes-agent')).toBe('~/www/hermes-agent')
+    expect(displayPath('/Users/brooklyn')).toBe('~')
   })
 
   it('collapses a Linux home prefix to ~', () => {
@@ -13,8 +13,8 @@ describe('displayPath', () => {
   })
 
   it('collapses a Windows user profile to ~', () => {
-    expect(displayPath('C:\\Users\\me\\src')).toBe('~/src')
-    expect(displayPath('C:/Users/me')).toBe('~')
+    expect(displayPath('C:\\Users\\brooklyn\\src')).toBe('~/src')
+    expect(displayPath('C:/Users/brooklyn')).toBe('~')
   })
 
   it('honours an explicit home override', () => {

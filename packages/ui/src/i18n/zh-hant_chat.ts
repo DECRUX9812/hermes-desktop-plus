@@ -32,24 +32,6 @@ export const zhHantChat = {
     steerTurn: '引導目前回合',
     stop: '停止',
     send: '傳送',
-    broadcastTip: '傳送到所有窗格',
-    broadcastNote: '僅傳送文字——附件保留在此窗格',
-    broadcastOn: '所有窗格',
-    broadcastSummary: (sent, queued, skipped, failed) => {
-      const extras: string[] = []
-
-      if (skipped > 0) {
-        extras.push(`${skipped} 個已略過`)
-      }
-
-      if (failed > 0) {
-        extras.push(`${failed} 個失敗`)
-      }
-
-      return extras.length > 0
-        ? `已傳送到 ${sent + queued} 個窗格，${extras.join('，')}`
-        : `已傳送到 ${sent + queued} 個窗格`
-    },
     speaking: '說話中',
     transcribing: '轉寫中',
     thinking: '思考中',
@@ -326,7 +308,6 @@ export const zhHantChat = {
       heartbeatEveryHours: hours => `每 ${hours} 小時`,
       heartbeatEverySeconds: seconds => `每 ${seconds} 秒`,
       heartbeatNext: time => `下次 ${time}`,
-      heartbeatDueWaitingForIdle: '已到期 — 等待會話閒置',
       heartbeatActions: '活動訊號操作',
       pauseHeartbeat: '暫停活動訊號',
       resumeHeartbeat: '繼續活動訊號',

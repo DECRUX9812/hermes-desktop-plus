@@ -122,7 +122,7 @@ export function PetPalettePage({ search, onGenerate }: PetPalettePageProps) {
                 load={(slug, url) => loadPetThumb(requestGateway, slug, url)}
                 size={32}
                 slug={pet.slug}
-                url={pet.spdemoeetUrl}
+                url={pet.spritesheetUrl}
               />
               <span className="flex min-w-0 flex-col">
                 <span className="flex items-center gap-1.5">

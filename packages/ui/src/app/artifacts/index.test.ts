@@ -524,7 +524,7 @@ ${payload}
   it('collects images referenced with a #media: markdown href and decodes the path', () => {
     const artifacts = collectArtifactsForSession(makeSession(), [
       {
-        content: '[Image: report](#media:C%3A%5CUsers%5CUser%5CMy%20Report.png)',
+        content: '[Image: report](#media:C%3A%5CUsers%5CMorten%5CMy%20Report.png)',
         role: 'assistant',
         timestamp: 2000
       }
@@ -533,7 +533,7 @@ ${payload}
     expect(artifacts).toHaveLength(1)
     expect(artifacts[0]).toMatchObject({
       kind: 'image',
-      value: 'C:\\Users\\User\\My Report.png'
+      value: 'C:\\Users\\Morten\\My Report.png'
     })
   })
 
@@ -573,7 +573,7 @@ ${payload}
     const artifacts = collectArtifactsForSession(makeSession(), [
       {
         content: [
-          '[Image: report](#media:C%3A%5CUsers%5CUser%5CMy%20Report.png)',
+          '[Image: report](#media:C%3A%5CUsers%5CMorten%5CMy%20Report.png)',
           'Old: **MEDIA: /tmp/generated/demo.png**',
           'Link: [docs](https://example.com/docs)'
         ].join('\n\n'),
@@ -584,7 +584,7 @@ ${payload}
 
     expect(artifacts.map(artifact => artifact.value)).toEqual([
       '/tmp/generated/demo.png',
-      'C:\\Users\\User\\My Report.png',
+      'C:\\Users\\Morten\\My Report.png',
       'https://example.com/docs'
     ])
   })

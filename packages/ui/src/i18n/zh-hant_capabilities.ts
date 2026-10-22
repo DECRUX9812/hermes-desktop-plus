@@ -38,8 +38,6 @@ export const zhHantCapabilities = {
       catalogProvenance: (sha: string) => `從 Hermes 目錄安裝${sha ? `，釘選提交 ${sha}` : ''}。`,
       pinnedProvenance: (sha: string) => `已釘選到提交 ${sha}。重新釘選前將拒絕更新。`,
       pinnedBadge: (sha: string) => `釘選 @ ${sha}`,
-      tierOfficial: '官方',
-      tierCommunity: '社區',
       updateToPin: (sha: string) => `更新到 ${sha}`,
       updateFailed: (name: string) => `無法更新 ${name}`,
       updated: (name: string) => `${name} 已更新到目前目錄釘選提交。重新啟動閘道後生效。`,

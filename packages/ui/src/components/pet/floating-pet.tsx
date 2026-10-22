@@ -137,7 +137,7 @@ export function FloatingPet() {
   // Fetch pet.info on connect. pet.changed re-runs this effect when the
   // signature moves; a slow backstop covers silent seed + cold-start races.
   // Older backends (no change_events) keep the legacy fast-while-inactive poll.
-  const active = info.enabled && Boolean(info.spdemoeetBase64)
+  const active = info.enabled && Boolean(info.spritesheetBase64)
   useEffect(() => {
     if (gatewayState !== 'open') {
       return
@@ -187,13 +187,13 @@ export function FloatingPet() {
           }
         }
 
-        // Send-once semantics (#54730): tell the gateway which spdemoeet
+        // Send-once semantics (#54730): tell the gateway which spritesheet
         // revision we already hold so an unchanged multi-MB sheet is not
         // re-sent over the WebSocket on every backstop refresh.
         const held = $petInfo.get()
-        const knownRevision = held.enabled && held.spdemoeetBase64 ? held.spdemoeetRevision : undefined
+        const knownRevision = held.enabled && held.spritesheetBase64 ? held.spritesheetRevision : undefined
 
-        const next = await requestGateway<PetInfo & { spdemoeetUnchanged?: boolean }>('pet.info', {
+        const next = await requestGateway<PetInfo & { spritesheetUnchanged?: boolean }>('pet.info', {
           knownRevision,
           profile: petProfile()
         })
@@ -201,9 +201,9 @@ export function FloatingPet() {
         if (!cancelled && next) {
           const current = $petInfo.get()
 
-          if (next.enabled && next.spdemoeetUnchanged && !next.spdemoeetBase64) {
+          if (next.enabled && next.spritesheetUnchanged && !next.spritesheetBase64) {
             // Gateway confirmed our held sheet is current; keep the bytes.
-            next.spdemoeetBase64 = current.spdemoeetBase64
+            next.spritesheetBase64 = current.spritesheetBase64
           }
 
           if (
@@ -212,8 +212,8 @@ export function FloatingPet() {
             current.slug === next.slug &&
             current.displayName === next.displayName &&
             current.scale === next.scale &&
-            current.spdemoeetRevision &&
-            current.spdemoeetRevision === next.spdemoeetRevision
+            current.spritesheetRevision &&
+            current.spritesheetRevision === next.spritesheetRevision
           ) {
             return
           }
@@ -244,7 +244,7 @@ export function FloatingPet() {
 
         const current = $petInfo.get()
 
-        if (current.enabled && current.spdemoeetBase64) {
+        if (current.enabled && current.spritesheetBase64) {
           return
         }
 
@@ -460,7 +460,7 @@ export function FloatingPet() {
 
   // While popped out, the desktop overlay window owns the mascot — hide the
   // in-window one so there aren't two.
-  if (!info.enabled || !info.spdemoeetBase64 || overlayActive) {
+  if (!info.enabled || !info.spritesheetBase64 || overlayActive) {
     return null
   }
 

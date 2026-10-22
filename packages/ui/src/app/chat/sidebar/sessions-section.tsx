@@ -1,7 +1,7 @@
 import type { useSensors } from '@dnd-kit/core'
 import { useStore } from '@nanostores/react'
 import type * as React from 'react'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
 import { type NewSessionSplitHandler, startNewSessionDrag } from '@/app/chat/new-session-drag'
 import { SidebarPanelLabel } from '@/app/shell/sidebar-label'
@@ -12,7 +12,6 @@ import type { SessionInfo } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { flattenSessionsWithBranches } from '@/lib/session-branch-tree'
 import {
-  flipKeyOf,
   groupEntriesByRecency,
   groupEntriesByStatus,
   hideCollapsedGroupRows,
@@ -20,7 +19,6 @@ import {
   toSessionRows
 } from '@/lib/session-date-groups'
 import { sessionBucketLabel } from '@/lib/time'
-import { useFlipList } from '@/lib/use-flip-list'
 import { cn } from '@/lib/utils'
 import {
   $sidebarListGroupIds,
@@ -30,8 +28,7 @@ import {
   toggleWorkspaceNodeCollapsed
 } from '@/store/layout'
 import { sessionPinId } from '@/store/session'
-import { $sessionDotStateById } from '@/store/session-dot-state'
-import { sessionLiveGroup } from '@/store/session-live'
+import { $sessionDotStateById, hasLiveTurn } from '@/store/session-dot-state'
 import { applySessionRange, listRowSelectionKeys, selectionKeyForSession } from '@/store/session-selection'
 
 import { SidebarDateDivider, SidebarSectionMeta } from './chrome'
@@ -52,8 +49,6 @@ import { SidebarSessionRow } from './session-row'
 import { VirtualSessionList } from './virtual-session-list'
 
 export const VIRTUALIZE_THRESHOLD = 25
-
-const SECTION_LABEL = 'pl-0 text-ui-2xs font-medium normal-case tracking-normal text-fg-subtle'
 
 interface SidebarSectionHeaderProps {
   label: string
@@ -80,13 +75,13 @@ function SidebarSectionHeader({
   const labelBody = (
     <>
       {icon}
-      <SidebarPanelLabel className={SECTION_LABEL}>{label}</SidebarPanelLabel>
+      <SidebarPanelLabel>{label}</SidebarPanelLabel>
       {meta && <SidebarSectionMeta>{meta}</SidebarSectionMeta>}
     </>
   )
 
   return (
-    <div className="group/section flex shrink-0 items-center justify-between gap-1 px-3.5 pb-1 pt-3">
+    <div className="group/section flex shrink-0 items-center justify-between gap-1 pb-1 pt-1.5">
       {collapsible ? (
         <button
           // min-w-0 lets the label truncate at narrow sidebar widths instead of
@@ -100,7 +95,7 @@ function SidebarSectionHeader({
               reads as a static label; an open one may wait for hover/focus. */}
           <DisclosureCaret
             className={cn(
-              'text-fg-muted transition',
+              'text-(--ui-text-tertiary) transition',
               open
                 ? 'opacity-0 group-hover/section-label:opacity-100 group-focus-visible/section-label:opacity-100'
                 : 'opacity-100'
@@ -372,12 +367,6 @@ export function SidebarSessionsSection({
     [isListGroupOpen, t]
   )
 
-  const flipRow = (row: SidebarListRow, node: React.ReactNode) => (
-    <div data-flip-key={flipKeyOf(row)} key={flipKeyOf(row)}>
-      {node}
-    </div>
-  )
-
   // A single flat/virtual/lane list row — either a divider or a session.
   const renderListRow = useCallback(
     (row: SidebarListRow, draggable: boolean, action?: React.ReactNode, selectionKeys?: readonly string[]) => {
@@ -391,7 +380,6 @@ export function SidebarSessionsSection({
       return (
         <SidebarDateDivider
           action={action}
-          count={'count' in row ? row.count : undefined}
           key={row.key}
           label={label}
           toggle={{
@@ -399,7 +387,6 @@ export function SidebarSessionsSection({
             onToggle: () => dividerToggle.onToggle(row.key),
             open
           }}
-          tone={'tone' in row ? row.tone : undefined}
         />
       )
     },
@@ -464,7 +451,7 @@ export function SidebarSessionsSection({
         : grouping === 'status'
           ? groupEntriesByStatus(
               displayEntries,
-              entry => sessionLiveGroup(dotStates[entry.session.id] ?? 'idle'),
+              entry => hasLiveTurn(dotStates[entry.session.id] ?? 'idle'),
               statusDividerLabels
             )
           : toSessionRows(displayEntries)
@@ -522,10 +509,6 @@ export function SidebarSessionsSection({
   // background refresh keeps the prior tree, so this only fires when empty.
   const showProjectsSkeleton =
     projectsLoading && !hasProjectOverview && !hasProjectContent && !projectContent && !groups?.length
-
-  const flatListRef = useRef<HTMLDivElement | null>(null)
-  const flatOrderKey = useMemo(() => visibleRows.map(flipKeyOf).join('\n'), [visibleRows])
-  useFlipList(flatListRef, flatOrderKey)
 
   let inner: React.ReactNode
 
@@ -653,17 +636,11 @@ export function SidebarSessionsSection({
   } else if (sessionsDraggable) {
     inner = (
       <ReorderableList ids={sortableRowIds} onReorder={persistSessionOrder} sensors={dndSensors}>
-        <div ref={flatListRef}>
-          {visibleRows.map(row => flipRow(row, renderListRow(row, true, dividerAction, flatSelectionKeys)))}
-        </div>
+        {visibleRows.map(row => renderListRow(row, true, dividerAction, flatSelectionKeys))}
       </ReorderableList>
     )
   } else {
-    inner = (
-      <div ref={flatListRef}>
-        {visibleRows.map(row => flipRow(row, renderListRow(row, false, dividerAction, flatSelectionKeys)))}
-      </div>
-    )
+    inner = visibleRows.map(row => renderListRow(row, false, dividerAction, flatSelectionKeys))
   }
 
   // The virtualizer owns its own scroller, so suppress the wrapper's overflow

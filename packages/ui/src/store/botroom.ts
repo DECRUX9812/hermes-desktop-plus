@@ -91,8 +91,6 @@ interface ResumedSession {
 
 const $bots = atom<Map<string, BotRoomBot>>(new Map())
 const $rooms = atom<Map<string, BotRoomRoom>>(new Map())
-/** In-process listeners for the state this store pushes to the windows. */
-const localListeners = new Set<(payload: BotRoomStatePayload) => void>()
 let wired = false
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -105,77 +103,20 @@ function wireControl(): void {
   window.hermesDesktop.botroom.onControl((msg) => void handleControl(msg))
 }
 
-/**
- * Wire the overlay's control channel in the MAIN renderer.
- *
- * Called from `main.tsx`'s own body rather than here at module-evaluation time:
- * this store is a SHARED chunk (the in-page bot mascot layer imports it too), so
- * the bundler is free to evaluate it before `lib/browser-desktop-bridge-install`
- * — imported earlier by `main.tsx` — has put `window.hermesDesktop` in place. A
- * self-wire that ran then would find no bridge, quietly never subscribe, and
- * leave the Bot Room overlay (whose toolbar button opens the window straight
- * through the bridge) waiting forever for its roster.
- *
- * Every window kind imports this store, including `?win=botroom` itself — the
- * overlay window has no business answering its own control channel — so `?win=`
- * documents are skipped. Idempotent.
- */
-export function wireBotRoomControl(): void {
-  if (typeof window === 'undefined' || new URLSearchParams(window.location.search).has('win')) {
-    return
-  }
-
-  if (window.hermesDesktop?.botroom) {
-    wireControl()
-  }
+// Self-wire in the MAIN renderer only (every window kind imports this store,
+// including `?win=botroom` itself — the overlay window has no business
+// answering its own control channel). Importing the module is enough; no
+// call site needed.
+if (
+  typeof window !== 'undefined' &&
+  window.hermesDesktop?.botroom &&
+  !new URLSearchParams(window.location.search).has('win')
+) {
+  wireControl()
 }
 
 function push(payload: BotRoomStatePayload): void {
   window.hermesDesktop.botroom.pushState(payload)
-
-  // Local echo: the browser host's in-page mascot layer renders the same rows
-  // the separate windows receive, and a BroadcastChannel never delivers a frame
-  // back to the context that posted it.
-  for (const listener of localListeners) {
-    listener(payload)
-  }
-}
-
-/**
- * Everything this store pushes to the Bot Room windows, echoed in-process.
- * The browser host's page layer is the only consumer: it is the same document
- * as this store, so it cannot hear the channel's own traffic.
- */
-export function subscribeBotRoomState(listener: (payload: BotRoomStatePayload) => void): () => void {
-  localListeners.add(listener)
-
-  return () => localListeners.delete(listener)
-}
-
-/** The roster this store last pushed — the page layer's first paint. */
-export function botRoomRoster(): BotRoomBot[] {
-  return [...$bots.get().values()]
-}
-
-/**
- * Route one control verb through the same dispatcher the channel feeds. The
- * page layer's in-page mascot and pill live in THIS document, so their verbs
- * come straight here instead of round-tripping a channel that would not answer
- * them.
- */
-export function dispatchBotRoomControl(msg: BotRoomControl): void {
-  void handleControl(msg)
-}
-
-/**
- * Start feeding the roster without opening the overlay window — the page
- * layer's own trigger. Electron does the same thing implicitly: main spawns one
- * mascot window per bot as soon as the renderer pushes a roster.
- */
-export function startBotRoomFeed(): void {
-  wireControl()
-  startFeed()
-  void refreshBots()
 }
 
 function startFeed(): void {
@@ -189,11 +130,7 @@ async function refreshBots(): Promise<void> {
     const res = await requestGatewayForProfile<{ profiles: ProfileRow[] }>(
       activeGatewayProfileKey(),
       'profiles.list',
-      // `profiles.list` has no hidden-row concept — it lists every profile
-      // (`hermes_cli.profiles.list_profiles`) — and the wire contract forbids
-      // unknown params, so an `include_hidden` here is rejected with 4000 and
-      // the roster never fills.
-      {},
+      { include_hidden: true },
     )
 
     const next = new Map<string, BotRoomBot>()
@@ -210,9 +147,7 @@ async function refreshBots(): Promise<void> {
       next.set(id, {
         id,
         name: p.name,
-        // `profiles.list` sends "" for a profile that has no display name, so
-        // the fallback has to be on emptiness, not on nullishness.
-        displayName: p.display_name?.trim() || p.name,
+        displayName: p.display_name ?? p.name,
         status,
         statusLine: p.last_active,
         color: (p.ui_meta?.color as string) ?? undefined,

@@ -11,11 +11,11 @@ import { ID } from './shared'
 
 // ── pet tab: attach a petdex companion that lives beside the avatar ─────────
 
-// A petdex "spdemoeet" is the FULL animation sheet (1536×1872 webp, ~2MB;
+// A petdex "spritesheet" is the FULL animation sheet (1536×1872 webp, ~2MB;
 // 8×9 grid of 192×208 frames). Cropping frame 0 client-side meant downloading
 // megabytes per tile, a UA-less CDN fetch the petdex CDN rejects with 403
 // (#90465), and it could never serve pets hatched locally — those are absent
-// from the petdex manifest, so `pet.gallery` reports an EMPTY spdemoeetUrl.
+// from the petdex manifest, so `pet.gallery` reports an EMPTY spritesheetUrl.
 // The gateway's `pet.thumb` crops + downsamples frame 0 server-side (installed
 // sheet off disk, else the host-validated CDN URL) and returns a small PNG data
 // URI: one path for every pet, same-origin through the authenticated gateway.
@@ -121,7 +121,7 @@ interface PetGalleryEntry {
   installed?: boolean
   slug: string
   /** Full animation sheet (1536×1872 webp); empty for locally hatched pets. */
-  spdemoeetUrl?: null | string
+  spritesheetUrl?: null | string
 }
 
 interface PetTabProps {
@@ -236,10 +236,10 @@ export function PetTab({ image, onImage }: PetTabProps) {
                 onClick={() => {
                   // The pet IS the profile picture: the server-cropped frame 0
                   // becomes the dialog's avatar image (works for locally
-                  // hatched pets too — they have no spdemoeet URL at all).
+                  // hatched pets too — they have no spritesheet URL at all).
                   // Persisted when the user hits Save.
                   setSelectedSlug(pet.slug)
-                  void petThumbIcon(pet.slug, pet.spdemoeetUrl).then(icon => {
+                  void petThumbIcon(pet.slug, pet.spritesheetUrl).then(icon => {
                     if (icon) {
                       onImage(icon)
                     } else {
@@ -252,7 +252,7 @@ export function PetTab({ image, onImage }: PetTabProps) {
                   })
                 }}
               >
-                <PetThumb size={40} slug={pet.slug} spriteUrl={pet.spdemoeetUrl} />
+                <PetThumb size={40} slug={pet.slug} spriteUrl={pet.spritesheetUrl} />
                 <span className="w-full truncate text-center text-[0.6rem] text-(--ui-text-tertiary)">
                   {pet.displayName}
                 </span>

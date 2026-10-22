@@ -72,13 +72,15 @@ archive_into "$ui_dir" 2 \
   apps/desktop/update-feed.d.cts \
   apps/desktop/scripts/compiler-cache.mjs \
   apps/desktop/electron/challenge-window.ts \
+  apps/desktop/electron/event-dedupe.ts \
   apps/desktop/electron/command-screenshot-types.ts \
   apps/desktop/electron/hub-iframe-policy.ts \
+  apps/desktop/electron/hardening.ts \
+  apps/desktop/electron/prepared-submissions.ts \
   apps/desktop/electron/hud-modifier-types.ts \
   apps/desktop/electron/install-stamp.ts \
   apps/desktop/electron/machine-profile.ts \
   apps/desktop/electron/notification-types.ts \
-  apps/desktop/electron/pool-limits.ts \
   apps/desktop/electron/power-save.ts \
   apps/desktop/electron/quick-entry.ts \
   apps/desktop/electron/region-capture-types.ts \
@@ -138,8 +140,9 @@ perl_rules+=('s{/home/([a-z])}{"/home/" . uc($1)}ge')
 # markdown-text.media).
 perl_rules+=('s{%2[Ff]home%2[Ff]([a-z])}{"%2Fhome%2F" . uc($1)}ge')
 
+perl_program=$(IFS=';'; printf '%s' "${perl_rules[*]}")
 while IFS= read -r -d '' file; do
-  perl -pi -e "${perl_rules[*]}" "$file"
+  perl -pi -e "$perl_program" "$file"
 done < <(
   if ((${#grep_patterns[@]})); then
     printf '%s\n' "${grep_patterns[@]}" > "$tmp_dir/ppd-grep"
@@ -149,4 +152,14 @@ done < <(
   fi
 )
 
+# The generic /home/<name> rules must run on every imported file, not only on files that also
+# match an owner pattern: the loop above is driven by the pattern file, which may be absent.
+generic_program='s{/home/([a-z])}{"/home/" . uc($1)}ge;s{%2[Ff]home%2[Ff]([a-z])}{"%2Fhome%2F" . uc($1)}ge'
+grep -RIlZE '/home/[a-z]|%2[Ff]home%2[Ff][a-z]' "$ui_dir" "$shared_dir" \
+  --exclude-dir=overlay --exclude-dir=node_modules --exclude-dir=dist-webapp \
+  --exclude=FORK_SOURCE 2>/dev/null |
+  xargs -0 -r perl -pi -e "$generic_program"
+
+# The guard scans tracked files only: stage the import so new files are covered too.
+git -C "$root_dir" add -A packages >/dev/null
 "$root_dir/scripts/check-no-personal-data.sh"

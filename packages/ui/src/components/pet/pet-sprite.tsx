@@ -148,7 +148,7 @@ interface PetSpriteProps {
 }
 
 /**
- * Canvas renderer for a petdex spdemoeet — the one piece that must be
+ * Canvas renderer for a petdex spritesheet — the one piece that must be
  * TypeScript (the engine's decode/encode is Python). Draws the row matching the
  * live `$petState`, stepping `framesPerState` frames across a `loopMs` loop.
  *
@@ -194,15 +194,15 @@ function PetSpriteImpl({ info, zoom = 1, stateOverride, rowOverride, pauseWhenUn
   const backingH = Math.max(1, Math.round(drawH * pixelRatio))
 
   const image = useMemo(() => {
-    if (!info.spdemoeetBase64) {
+    if (!info.spritesheetBase64) {
       return null
     }
 
     const img = new Image()
-    img.src = `data:${info.mime ?? 'image/webp'};base64,${info.spdemoeetBase64}`
+    img.src = `data:${info.mime ?? 'image/webp'};base64,${info.spritesheetBase64}`
 
     return img
-  }, [info.spdemoeetBase64, info.mime])
+  }, [info.spritesheetBase64, info.mime])
 
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {

@@ -16,7 +16,6 @@ import {
 } from '@/lib/browser-transport'
 import { createBrowserUploadsBridge } from '@/lib/browser-uploads'
 import { createBrowserWindowOpener, sessionWindowTarget } from '@/lib/browser-window'
-import { createBrowserBotRoomBridge, createBrowserBotRoomMascotBridge, createBrowserPane3dBridge } from '@/lib/browser-window-bridges'
 import { createBrowserZoom } from '@/lib/browser-zoom'
 import { $connection } from '@/store/session'
 import type { BackendUpdateCheckResponse } from '@/types/hermes'
@@ -92,15 +91,6 @@ export function installBrowserDesktopBridge(): boolean {
     }),
     ...uploads,
     api,
-    // The Bot Room overlay and the 3D Pane are separate windows in Electron. A
-    // browser host stands a same-origin popup tab in for each and relays their
-    // push/control traffic over BroadcastChannel, so both surfaces work here.
-    botroom: createBrowserBotRoomBridge(),
-    // Per-bot surfaces (mascots, task pill): Electron main spawns one small
-    // always-on-top window per bot; a browser has no such window, so the roster
-    // rows reach the in-page layer through this bridge instead.
-    botroomMascot: createBrowserBotRoomMascotBridge(),
-    pane3d: createBrowserPane3dBridge(),
     findInPage: async (query: string) => {
       const find = (window as Window & { find?: (value: string) => boolean }).find
 
@@ -155,7 +145,6 @@ export function installBrowserDesktopBridge(): boolean {
         const health = await api<{ version?: string; displayVersion?: string; commit?: string }>({
           path: '/api/health'
         })
-
         return {
           appVersion: health.displayVersion || health.version || 'browser-hosted',
           baseVersion: health.version,
@@ -182,10 +171,8 @@ export function installBrowserDesktopBridge(): boolean {
           const res = await api<BackendUpdateCheckResponse>({
             path: `/api/hermes/update/check?force=${force}`
           })
-
           const behind = res.behind === undefined ? 0 : res.behind
           const checkFailed = res.can_apply && res.behind === null
-
           return {
             supported: res.can_apply,
             error: checkFailed ? 'check-failed' : undefined,

@@ -31,7 +31,7 @@ const INFO = {
   framesPerState: 2,
   loopMs: 120,
   scale: 1,
-  spdemoeetBase64: 'stub',
+  spritesheetBase64: 'stub',
   stateRows: ['idle']
 }
 

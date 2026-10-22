@@ -244,7 +244,6 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
         if (scopeRef.current === scopeProfile) {
           setLoadError(err instanceof Error ? err.message : String(err))
         }
-
         if (!silent) {
           notifyError(err, m.loadFailed)
         }

@@ -78,12 +78,7 @@ const plugin: HermesPlugin = {
           id: 'nav',
           area: SIDEBAR_NAV_AREA,
           order: 55,
-          data: {
-            codicon: 'map',
-            label: ctx.i18n.t('nav'),
-            path: '/studio',
-            tier: 'advanced'
-          } satisfies SidebarNavContribution,
+          data: { codicon: 'map', label: ctx.i18n.t('nav'), path: '/studio' } satisfies SidebarNavContribution,
         },
         {
           id: 'open',

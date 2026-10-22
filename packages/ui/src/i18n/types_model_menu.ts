@@ -1,4 +1,6 @@
 export interface ModelMenuTranslations {
+  /** A pick made while a turn runs: the owner records it for the next turn. */
+  pickDeferred: (model: string) => string
   search: string
   noModels: string
   editModels: string
@@ -7,7 +9,7 @@ export interface ModelMenuTranslations {
   favorites: string
   addFavorite: string
   removeFavorite: string
-  favoownerortcut: string
+  favoriteShortcut: string
   fast: string
   free: string
   cacheRead: string

@@ -373,7 +373,7 @@ describe('GatewaySettings', () => {
   // (docs: "you still sign in from the Gateway settings panel"), so the
   // Authentication row must stay reachable — its controls are not env-owned.
   describe('env-override remote', () => {
-    const envUrl = 'http://100.64.0.1:9191'
+    const envUrl = 'http://100.116.104.53:9191'
 
     const envRemote = {
       ...localConnection,

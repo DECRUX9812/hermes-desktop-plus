@@ -122,9 +122,9 @@ function versionItem(
     icon: applying ? <Loader2 className="size-3 animate-spin" /> : <Hash className="size-3" />,
     id: `version-${target}`,
     label: status.label,
-    // The version rests hidden, but being behind is not a preference: an
-    // available update forces it back so the user cannot miss it.
-    lockedVisible: status.hasUpdate,
+    // Update state is not a preference: hiding it is how a user misses that
+    // they are behind. Listed in the menu, but locked on.
+    lockedVisible: true,
     onSelect: () => openUpdateOverlayFor(target),
     title: status.tooltip,
     toggleLabel,
@@ -531,17 +531,18 @@ export function useStatusbarItems({
         variant: 'action'
       },
       {
-        // The session overview's door: watchable work. Only exists while a turn is
+        // Mission Control's door: watchable work. Only exists while a turn is
         // actually in flight — same self-surfacing rule as the inbox above.
-        actionId: 'view.sessionOverview',
+        // TODO(i18n): title/toggleLabel are hardcoded English (no new catalog
+        // keys in this change) — move to copy.* with the rest of the feed copy.
         className: 'w-7 justify-center px-0',
         detail: activeWork.count > 0 ? activeWork.count : undefined,
         hidden: activeWork.count === 0,
         icon: <MonitorPlay className="size-3.5" />,
         id: 'mission-control',
         to: MISSION_ROUTE,
-        title: t.sessionOverview.title,
-        toggleLabel: t.sessionOverview.title,
+        title: 'Mission Control',
+        toggleLabel: 'Toggle Mission Control',
         variant: 'action'
       },
       {
@@ -561,7 +562,7 @@ export function useStatusbarItems({
       {
         className: gatewayRestarting ? undefined : gatewayClassName,
         detail: gatewayHealth.detail,
-        hidden: botsShowing || !(gatewayHealth.degraded || gatewayRestarting),
+        hidden: botsShowing,
         icon: gatewayRestarting ? (
           <GlyphSpinner ariaLabel={copy.gatewayRestarting} className="size-3" />
         ) : inferenceReady ? (

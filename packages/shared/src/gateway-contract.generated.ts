@@ -431,8 +431,8 @@ export interface PetSpritePayload {
   slug?: string | null
   displayName?: string | null
   mime?: string | null
-  spdemoeetBase64?: string | null
-  spdemoeetRevision?: string | null
+  spritesheetBase64?: string | null
+  spritesheetRevision?: string | null
   frameW?: number | null
   frameH?: number | null
   framesPerState?: number | null
@@ -457,348 +457,6 @@ export interface ProjectFacts {
   packageManagers: string[]
   verifyCommands: string[]
   contextFiles: string[]
-}
-/** Client→server method params / server→client request params. Unknown keys are rejected. */
-export type Params = Record<string, never>
-export interface TeamListResult {
-  teams: TeamSummary[]
-}
-export interface TeamSummary {
-  id: string
-  name: string
-  mission?: string
-  member_count: number
-  open_seats: number
-  goal_count: number
-  pending_approvals: number
-  created_at: number
-  updated_at: number
-  [key: string]: unknown
-}
-export interface TeamIdParams {
-  team_id: string
-}
-/** What every mutating call returns: the fresh doc, its org tree and the goal roll-up, so a client re-renders from one response. */
-export interface TeamView {
-  team: Team
-  tree: TeamOrgNode[]
-  rollup: TeamRollup
-}
-export interface Team {
-  id: string
-  name: string
-  mission?: string
-  policy: TeamPolicy
-  channels?: Record<string, string>
-  members: TeamMember[]
-  goals: TeamGoal[]
-  approvals: TeamApproval[]
-  learnings: TeamLearning[]
-  created_at: number
-  updated_at: number
-  [key: string]: unknown
-}
-export interface TeamPolicy {
-  lead_decides?: boolean
-  [key: string]: unknown
-}
-/** One seat — ``tools/bot_team.py::upsert_member``. ``profile`` is null for an open seat; ``credentials`` are reference names, never values. */
-export interface TeamMember {
-  slot: string
-  profile?: string | null
-  role?: string
-  title?: string
-  reports_to?: string | null
-  lead?: boolean
-  status?: string
-  skills?: string[]
-  plugins?: string[]
-  credentials?: string[]
-  budget: TeamBudget
-  joined_at?: number
-  [key: string]: unknown
-}
-export interface TeamBudget {
-  monthly_usd?: number | null
-  hard_stop?: boolean
-  spent_usd?: number
-  period?: string
-  [key: string]: unknown
-}
-export interface TeamGoal {
-  id: string
-  title: string
-  detail?: string
-  parent_id?: string | null
-  owner?: string | null
-  status?: string
-  task_ids?: string[]
-  created_at?: number
-  updated_at?: number | null
-  [key: string]: unknown
-}
-export interface TeamApproval {
-  id: string
-  kind: string
-  subject: string
-  detail?: string
-  payload?: Record<string, unknown> | null
-  requested_by: string
-  status: string
-  decided_by?: string | null
-  decided_at?: number | null
-  note?: string
-  created_at?: number
-  [key: string]: unknown
-}
-export interface TeamLearning {
-  id: string
-  text: string
-  by: string
-  source?: string
-  count?: number
-  at?: number
-  last_at?: number
-  [key: string]: unknown
-}
-export interface TeamOrgNode {
-  slot: string
-  profile?: string | null
-  role?: string
-  title?: string
-  reports_to?: string | null
-  lead?: boolean
-  status?: string
-  skills?: string[]
-  plugins?: string[]
-  credentials?: string[]
-  budget: TeamBudget
-  joined_at?: number
-  reports?: TeamOrgNode[]
-  [key: string]: unknown
-}
-export interface TeamRollup {
-  goals: Record<string, GoalProgress>
-  overall: TeamRollupOverall
-  [key: string]: unknown
-}
-export interface GoalProgress {
-  done: number
-  total: number
-  percent: number
-  blocked?: boolean
-  status?: string
-  [key: string]: unknown
-}
-export interface TeamRollupOverall {
-  done: number
-  total: number
-  percent: number
-  [key: string]: unknown
-}
-/** Local member profiles of a group-chat room (remote members can't hold seats — the caller leaves them out). */
-export interface BotsTeamRoomLeadParams {
-  members?: string[]
-}
-/** ``lead`` is the room's orchestrator profile when one team covers the room and its lead is seated; ``None`` — not a team room, no seated lead, or several teams disagree — means the room keeps fan-out listening. */
-export interface BotsTeamRoomLeadResult {
-  lead?: string | null
-  lead_slot?: string
-  lead_title?: string
-  team_id?: string | null
-  team_name?: string
-}
-export interface BotsTeamCreateParams {
-  name: string
-  mission?: string | null
-  lead_decides?: boolean | null
-  channels?: Record<string, string> | null
-  actor?: string | null
-}
-export interface BotsTeamUpdateParams {
-  team_id: string
-  actor?: string | null
-  name?: string | null
-  mission?: string | null
-  lead_decides?: boolean | null
-  channels?: Record<string, string> | null
-}
-export interface TeamActorParams {
-  team_id: string
-  actor?: string | null
-}
-export interface OkResult {
-  ok?: boolean
-}
-export interface BotsTeamMemberUpsertParams {
-  team_id: string
-  actor?: string | null
-  slot?: string | null
-  profile?: string | null
-  role?: string | null
-  title?: string | null
-  skills?: string[] | null
-  plugins?: string[] | null
-  credentials?: string[] | null
-  status?: string | null
-  monthly_usd?: number | null
-  hard_stop?: boolean | null
-  reports_to?: string | null
-  lead?: boolean | null
-}
-export interface BotsTeamMemberUpsertResult {
-  team: Team
-  tree: TeamOrgNode[]
-  rollup: TeamRollup
-  member: TeamMember
-}
-export interface BotsTeamMemberRemoveParams {
-  team_id: string
-  actor?: string | null
-  member: string
-}
-export interface BotsTeamGoalUpsertParams {
-  team_id: string
-  actor?: string | null
-  goal_id?: string | null
-  title?: string | null
-  detail?: string | null
-  parent_id?: string | null
-  owner?: string | null
-  status?: string | null
-}
-export interface BotsTeamGoalResult {
-  team: Team
-  tree: TeamOrgNode[]
-  rollup: TeamRollup
-  goal: TeamGoal
-}
-export interface BotsTeamGoalLinkTaskParams {
-  team_id: string
-  actor?: string | null
-  goal_id: string
-  task_id: string
-  unlink?: boolean | null
-}
-export interface BotsTeamGoalSpawnTaskParams {
-  team_id: string
-  actor?: string | null
-  goal_id: string
-  title: string
-  body?: string | null
-  assignee?: string | null
-}
-export interface BotsTeamGoalSpawnTaskResult {
-  team: Team
-  tree: TeamOrgNode[]
-  rollup: TeamRollup
-  task_id: string
-  assignee: string
-}
-export interface BotsTeamApprovalRequestParams {
-  team_id: string
-  kind: string
-  subject: string
-  requested_by: string
-  detail?: string | null
-  payload?: Record<string, unknown> | null
-}
-export interface BotsTeamApprovalRequestResult {
-  approval: TeamApproval
-}
-export interface BotsTeamApprovalDecideParams {
-  team_id: string
-  actor?: string | null
-  approval_id: string
-  approve: boolean
-  note?: string | null
-}
-export interface BotsTeamApprovalDecideResult {
-  team: Team
-  tree: TeamOrgNode[]
-  rollup: TeamRollup
-  approval: TeamApproval
-}
-export interface BotsTeamBudgetParams {
-  team_id: string
-  member: string
-}
-export interface BotsTeamBudgetResult {
-  allowed: boolean
-  reason?: string
-  remaining_usd?: number | null
-  over_budget?: boolean
-}
-export interface BotsTeamBudgetRecordParams {
-  team_id: string
-  member: string
-  usd: number
-  actor?: string | null
-}
-export interface BotsTeamLearningAddParams {
-  team_id: string
-  text: string
-  by: string
-  source?: string | null
-}
-export interface BotsTeamLearningResult {
-  learning: TeamLearning
-}
-export interface BotsTeamLearningRemoveParams {
-  team_id: string
-  actor?: string | null
-  learning_id: string
-}
-export interface BotsTeamBriefParams {
-  team_id: string
-  member: string
-  goal_id?: string | null
-}
-export interface BotsTeamBriefResult {
-  brief: string
-}
-export interface BotsTeamPackExportResult {
-  pack: TeamPack
-}
-export interface TeamPack {
-  pack_version: number
-  name: string
-  mission?: string
-  policy: TeamPolicy
-  seats: TeamPackSeat[]
-  [key: string]: unknown
-}
-export interface TeamPackSeat {
-  slot: string
-  role?: string
-  title?: string
-  reports_to_slot?: string | null
-  lead?: boolean
-  skills?: string[]
-  plugins?: string[]
-  credentials?: string[]
-  monthly_usd?: number | null
-  hard_stop?: boolean
-  [key: string]: unknown
-}
-export interface BotsTeamPackImportParams {
-  pack: TeamPack
-  name?: string | null
-  actor?: string | null
-}
-export interface BotsTeamAuditParams {
-  team_id: string
-  limit?: number | null
-}
-export interface BotsTeamAuditResult {
-  entries: TeamAuditEntry[]
-}
-export interface TeamAuditEntry {
-  at: number
-  actor: string
-  action: string
-  detail?: Record<string, unknown>
-  [key: string]: unknown
 }
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
@@ -1069,6 +727,9 @@ export interface SharedMetricsUpdateRunResult {
 export interface SharedMetricsDesktopFeatureUseParams {
   profile?: string | null
   area: string
+}
+export interface OkResult {
+  ok?: boolean
 }
 /** ``kind`` notice_dismissed|error_toast|renderer_crash|backend_disconnect|slow_frame; ``detail`` a closed code-defined word for that kind (notice id, error category, crash reason, drop reason, frame duration bucket), never message text. */
 export interface SharedMetricsDesktopFrictionParams {
@@ -1419,7 +1080,7 @@ export interface ConnectionTargetEnvField {
   default: string
   prompt?: string | null
 }
-export type CatalogTier = 'official' | 'community'
+export type CatalogTier = 'official' | 'verified' | 'community'
 /** The catalog's security scan of the pinned commit; read-only on the card. */
 export interface CatalogScan {
   status: CatalogScanStatus
@@ -1656,30 +1317,6 @@ export interface ConnectorPolicySetResult {
   revision: string
   effective: ConnectorPolicyEffectiveUnrestricted | ConnectorPolicyEffectiveDenyAll | ConnectorPolicyEffectiveAllow | ConnectorPolicyEffectiveDeny
 }
-export interface DelegationReportsResult {
-  reports: DelegationReport[]
-}
-/** One settled background delegation awaiting report-back to its origin session. */
-export interface DelegationReport {
-  delegation_id: string
-  state: string
-  outcome: DelegationReportOutcome
-  title: string
-  summary: string
-  summary_source: DelegationReportSummarySource
-  task_count: number
-  completed_count: number
-  failed_count: number
-  duration_seconds?: number | null
-  completed_at?: number | null
-  delivery_state?: string
-  child_session_ids?: Record<string, string>
-  group?: string | null
-}
-/** done = every task finished cleanly; failed = nothing completed; needs_decision = the mixed middle (interrupted, truncated, partly failed, stalled) — a human should look. */
-export type DelegationReportOutcome = 'done' | 'needs_decision' | 'failed'
-/** ``model`` = the cached utility-model one-liner; ``heuristic`` = first substantive line of the result, always available when no auxiliary model is configured. */
-export type DelegationReportSummarySource = 'model' | 'heuristic'
 /** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. */
 export interface DisplayStatus {
   profile: string
@@ -1817,277 +1454,6 @@ export interface DisplayLeaseReleaseParams {
   viewer_id?: string | null
   force?: boolean | null
 }
-export interface ForkApprovalsListParams {
-  session_id: string
-  profile?: string | null
-}
-export interface ForkApprovalsListResult {
-  approvals: ForkApproval[]
-}
-export interface ForkApproval {
-  request_id: string
-  tool_call_id: string
-  tool_name: string
-  command: string
-  description: string
-  created_at: number
-  status: ForkApprovalStatus
-  decided_at?: number | null
-  choice?: ApprovalChoice | null
-  ran_at?: number | null
-  reason?: string | null
-}
-export type ForkApprovalStatus = 'pending' | 'allowed' | 'denied' | 'expired' | 'withdrawn'
-export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny'
-export interface ForkApprovalsDecideParams {
-  session_id: string
-  request_id: string
-  choice: ApprovalChoice
-  profile?: string | null
-}
-export interface ForkApprovalsDecideResult {
-  approval: ForkApproval
-  resolved: boolean
-}
-export interface ForkBotIdentityGetParams {
-  profile: string
-}
-export interface ForkBotIdentityGetResult {
-  profile: string
-  display_name: string
-  role: string
-  instructions: string
-  model: ForkBotModelPin
-  revision: number
-}
-export interface ForkBotModelPin {
-  provider: string
-  default: string
-}
-export interface ForkBotIdentitySetParams {
-  profile: string
-  display_name?: string | null
-  role?: string | null
-  instructions?: string | null
-  model?: string | null
-  provider?: string | null
-  confirm_expensive_model?: boolean | null
-  expected_revision?: number | null
-}
-export interface ForkBotIdentitySetResult {
-  profile: string
-  display_name: string
-  role: string
-  instructions: string
-  model: ForkBotModelPin
-  revision: number
-  applied: ForkBotIdentityApplied
-  confirm_required?: boolean | null
-  confirm_message?: string | null
-}
-export interface ForkBotIdentityApplied {
-  display_name?: boolean | null
-  role?: boolean | null
-  instructions?: boolean | null
-  model?: boolean | null
-}
-export interface ForkMemoryListParams {
-  profile: string
-}
-export interface ForkMemoryListResult {
-  entries: ForkMemoryEntry[]
-  usage: ForkMemoryUsage
-  enabled: ForkMemoryEnabled
-}
-export interface ForkMemoryEntry {
-  id: string
-  target: string
-  text: string
-}
-export interface ForkMemoryUsage {
-  memory: ForkMemoryLimitUsage
-  user: ForkMemoryLimitUsage
-}
-export interface ForkMemoryLimitUsage {
-  used: number
-  limit: number
-}
-export interface ForkMemoryEnabled {
-  memory: boolean
-  user: boolean
-}
-export interface ForkMemoryAddParams {
-  profile: string
-  target: string
-  text: string
-}
-export interface ForkMemoryUpdateParams {
-  profile: string
-  id: string
-  text: string
-}
-export interface ForkMemoryRemoveParams {
-  profile: string
-  id: string
-}
-export interface BrowserThumbnailParams {
-  tool_call_id: string
-  profile?: string | null
-  session_id?: string | null
-}
-export interface BrowserThumbnailResult {
-  found: boolean
-  reason?: string | null
-  mime?: string | null
-  data_base64?: string | null
-  url?: string | null
-  title?: string | null
-  captured_at?: number | string | null
-}
-export interface BrowserSnapshotParams {
-  tool_call_id: string
-  profile?: string | null
-  session_id?: string | null
-}
-export interface BrowserSnapshotResult {
-  found: boolean
-  text?: string | null
-  url?: string | null
-  title?: string | null
-}
-export interface ComputerTimelineParams {
-  profile: string
-  session_id: string
-  limit?: number | null
-}
-export interface ComputerTimelineResult {
-  session_id: string
-  steps: ComputerTimelineStep[]
-  todos: ComputerTodo[]
-}
-export interface ComputerTimelineStep {
-  id: string
-  index: number
-  tool: string
-  kind: 'terminal' | 'file' | 'browser' | 'search' | 'other'
-  title: string
-  status: 'done' | 'error' | 'running'
-  at?: string | null
-  duration_s?: number | null
-  detail: ComputerTimelineDetail
-}
-export interface ComputerTimelineDetail {
-  command?: string | null
-  output_tail?: string | null
-  path?: string | null
-  diff?: string | null
-  url?: string | null
-  page_title?: string | null
-  screenshot_path?: string | null
-}
-export interface ComputerTodo {
-  id: string
-  content: string
-  status: string
-}
-/** Calls that take no arguments; the desktop sends ``{}``. */
-export type ForkOnboardingEmptyParams = Record<string, never>
-export interface EnsureSetupProfileResult {
-  name: string
-  path: string
-  created: boolean
-}
-/** ``messages`` seeds the setup chat only when it is created empty; anything else is ignored. */
-export interface EnsureSetupSessionParams {
-  messages?: unknown[] | null
-}
-export interface EnsureSetupSessionResult {
-  profile: string
-  session_id: string
-  empty: boolean
-}
-export interface ForkOnboardingStateResult {
-  eligible: boolean
-  profile?: string | null
-  intro: string
-  failed_starts: number
-  completed_at?: string | null
-}
-export interface ResetSetupProfileResult {
-  name: string
-  path: string
-  reset: boolean
-}
-export interface ListRoutinesParams {
-  profile: string
-}
-export interface ListRoutinesResult {
-  routines: Routine[]
-}
-export interface Routine {
-  id: string
-  name: string
-  kind: 'schedule' | 'watch'
-  schedule: string
-  prompt: string
-  condition?: string | null
-  enabled: boolean
-  next_run_at?: string | null
-  last_run_at?: string | null
-  last_status?: string | null
-  deliver?: string | null
-}
-export interface CreateRoutineParams {
-  profile: string
-  name: string
-  kind: 'schedule' | 'watch'
-  schedule: string
-  prompt?: string | null
-  condition?: string | null
-}
-export interface CreateRoutineResult {
-  routines: Routine[]
-}
-export interface UpdateRoutineParams {
-  profile: string
-  id: string
-  name?: string | null
-  schedule?: string | null
-  prompt?: string | null
-  condition?: string | null
-}
-export interface UpdateRoutineResult {
-  routines: Routine[]
-}
-export interface PauseRoutineParams {
-  profile: string
-  id: string
-}
-export interface PauseRoutineResult {
-  routines: Routine[]
-}
-export interface ResumeRoutineParams {
-  profile: string
-  id: string
-}
-export interface ResumeRoutineResult {
-  routines: Routine[]
-}
-export interface RemoveRoutineParams {
-  profile: string
-  id: string
-}
-export interface RemoveRoutineResult {
-  routines: Routine[]
-}
-export interface RunRoutineNowParams {
-  profile: string
-  id: string
-}
-export interface RunRoutineNowResult {
-  routines: Routine[]
-  started: boolean
-}
 export interface GroupsCapabilitiesParams {
   profile?: string | null
 }
@@ -2100,6 +1466,7 @@ export interface GroupsCapabilitiesResult {
   features: string[]
   methods: string[]
   max_log_limit: number
+  seatable_profiles?: string[] | null
 }
 /** ``enabled`` with ``profile``/``catalog``/``endpoint``, or disabled with a ``reason``. */
 export interface RoomLinkStatus {
@@ -2304,6 +1671,7 @@ export interface GroupsApproveParams {
   choice: ApprovalChoice
   request_id: string
 }
+export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny'
 /** ``result`` is the local ``approval.respond`` answer or the peer's run-action receipt. */
 export interface GroupsApproveResult {
   approved?: boolean
@@ -2448,7 +1816,7 @@ export interface BotRelayOutboxDrainParams {
 export interface BotRelayOutboxDrainResult {
   envelopes: RelayEnvelope[]
 }
-/** ``tools/bot_relay.py::enqueue_envelope``. ``note`` rides along when the DM is a task hand-off (#48) — ``bot_relay.deliver`` files it into the target's mailbox. */
+/** ``tools/bot_relay.py::enqueue_envelope``. */
 export interface RelayEnvelope {
   id: string
   created_at: number
@@ -2458,17 +1826,15 @@ export interface RelayEnvelope {
   target_profile: string
   target_handle: string
   message: string
-  note?: Record<string, unknown> | null
   [key: string]: unknown
 }
-/** ``profile`` here is the TARGET profile on this gateway (also what the desktop route wrapper adds). ``note`` is an optional mailbox task hand-off (``{id, title, body, payload?}``) filed on this install before delivery. */
+/** ``profile`` here is the TARGET profile on this gateway (also what the desktop route wrapper adds). */
 export interface BotRelayDeliverParams {
   profile: string
   message: string
   from_profile?: string | null
   from_handle?: string | null
   from_connection?: string | null
-  note?: Record<string, unknown> | null
 }
 export interface BotRelayDeliverResult {
   reply: string
@@ -2479,60 +1845,6 @@ export interface BotRelayReplyParams {
   reply?: string | null
   error?: string | null
   reason?: string | null
-}
-export interface BotsMailboxListParams {
-  profile?: string | null
-  handle?: string | null
-}
-export interface BotsMailboxListResult {
-  notes: BotMailboxNote[]
-}
-/** A stored mailbox note — ``tools/bot_mailbox.py::append_note``. */
-export interface BotMailboxNote {
-  id: string
-  kind: string
-  to: BotMailboxParty
-  sender: BotMailboxParty
-  title: string
-  body: string
-  payload?: Record<string, unknown> | null
-  status: string
-  reply: string
-  created_at: number
-  updated_at: number
-  room?: string | null
-  [key: string]: unknown
-}
-/** One end of a note — ``tools/bot_mailbox.py::_normalize_party``. ``kind`` is 'bot' or 'user'; ``connection`` is the sender-side connection id (display only). */
-export interface BotMailboxParty {
-  kind?: string | null
-  profile?: string | null
-  handle?: string | null
-  name?: string | null
-  connection?: string | null
-  [key: string]: unknown
-}
-export interface BotsMailboxSendParams {
-  profile?: string | null
-  to: string
-  title: string
-  body?: string | null
-  payload?: Record<string, unknown> | null
-}
-export interface BotsMailboxSendResult {
-  note: BotMailboxNote
-  reply?: string | null
-  queued?: boolean | null
-  delivery_error?: string | null
-}
-export interface BotsMailboxUpdateParams {
-  profile?: string | null
-  id: string
-  status: string
-  reply?: string | null
-}
-export interface BotsMailboxUpdateResult {
-  note: BotMailboxNote
 }
 export interface BrowserControllerRegisterParams {
   session_id: string
@@ -2607,6 +1919,8 @@ export interface ClientCapabilitiesResult {
   server_requests: string[]
   declines_not_shown?: boolean
 }
+/** Client→server method params / server→client request params. Unknown keys are rejected. */
+export type Params = Record<string, never>
 /** ``machine_kind`` is ``Spark``, ``Mac``, ``PC`` or ``computer``. ``nvidia_platform`` is ``products.nvidia_platform()``: ``rtx_spark``, ``dgx_spark``, ``discrete`` or null. ``locale`` is the OS account's first UI language, null when the OS has none. */
 export interface MachineFactsResult {
   machine: MachineInfo
@@ -2627,48 +1941,6 @@ export interface MachineInfo {
   wsl?: boolean | null
   container?: boolean | null
 }
-export interface _AppScoped {
-  profile?: string | null
-  session_id?: string | null
-}
-export interface McpAppsListResult {
-  apps: McpApp[]
-}
-/** A tool with an app. ``registry_name`` is the model-facing tool name, ``None`` for an app-only tool (callable from its UI, never by the model). */
-export interface McpApp {
-  server: string
-  tool: string
-  title: string
-  description?: string
-  registry_name?: string | null
-  resourceUri: string
-  visibility: string[]
-  entrypoints?: unknown[]
-  icons?: unknown[]
-  [key: string]: unknown
-}
-export interface McpAppsReadUiParams {
-  profile?: string | null
-  session_id?: string | null
-  server: string
-  uri: string
-}
-/** ``meta`` is the content item's ``_meta`` (``ui.csp``, ``ui.prefersBorder``, ``openai/ui``). */
-export interface McpAppsReadUiResult {
-  uri: string
-  mimeType: string
-  html: string
-  meta?: Record<string, unknown>
-}
-export interface McpAppsCallParams {
-  profile?: string | null
-  session_id?: string | null
-  server: string
-  tool: string
-  arguments?: Record<string, unknown>
-}
-/** The MCP ``CallToolResult`` as JSON (``content``, ``structuredContent``, ``isError``, ``_meta``). */
-export type McpAppsCallResult = Record<string, unknown>
 /** ``word`` is the token under the cursor (``@`` prefix = context reference); ``cwd`` / ``session_id`` pick the directory the listing resolves against. */
 export interface CompletePathParams {
   profile?: string | null
@@ -3336,20 +2608,20 @@ export interface ProjectsProjectSessionsParams {
 export interface ProjectsProjectSessionsResult {
   project?: ProjectTreeNode | null
 }
-/** ``knownRevision``: the spdemoeet revision the caller already holds (send-once bytes). */
+/** ``knownRevision``: the spritesheet revision the caller already holds (send-once bytes). */
 export interface PetInfoParams {
   profile?: string | null
   knownRevision?: string | null
 }
-/** ``server._pet_sprite_payload`` behind ``enabled``; every sprite field is absent when the pet display is off, ``spdemoeetBase64`` is elided when ``spdemoeetUnchanged``. */
+/** ``server._pet_sprite_payload`` behind ``enabled``; every sprite field is absent when the pet display is off, ``spritesheetBase64`` is elided when ``spritesheetUnchanged``. */
 export interface PetInfoResult {
   enabled: boolean
   slug?: string | null
   displayName?: string | null
   mime?: string | null
-  spdemoeetBase64?: string | null
-  spdemoeetRevision?: string | null
-  spdemoeetUnchanged?: boolean | null
+  spritesheetBase64?: string | null
+  spritesheetRevision?: string | null
+  spritesheetUnchanged?: boolean | null
   frameW?: number | null
   frameH?: number | null
   framesPerState?: number | null
@@ -3365,7 +2637,7 @@ export interface PetInfoMetaResult {
   slug?: string | null
   displayName?: string | null
   scale?: number | null
-  spdemoeetRevision?: string | null
+  spritesheetRevision?: string | null
 }
 /** ``graphics`` opts into the kitty payload when the TTY speaks it; ``cols`` overrides the width. */
 export interface PetCellsParams {
@@ -3403,7 +2675,7 @@ export interface PetGalleryEntry {
   slug: string
   displayName: string
   installed: boolean
-  spdemoeetUrl?: string
+  spritesheetUrl?: string
   curated?: boolean | null
   generated?: boolean
 }
@@ -3426,7 +2698,7 @@ export interface PetExportResult {
   filename: string
   zipBase64: string
 }
-/** ``url``: spdemoeet source for a not-yet-installed pet. */
+/** ``url``: spritesheet source for a not-yet-installed pet. */
 export interface PetThumbParams {
   profile?: string | null
   slug: string
@@ -3473,6 +2745,8 @@ export interface PromptSubmitResult {
   survivor_user_row_ids?: (number | null)[] | null
   survivor_row_id_map?: Record<string, number | null> | null
   turn_isolation?: boolean | null
+  admission_id?: string | null
+  forwarded?: boolean | null
 }
 export type PromptSubmitStatus = 'streaming' | 'queued' | 'steered' | 'redirected'
 export interface ClipboardPasteParams {
@@ -3541,14 +2815,6 @@ export interface FileAttachParams {
   path?: string | null
   data_url?: string | null
   name?: string | null
-  staged_upload?: StagedFileUpload | null
-}
-/** Source identity returned by the browser upload route, checked against the live profile. */
-export interface StagedFileUpload {
-  install_id: string
-  path: string
-  profile_home: string
-  profile_incarnation?: string | null
 }
 export interface FileAttachResult {
   attached: boolean
@@ -3798,9 +3064,6 @@ export interface SessionCreateParams {
   hidden?: boolean
   room_plumbing?: boolean
   follow_profile_config?: boolean
-  bot_topic?: boolean
-  team_room?: boolean
-  team_room_lead?: string | null
   idempotency_key?: string | null
 }
 /** One create-time transcript row (``session_history._coerce_seed_history``); ``text`` is the legacy alias of ``content``; only ``display_kind: "hidden"`` is accepted from the wire. Clients forward stored rows verbatim (``_row_id``, ``timestamp``, …) and the coercer drops what it does not use, so the row stays open. */
@@ -3828,7 +3091,6 @@ export interface TranscriptMessage {
   row_id?: number | null
   display_kind?: string | null
   display_metadata?: unknown | null
-  user_originated?: boolean | null
   name?: string | null
   context?: string | null
   args?: Record<string, unknown> | null
@@ -3903,7 +3165,6 @@ export interface InflightTurn {
   assistant?: string
   streaming?: boolean
   user?: string
-  user_originated?: boolean | null
   display_kind?: string | null
   display_metadata?: Record<string, unknown> | null
   corrections?: string[] | null
@@ -4020,6 +3281,7 @@ export interface SessionActiveItem {
   model: string
   preview: string
   session_key: string
+  source?: string | null
   started_at: number
   status: LiveSessionStatus
   title: string
@@ -4359,6 +3621,7 @@ export interface SessionEventsSinceParams {
   session_id: string
   profile?: string | null
   last_seen?: number | null
+  replay_epoch?: string | null
 }
 export interface SessionEventsSinceResult {
   events: Record<string, unknown>[]
@@ -4395,27 +3658,6 @@ export interface LlmOneshotParams {
 export interface LlmOneshotResult {
   text: string
 }
-/** ``history`` is the client-owned thread (prior Q/A pairs); the server keeps no state. */
-export interface SessionAskParams {
-  session_id: string
-  profile?: string | null
-  question: string
-  history?: unknown[] | null
-}
-export interface SessionAskResult {
-  answer: string
-  resolved_id: string
-  messages_considered: number
-  truncated: boolean
-}
-/** No body beyond the session address; a miss answers empty text, never an error. */
-export interface SessionPredictNextParams {
-  session_id: string
-  profile?: string | null
-}
-export interface SessionPredictNextResult {
-  text: string
-}
 export interface SystemBatteryParams {
   profile?: string | null
 }
@@ -4433,6 +3675,7 @@ export interface ProcessStopParams {
 }
 export interface ProcessStopResult {
   killed: number
+  delegations?: number
 }
 export interface AgentsListParams {
   profile?: string | null
@@ -4471,6 +3714,7 @@ export interface ProcessEntry {
   notify_on_complete?: boolean | null
   exit_code?: number | null
   exited_at?: number | null
+  started_epoch?: number | null
   completion_reason?: string | null
   detached?: boolean | null
   [key: string]: unknown
@@ -4526,6 +3770,8 @@ export interface CommandsCatalogResult {
   skills?: Record<string, SkillCatalogEntry>
   skill_count?: number
   warning?: string
+  plugin_discovery_error?: string
+  plugin_commands?: Record<string, string>
 }
 export interface CommandCatalogMeta {
   argument_mode?: ArgumentMode | null
@@ -4589,13 +3835,11 @@ export interface SlashExecResult {
 export interface InsightsGetParams {
   days?: number | null
   profile?: string | null
-  report?: boolean | null
 }
 export interface InsightsGetResult {
   days: number
   sessions: number
   messages: number
-  report?: Record<string, unknown> | null
 }
 export interface ConfigShowParams {
   profile?: string | null
@@ -4628,9 +3872,8 @@ export interface RollbackRestoreParams {
   session_id: string
   hash: string
   file_path?: string | null
-  files_only?: boolean
-  safe?: boolean
   profile?: string | null
+  all?: boolean | null
 }
 /** ``tools/checkpoint_manager.py::restore`` outcome; ``history_removed`` is added for a full (non-file) restore that also rewound the live transcript. */
 export interface RollbackRestoreResult {
@@ -4792,7 +4035,11 @@ export interface ToolsConfigureResult {
   reset: boolean
   unknown: string[]
 }
-export type ReloadEnvParams = Record<string, never>
+/** The shared owner serves ``/reload`` for one session the caller controls (``session_id``). */
+export interface ReloadEnvParams {
+  session_id?: string | null
+  profile?: string | null
+}
 export interface ReloadEnvResult {
   updated: number
 }
@@ -4803,6 +4050,7 @@ export interface ReloadMcpParams {
   always?: boolean
   rev?: string | null
 }
+/** ``session``: what the calling local session's MCP servers did (a new policy generation, nothing to change, or deferred while a turn runs or waits); ``unavailable``: configured servers that did not connect beside what did apply; ``session_servers``: the MCP servers that session's committed policy runs. */
 export interface ReloadMcpResult {
   status: ReloadMcpStatus
   message?: string | null
@@ -4810,8 +4058,12 @@ export interface ReloadMcpResult {
   coalesced?: boolean | null
   turn_isolation?: boolean | null
   host_ack?: unknown | null
+  session?: ReloadMcpSession | null
+  unavailable?: string[] | null
+  session_servers?: string[] | null
 }
 export type ReloadMcpStatus = 'confirm_required' | 'reloaded'
+export type ReloadMcpSession = 'applied' | 'unchanged' | 'busy'
 /** ``query`` is the search text / hub identifier / browse page (digits); ``page`` / ``page_size`` apply to ``browse``. */
 export interface SkillsManageParams {
   profile?: string | null
@@ -5095,13 +4347,25 @@ export interface McpOauthCallbackResult {
 export type PluginsListParams = Record<string, never>
 export interface PluginsListResult {
   plugins: LegacyPluginRow[]
+  toolsets?: PluginToolsetRow[] | null
+  portable_mcp_servers?: string[] | null
 }
 export interface LegacyPluginRow {
   name: string
   version: string
   enabled: boolean
+  key?: string | null
+  tools?: number | null
+  hooks?: number | null
+  commands?: number | null
+  error?: string | null
 }
-/** ``toggle``: ``key``/``name`` + ``enable``; ``install``: ``identifier``/``repo`` or ``catalog_name`` (+ ``force``, ``enable``, ``ref``); ``update``: ``name`` (+ ``accept_capabilities`` to apply a re-pin that widened the plugin after the user confirmed the ``delta``); ``remove``: ``name`` (user installs only); ``settings``: ``key`` + ``values`` (``{setting_key: value}``, non-secret schema keys only); ``presence``: ``names`` (catalog names, answered in that order). */
+export interface PluginToolsetRow {
+  key: string
+  label: string
+  description: string
+}
+/** ``toggle``: ``key``/``name`` + ``enable``; ``install``: ``identifier``/``repo`` or ``catalog_name`` (+ ``force``, ``enable``, ``ref``); ``update``: ``name`` (+ ``accept_capabilities`` to apply a re-pin that widened the plugin after the user confirmed the ``delta``, + ``force`` to apply an update whose security scan returned caution after the user saw the findings); ``remove``: ``name`` (user installs only); ``settings``: ``key`` + ``values`` (``{setting_key: value}``, non-secret schema keys only); ``presence``: ``names`` (catalog names, answered in that order). */
 export interface PluginsManageParams {
   profile?: string | null
   action?: PluginsAction
@@ -5118,7 +4382,7 @@ export interface PluginsManageParams {
   names?: string[] | null
 }
 export type PluginsAction = 'list' | 'toggle' | 'install' | 'update' | 'remove' | 'settings' | 'onboarding' | 'presence'
-/** ``list`` → ``plugins`` + counts; ``toggle`` → ``ok``/``unchanged``/``restart_required``/``name`` (the canonical key written)/``plugin``; ``install`` → ``hermes_cli.plugins_cmd.dashboard_install_plugin``'s ok payload; ``toggle``/``install``/``update`` that loaded a plugin also carry ``gateway_reloaded`` (the running gateway picked it up and re-wired its handlers) and ``activation`` — the honest split of what is live now vs deferred, so ``restart_required`` is True only when no gateway answered; ``update`` → ``ok``/``unchanged``/``sha``, or ``ok=false`` + ``consent_required`` with the ``delta`` (``{surface: [added...]}``) / ``delta_lines`` a widened pin adds — nothing changed until the client retries with ``accept_capabilities``; ``remove`` → ``ok``/``name`` plus ``cleared_memory_provider`` when the removed plugin was the live ``memory.provider``. */
+/** ``list`` → ``plugins`` + counts; ``toggle`` → ``ok``/``unchanged``/``restart_required``/``name`` (the canonical key written)/``plugin``; ``install`` → ``hermes_cli.plugins_cmd.dashboard_install_plugin``'s ok payload; ``toggle``/``install``/``update`` that loaded a plugin also carry ``gateway_reloaded`` (the running gateway picked it up and re-wired its handlers) and ``activation`` — the honest split of what is live now vs deferred, so ``restart_required`` is True only when no gateway answered; ``update`` → ``ok``/``unchanged``/``sha``, or ``ok=false`` + ``consent_required`` with the ``delta`` (``{surface: [added...]}``) / ``delta_lines`` a widened pin adds — nothing changed until the client retries with ``accept_capabilities`` — or ``ok=false`` + ``scan_blocked`` with ``scan_verdict`` / ``scan_findings`` (retry a caution verdict with ``force``); ``remove`` → ``ok``/``name`` plus ``cleared_memory_provider`` when the removed plugin was the live ``memory.provider``. */
 export interface PluginsManageResult {
   plugins?: AgentPluginRow[] | null
   user_count?: number | null
@@ -5142,6 +4406,9 @@ export interface PluginsManageResult {
   consent_required?: boolean | null
   delta?: Record<string, string[]> | null
   delta_lines?: string[] | null
+  scan_blocked?: boolean | null
+  scan_verdict?: string | null
+  scan_findings?: PluginScanFinding[] | null
   error?: string | null
   written?: string[] | null
   onboarding?: OnboardingCatalogPlugin[] | null
@@ -5165,6 +4432,7 @@ export interface AgentPluginRow {
   catalog_sha?: string | null
   catalog_version?: string | null
   update_available?: boolean | null
+  update_target?: string | null
   pinned_sha?: string | null
   settings_schema?: PluginSettingField[] | null
 }
@@ -5212,6 +4480,15 @@ export interface PluginLiveSkill {
   name: string
   description?: string
 }
+/** One security-scan finding (``tools.plugin_guard``) on a plugin tree the scan blocked. */
+export interface PluginScanFinding {
+  pattern_id: string
+  severity: string
+  category: string
+  file: string
+  line: number
+  description: string
+}
 /** A catalog plugin curated for the onboarding card (``onboarding: true``) that this OS runs. ``app_state`` is the pinned ``plugin.json`` declaration judged on this host; ``sentence`` names what is missing (empty when present or unknown). */
 export interface OnboardingCatalogPlugin {
   name: string
@@ -5247,6 +4524,782 @@ export interface PluginCatalogLookupEntry {
   sha: string
   subdir: string
 }
+export interface CanonicalShellExecParams {
+  session_id: string
+  command: string
+  profile?: string | null
+}
+export interface PromptReceiptParams {
+  session_id: string
+  admission_id: string
+  include_result?: boolean | null
+}
+/** ``result`` / ``usage``: the structured turn result committed at settlement, only with ``include_result`` on a terminal admission that saved one. */
+export interface PromptReceiptResult {
+  admission_id: string
+  ref: CanonicalSessionRef
+  sequence: number
+  status: 'queued' | 'started' | 'unknown' | 'terminal'
+  outcome: string | null
+  authority_epoch: number
+  execution_generation: number | null
+  result?: unknown | null
+  usage?: Record<string, unknown> | null
+}
+export interface CanonicalSessionRef {
+  profile_id: string
+  session_id: string
+}
+export interface PromptCancelParams {
+  session_id: string
+  admission_id: string
+}
+/** ``gateway/session_contract.py::AdmissionReceipt`` as ``dataclasses.asdict`` sends it. */
+export interface AdmissionStatus {
+  admission_id: string
+  ref: CanonicalSessionRef
+  sequence: number
+  status: 'queued' | 'started' | 'unknown' | 'terminal'
+  outcome: string | null
+  authority_epoch: number
+  execution_generation: number | null
+}
+export interface PromptResolveUnknownParams {
+  session_id: string
+  admission_id: string
+  execution_generation: number
+}
+/** ``operation`` + ``payload`` are validated by ``hermes_state_mutations.validate_action``; ``expected_generation`` is required for delete/rewind/reset/branch/model/compress/reasoning/workspace. ``reasoning`` (``{effort}``) and ``workspace`` (``{cwd}``, refused ``session_busy`` mid-turn) rewrite the session's frozen policy: session-scope ``/reasoning`` and Desktop's Move to project. ``edit_policy`` (``{policy}``: ask / workspace_session / session) is an ACP session's edit approval (main's ACP modes). */
+export interface SessionMutateParams {
+  session_id: string
+  request_id: string
+  expected_revision: number
+  operation: string
+  payload: Record<string, unknown>
+  expected_generation?: number | null
+}
+/** The committed mutation receipt plus the operation's projection (``title``, ``archived``, ``branched_session_id``, compress ``status``/``lines``, …). ``revision`` is absent only on a read-only compress preview. */
+export interface SessionMutateResult {
+  session_id: string
+  operation: string
+  revision?: number | null
+  [key: string]: unknown
+}
+/** Exactly one of ``filters`` (``SessionDB.prune_sessions`` keyword filters, as ``hermes sessions prune`` builds them) or ``never_active_days`` (``--never-active``). */
+export interface SessionPruneParams {
+  filters?: Record<string, unknown> | null
+  never_active_days?: number | null
+}
+export interface SessionPruneResult {
+  deleted: number
+  routing_deleted?: number | null
+  skipped?: number | null
+}
+export interface CommandObserveParams {
+  session_id: string
+  name: string
+  arg?: string | null
+  profile?: string | null
+}
+export interface CommandObserveResult {
+  queued: boolean
+}
+export interface CanonicalSessionInfoParams {
+  session_id: string
+}
+/** ``gateway/session_local_inventory.py::snapshot_info``: ``local_session_info`` + the inventory. */
+export interface CanonicalSessionInfo {
+  provider?: string | null
+  tools?: Record<string, string[]> | null
+  skills?: Record<string, string[]> | null
+  mcp_servers?: McpServerStatus[] | null
+  version?: string | null
+  release_date?: string | null
+  update_behind?: unknown | null
+  update_command?: string | null
+  branch?: string | null
+  project?: ProjectRef | null
+  system_prompt?: string | null
+  context_length?: number | null
+  enabled_toolsets?: string[] | null
+  tool_availability?: Record<string, unknown> | null
+  tool_availability_warnings?: string[] | null
+  browser_backend_notice?: string | null
+  unknown_toolsets?: string[] | null
+  source: string
+  model?: string | null
+  lazy: boolean
+  profile_id: string
+  desktop_protocol: string
+  profile_name: string
+  cwd?: string | null
+  edit_approval_policy?: 'ask' | 'workspace_session' | 'session' | null
+  launch_request?: Record<string, unknown> | null
+  reasoning_effort?: string | null
+  reasoning_effort_wire?: string | null
+  service_tier?: string | null
+  fast?: boolean | null
+  title?: string | null
+  started_at?: number | null
+  last_active_at?: number | null
+  yolo?: boolean | null
+  api_mode?: string | null
+  tool_count?: number | null
+  credential_hint?: string | null
+  config_warning?: string | null
+  [key: string]: unknown
+}
+export interface SessionStatsParams {
+  session_id: string
+}
+/** ``gateway/session_usage.py::usage_stats``: session-cumulative counters (the agent's ``session_*``), context / compressor figures, rolling latency and throughput, rate-limit state, live subagents. */
+export interface SessionStats {
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  reasoning_tokens: number
+  api_calls: number
+  last_prompt_tokens: number
+  context_tokens: number
+  context_length?: number | null
+  config_context_length?: number | null
+  context_source?: string | null
+  compression_count: number
+  avg_latency_s?: number | null
+  tokens_per_s?: number | null
+  last_turn_tokens: number
+  rate_limit?: Record<string, unknown> | null
+  active_subagents: number
+  model: string
+  provider: string
+  fallback_model?: string | null
+}
+export interface RollbackSessionDiffParams {
+  session_id: string
+  profile?: string | null
+}
+/** ``gateway/session_tui_ops.py::_session_diff``: ``CheckpointManager.session_diff`` under the session's frozen checkpoint policy (``enabled: false`` when that policy does not checkpoint). ``diff`` is bounded to fit one frame; ``diff_lines`` counts the whole body. */
+export interface RollbackSessionDiffResult {
+  enabled: boolean
+  success?: boolean
+  stat?: string
+  diff?: string
+  diff_lines?: number
+  empty?: boolean
+  error?: string | null
+}
+/** ``format``: json (default) / md / markdown / html / snapshot (``normalize_save_format``). */
+export interface SessionExportParams {
+  session_id: string
+  profile?: string | null
+  format?: string
+  redact?: boolean
+}
+/** ``gateway/session_tui_ops.py::export_session``: the rendered ``/save`` body and its default file name. The client writes it (the gateway may be remote); nothing is written on the host. */
+export interface SessionExportResult {
+  format: string
+  filename: string
+  content: string
+}
+export interface SessionAutomationParams {
+  session_id: string
+  kind: 'goal' | 'loop' | 'heartbeat'
+  call: string
+  args?: unknown[] | null
+  kwargs?: Record<string, unknown> | null
+}
+/** ``gateway/session_viewer_automation.py``: the manager's persisted state after the call (its own JSON, ``null`` when none) and the call's value, or the refusal main's manager raised. */
+export interface SessionAutomationResult {
+  state: string | null
+  value?: unknown | null
+  error?: Record<string, string> | null
+}
+export interface SessionDetachParams {
+  session_id: string
+  subscription_id: string
+  end_reason?: string | null
+}
+export interface SessionDetachResult {
+  session_id: string
+  subscription_id: string
+  detached: boolean
+}
+export type RuntimeDescribeParams = Record<string, never>
+export interface RuntimeDescribeResult {
+  instance_id: string
+  profile_id: string
+  authority_epoch: number
+  capabilities: string[]
+  session_create: SessionCreateDescriptor
+  skin?: SkinPayload | null
+}
+export interface SessionCreateDescriptor {
+  sources: string[]
+  parameters: string[]
+}
+/** ``tui_gateway/change_watcher.py::resolve_skin`` — the resolved active skin (``HermesSkin``). ``{}`` when the skin engine failed to load. Colour maps are token → colour string. */
+export interface SkinPayload {
+  name?: string
+  description?: string
+  colors?: Record<string, string>
+  light_colors?: Record<string, string>
+  dark_colors?: Record<string, string>
+  branding?: Record<string, string>
+  banner_logo?: string
+  banner_hero?: string
+  tool_prefix?: string
+  help_header?: string
+  [key: string]: unknown
+}
+export interface ClarifyRespondParams {
+  session_id: string
+  execution_generation: number
+  prompt_id: string
+  answer: string
+}
+export interface PromptResponseResult {
+  status: 'resolved' | 'already_resolved'
+  prompt_id: string
+}
+export interface CronRunParams {
+  job_id: string
+  request_id: string
+  extra_prompt: string | null
+}
+export interface CronSubmitResult {
+  session_id: string
+  admission_id: string
+}
+/** ``result`` is the ``run_job`` tuple once terminal; ``recover`` adds the frozen ``job`` and answers ``status='missing'`` for a firing that was never admitted. */
+export interface CronStatusResult {
+  status: string
+  result: unknown[] | null
+  job_flags?: Record<string, unknown> | null
+  job?: Record<string, unknown> | null
+  [key: string]: unknown
+}
+export interface CronAdmissionParams {
+  session_id: string
+  admission_id: string
+}
+export interface CronCancelResult {
+  ok: boolean
+}
+export interface KanbanRunParams {
+  board: string
+  task_id: string
+  run_id: number
+  claim_lock: string
+  db?: string | null
+}
+export interface KanbanRunResult {
+  session_id: string
+  receipt: AdmissionStatus
+}
+export interface A2aForwardParams {
+  agent: string
+  tenant: string
+  peer: string
+  context_id: string
+  input_id: string
+  text: string
+}
+export interface A2aForwardResult {
+  admission_id: string
+  ref: CanonicalSessionRef
+  sequence: number
+  status: 'queued' | 'started' | 'unknown' | 'terminal'
+  outcome: string | null
+  authority_epoch: number
+  execution_generation: number | null
+  session_id: string
+  result: unknown | null
+}
+export interface WorkerRegisterParams {
+  profile_id: string
+  session_id: string
+  execution_id: string
+  generation: number
+  pid: number
+  birth: number
+  secret: string
+  kind: string
+}
+/** A ``worker_executions`` row without its adoption digest. */
+export interface WorkerExecution {
+  execution_id: string
+  session_id: string
+  kind: string
+  owner_epoch: number
+  generation: number
+  status: string
+  last_sequence: number
+  [key: string]: unknown
+}
+/** The producer claim every worker verb proves (``gateway/session_worker.py::_SCOPE``). */
+export interface WorkerScopeParams {
+  profile_id: string
+  session_id: string
+  execution_id: string
+  generation: number
+  pid: number
+  birth: number
+  secret: string
+}
+export interface WorkerPersistParams {
+  profile_id: string
+  session_id: string
+  execution_id: string
+  generation: number
+  pid: number
+  birth: number
+  secret: string
+  epoch: number
+  sequence: number
+  operation: string
+  payload: Record<string, unknown>
+}
+/** The operation's durable receipt (``message_id`` for an append, delegation results, …). */
+export type WorkerPersistResult = Record<string, unknown>
+export interface GroupsAttachmentUploadParams {
+  profile?: string | null
+  room_id: string
+  upload_id: string
+  kind: string
+  name: string
+  mime: string
+  data_base64: string
+}
+export interface RoomAttachment {
+  attachment_id: string
+  kind: string
+  name: string
+  size: number
+  mime: string
+  sha256: string
+  state: string
+  created_at: number
+  idempotent: boolean
+  event_id?: string | null
+  [key: string]: unknown
+}
+export interface GroupsAttachmentDownloadParams {
+  profile?: string | null
+  room_id: string
+  event_id: string
+  attachment_id: string
+}
+export interface RoomAttachmentBytes {
+  attachment_id: string
+  kind: string
+  name: string
+  size: number
+  mime: string
+  sha256: string
+  state: string
+  created_at: number
+  idempotent: boolean
+  event_id?: string | null
+  data_base64: string
+  [key: string]: unknown
+}
+export interface GroupsDiscardParams {
+  profile?: string | null
+  room_id: string
+  member_id: string
+  task_id: string
+  execution_generation: number
+}
+export interface GroupsDiscardResult {
+  discarded?: boolean
+  task: RoomTaskReceipt
+}
+export interface CanonicalCreateParams {
+  profile?: string | null
+  request_id?: string | null
+  source?: 'cli' | 'tui' | 'gui' | 'acp' | 'tool' | 'oneshot'
+  cwd?: string | null
+  row_cwd?: string | null
+  model?: string | null
+  provider?: string | null
+  base_url?: string | null
+  api_key?: string | null
+  toolsets?: string[] | null
+  reasoning?: string | null
+  max_turns?: number | string | null
+  ignore_rules?: boolean
+  yolo?: boolean
+  safe_mode?: boolean
+  ignore_user_config?: boolean
+  skills?: string[] | null
+  checkpoints?: boolean
+  accept_hooks?: boolean
+  pass_session_id?: boolean
+  editor?: Record<string, unknown> | null
+  title?: string | null
+  hidden?: boolean
+  follow_profile_config?: boolean | null
+  service_tier?: string | null
+  cwd_explicit?: boolean | null
+  run_budget?: number | null
+  verbose?: boolean
+  client_env?: Record<string, string> | null
+}
+export interface CanonicalSnapshot {
+  session_id: string
+  stored_session_id: string
+  messages: TranscriptMessage[]
+  display_messages?: TranscriptMessage[] | null
+  message_count: number
+  running: boolean
+  authority_epoch: number
+  replay_epoch: string
+  last_sequence: number
+  subscription_id: string
+  revision: number
+  execution_generation: number
+  pending: CanonicalPendingAdmission[]
+  prompts: CanonicalPendingPrompt[]
+  info: CanonicalSnapshotInfo
+  pending_connection?: ConnectionRequestPayload | null
+  todo_state?: TodoState | null
+}
+export interface CanonicalPendingAdmission {
+  admission_id: string
+  ref: CanonicalSessionRef
+  sequence: number
+  status: 'queued' | 'started' | 'unknown' | 'terminal'
+  outcome: string | null
+  authority_epoch: number
+  execution_generation: number | null
+  input_id: string
+  text: string
+  controls?: ('steer' | 'replace')[] | null
+  steering?: boolean | null
+}
+export interface CanonicalPendingPrompt {
+  kind: 'approval' | 'clarify'
+  prompt_id: string
+  execution_generation: number
+  choices: string[]
+  command?: string | null
+  description?: string | null
+  edit?: Record<string, unknown> | null
+  question?: string | null
+  multi_select?: boolean | null
+  timeout_s?: number | null
+}
+export interface CanonicalSnapshotInfo {
+  provider?: string | null
+  tools?: Record<string, string[]> | null
+  skills?: Record<string, string[]> | null
+  mcp_servers?: McpServerStatus[] | null
+  version?: string | null
+  release_date?: string | null
+  update_behind?: unknown | null
+  update_command?: string | null
+  branch?: string | null
+  project?: ProjectRef | null
+  system_prompt?: string | null
+  context_length?: number | null
+  enabled_toolsets?: string[] | null
+  tool_availability?: Record<string, unknown> | null
+  tool_availability_warnings?: string[] | null
+  browser_backend_notice?: string | null
+  unknown_toolsets?: string[] | null
+  desktop_protocol: 'hermes-gateway-v1'
+  source?: string | null
+  model?: string | null
+  lazy?: boolean | null
+  profile_id?: string | null
+  profile_name?: string | null
+  cwd?: string | null
+  edit_approval_policy?: 'ask' | 'workspace_session' | 'session' | null
+  launch_request?: Record<string, unknown> | null
+  reasoning_effort?: string | null
+  reasoning_effort_wire?: string | null
+  service_tier?: string | null
+  fast?: boolean | null
+  title?: string | null
+  started_at?: number | null
+  last_active_at?: number | null
+  yolo?: boolean | null
+  api_mode?: string | null
+  tool_count?: number | null
+  credential_hint?: string | null
+  config_warning?: string | null
+}
+export interface CanonicalResumeParams {
+  profile?: string | null
+  session_id?: string
+  title?: string | null
+  latest?: 'cli' | 'tui' | null
+  workspace?: string | null
+  source?: string | null
+  editor?: Record<string, unknown> | null
+  api_key?: string | null
+  defer_history?: boolean
+  omit_messages?: boolean
+  cols?: number | null
+  display_projection?: boolean
+}
+export interface CanonicalListParams {
+  profile?: string | null
+  scope?: 'live' | 'stored'
+  limit?: number
+  title?: string | null
+  include_hidden?: boolean
+}
+export interface CanonicalListResult {
+  sessions: CanonicalSessionListRow[]
+  scope: 'stored' | 'live'
+}
+export interface CanonicalSessionListRow {
+  session_id: string
+  id: string
+  title: string
+  source: string | null
+  started_at: number | null
+  message_count: number
+  running: boolean
+  model?: string | null
+  resolved_id?: string | null
+  root_title?: string | null
+}
+export interface CanonicalControlParams {
+  profile?: string | null
+  session_id: string
+  execution_generation: number
+}
+export interface CanonicalSessionHandle {
+  ref: CanonicalSessionRef
+  instance_id: string
+  authority_epoch: number
+  revision: number
+  execution_generation: number
+  execution_state: 'idle' | 'running' | 'waiting' | 'unknown' | 'terminal'
+}
+export interface CanonicalCorrectionParams {
+  profile?: string | null
+  session_id: string
+  execution_generation: number
+  text: string
+}
+/** ``session.steer`` / ``session.redirect``: the correction verdict, or ``{voice_stopped: true}`` when the busy-time text was a bare stop phrase that ended the LOCAL voice chat. */
+export type CanonicalCorrectionResult = CanonicalCorrectionAck | CanonicalVoiceStopped
+export interface CanonicalCorrectionAck {
+  status: 'queued' | 'redirected' | 'rejected'
+  text: string
+  execution_generation: number
+  authority_epoch: number
+  delivered?: false | null
+}
+/** A bare stop phrase typed while the session's voice chat is on: the chat ended, nothing was admitted (TUI-26). */
+export interface CanonicalVoiceStopped {
+  voice_stopped: true
+}
+export interface CanonicalEventsParams {
+  profile?: string | null
+  session_id: string
+  last_sequence?: number
+  last_seen?: number
+  replay_epoch?: string | null
+}
+export interface CanonicalEventsResult {
+  events: CanonicalReplayEvent[]
+  latest_seq: number
+  last_sequence: number
+  epoch: string
+  replay_epoch: string
+  truncated: boolean
+  snapshot_required: boolean
+  count: number
+}
+export interface CanonicalReplayEvent {
+  type: string
+  session_id: string
+  payload: Record<string, unknown>
+  replay_epoch: string
+  seq: number
+  authority_epoch?: number | null
+  execution_generation?: number | null
+  admission_id?: string | null
+}
+export interface CanonicalSubmitParams {
+  profile?: string | null
+  session_id: string
+  text: string
+  submission_id?: string | null
+  input_id?: string | null
+  queued?: boolean
+  attachments?: CanonicalAttachment[] | null
+  finite?: boolean
+  unattended?: boolean
+  surface?: string | null
+  voice_context?: string | null
+  interrupted?: boolean
+  voice_turn?: boolean
+  display_kind?: 'hidden' | null
+  title_preview?: string | null
+  turn_author?: CanonicalTurnAuthor | null
+  api_text?: string | null
+  model_override?: CanonicalModelOverride | null
+  clarify_batch?: boolean
+}
+export interface CanonicalAttachment {
+  path: string
+  mime: string
+}
+export interface CanonicalTurnAuthor {
+  id?: string | null
+  name?: string | null
+  is_bot?: boolean
+  origin?: string | null
+}
+export interface CanonicalModelOverride {
+  model: string
+  provider?: string | null
+  reasoning?: string | null
+}
+/** ``prompt.submit``: the admission receipt, or ``{voice_stopped: true}``. */
+export type CanonicalSubmitResult = AdmissionStatus | CanonicalVoiceStopped
+export interface CanonicalApprovalParams {
+  profile?: string | null
+  session_id: string
+  execution_generation: number
+  prompt_id: string
+  choice: string
+}
+export interface CanonicalSteerQueuedParams {
+  profile?: string | null
+  session_id: string
+  admission_id: string
+}
+/** The edited prompt: admitted as a NEW admission (``submission_id``) at the FIFO tail. */
+export interface CanonicalReplaceQueuedParams {
+  profile?: string | null
+  session_id: string
+  admission_id: string
+  submission_id: string
+  text: string
+  attachments?: CanonicalAttachment[] | null
+  display_kind?: 'hidden' | null
+  title_preview?: string | null
+}
+export interface CanonicalConfigGetResult {
+  value?: string | null
+  display?: string | null
+  tool_progress?: string | null
+  model?: string | null
+  provider?: string | null
+  providers?: ConfigProviderRef[] | null
+  home?: string | null
+  cwd?: string | null
+  branch?: string | null
+  config?: Record<string, unknown> | null
+  prompt?: string | null
+  mtime?: number | null
+  mcp_rev?: string | null
+  key?: string | null
+  scope?: string | null
+}
+/** Session controls (``busy`` / ``verbose`` / ``yolo`` / ``show_reasoning`` / ``service_tier``, which need ``session_id``) and the TUI's profile preferences (``gateway/session_tui_config.py``; ``session_id`` optional). ``model`` is recognised only to be refused with ``use_session_mutation_model``: a model pick is the revision-fenced ``session.mutate`` operation, never a config write. */
+export interface CanonicalConfigSetParams {
+  profile?: string | null
+  session_id?: string | null
+  key: string
+  value?: unknown
+  confirm_expensive_model?: boolean | null
+  scope?: 'session' | 'global' | null
+}
+export interface CanonicalProfilesParams {
+  profile?: string | null
+  include_sessions?: boolean
+}
+export interface CanonicalProfilesResult {
+  profiles: CanonicalProfileRow[]
+  bot_mode_protocol?: boolean
+  install_id?: string
+}
+export interface CanonicalProfileRow {
+  name: string
+  path: string
+  is_default?: boolean
+  model?: string | null
+  provider?: string | null
+  description?: string
+  display_name?: string
+  skill_count?: number
+  previous_names?: string[]
+  last_session?: ProfileCanonicalSession | null
+  worker_session?: ProfileWorkerSession | null
+  canonical_session?: ProfileCanonicalSession | null
+  ui_meta_revisions?: Record<string, number>
+  ui_meta?: Record<string, unknown> | null
+  has_avatar?: boolean
+}
+export interface CanonicalAttachedImageResult {
+  name?: string | null
+  width?: number | null
+  height?: number | null
+  token_estimate?: number | null
+  attached: boolean
+  path?: string | null
+  count?: number | null
+  remainder?: string | null
+  text?: string | null
+  bytes?: number | null
+  message?: string | null
+  mime: string
+}
+export interface CanonicalRoomAttemptParams {
+  profile?: string | null
+  room_id: string
+  member_id: string
+  task_id: string
+  execution_generation: number
+}
+export interface CanonicalRoomCreateParams {
+  profile?: string | null
+  room_id: string
+  name: string
+  members: RoomMemberInput[]
+}
+export interface CanonicalRoomApproveParams {
+  profile?: string | null
+  room_id: string
+  member_id: string
+  task_id: string
+  execution_generation: number
+  choice: 'once' | 'deny'
+  request_id: string
+}
+export interface CanonicalBotDeliverParams {
+  profile?: string | null
+  message: string
+  id: string
+  session_id?: string | null
+  author?: Record<string, unknown> | null
+  notification_category?: string | null
+}
+/** A delivery's receipt. It names its admission, unless ``refused``: the FIFO refused the delivery before anything was committed (``gateway/session_bot.py``), a terminal ``failed`` receipt with no admission that the relay settles as the sender's answer. */
+export interface CanonicalBotDeliverResult {
+  status: string
+  delivery_id: string
+  profile_home: string
+  session_id: string
+  admission_id?: string | null
+  refused?: true | null
+  message: string
+  reply?: string | null
+  retry_admission_id?: string | null
+  error?: string | null
+  reason?: string | null
+}
 /** ``answers`` rides only on a reconnect replay (locks the server already accepted; null = skipped). */
 export interface ClarifyRequestParams {
   session_id: string
@@ -5259,9 +5312,10 @@ export interface ClarifyQuestion {
   choices?: string[] | null
   multi_select?: boolean
 }
-/** ``{answers}`` for the whole set (early locks go through the ``clarify.lock`` RPC); a response without ``answers`` is cancel-all. */
+/** ``{answers}`` for the whole set (early locks go through the ``clarify.lock`` RPC); a response without ``answers`` is cancel-all. ``outcome`` (optional): how the viewer's own panel ended, as main's classic CLI reports it (``timed_out`` keeps the answers locked before its deadline). */
 export interface ClarifyResult {
   answers?: Record<string, string | null> | null
+  outcome?: 'submitted' | 'timed_out' | 'cancelled' | null
 }
 /** ``card`` is the beat's data (``agent/onboarding_flow.py::BEATS``): name, theme, connectors and plugins have their own shape; layout, tour and build carry ``options``. ``tool_call_id`` is the setup_beat call the card belongs to: only that transcript row draws it. */
 export interface SetupBeatRequestParams {
@@ -5441,28 +5495,6 @@ export interface ThemeValues {
   mode?: ThemeMode | null
   layout?: string | null
 }
-/** ``tools/verify_preview_tool.py``; ``settle_ms`` lets pending console traffic land first. */
-export interface PreviewVerifyRequestParams {
-  session_id: string
-  settle_ms?: number | null
-}
-/** The renderer's pass/fail card; ``ok: false`` with ``error`` when no preview is open. */
-export interface PreviewVerifyResult {
-  ok: boolean
-  errorCount?: number | null
-  errors?: PreviewVerifyErrorEntry[] | null
-  tabId?: string | null
-  title?: string | null
-  url?: string | null
-  warningCount?: number | null
-  error?: string | null
-}
-export interface PreviewVerifyErrorEntry {
-  level: number
-  message: string
-  line?: number | null
-  source?: string | null
-}
 export interface DisplayInstallSudoParams {
   session_id: string
   profile_key: string
@@ -5529,20 +5561,7 @@ export interface GatewayReadyPayload {
   change_events: boolean
   replay_epoch: string
   heartbeat?: boolean | null
-}
-/** ``tui_gateway/change_watcher.py::resolve_skin`` — the resolved active skin (``HermesSkin``). ``{}`` when the skin engine failed to load. Colour maps are token → colour string. */
-export interface SkinPayload {
-  name?: string
-  description?: string
-  colors?: Record<string, string>
-  light_colors?: Record<string, string>
-  dark_colors?: Record<string, string>
-  branding?: Record<string, string>
-  banner_logo?: string
-  banner_hero?: string
-  tool_prefix?: string
-  help_header?: string
-  [key: string]: unknown
+  session_authority?: boolean | null
 }
 /** ``agent/onboarding_record.py::_transition``: the run ``run_id`` stopped being in progress. ``stored_session_id`` is its chat at the compression tip. ``done``: the first-task card was answered; ``skipped``: Skip setup; ``replaced``: a rerun opened a new run; ``deleted``: its chat was deleted. */
 export interface OnboardingEndedPayload {
@@ -5573,6 +5592,19 @@ export interface ErrorPayload {
 /** ``tui_gateway/model_switch.py`` capability-refresh notice. */
 export interface NoticePayload {
   message: string
+}
+/** ``message.start``. Empty from the TUI gateway's emitters and for an ordinary admission; ``gateway/session_authority._stamp_claim`` adds an automation admission's async-result card (``session_automation.admission_display``: a background-process completion) and its model text, so a viewer that did not submit the turn paints the same header the submitter would. */
+export interface MessageStartPayload {
+  display_kind?: string | null
+  display_text?: string | null
+  notification_category?: string | null
+  text?: string | null
+}
+/** ``message.delta``. A session-authority local-viewer turn also publishes ``text: null``: the reply segment boundary (the agent's ``stream_delta_callback(None)``, before tool lines) that closes the classic CLI's reply box. Every other viewer ignores an empty chunk. */
+export interface MessageDeltaPayload {
+  text: string | null
+  rendered?: string | null
+  verbose?: boolean | null
 }
 /** ``prompt_turn._invoke_agent._stream`` (message.delta: ``text`` + optional ``rendered``), ``agent_callbacks._agent_cbs`` (reasoning.delta / thinking.delta), ``tool_progress._progress_reasoning`` (reasoning.available). ``verbose`` rides only when the session's verbose reasoning mode is on. */
 export interface StreamDeltaPayload {
@@ -5632,15 +5664,40 @@ export interface PersistedTurn {
   complete: boolean
   user_row_id?: number | null
   final_assistant_row_id?: number | null
+  user_row_ids?: number[] | null
+  submission_id?: string | null
 }
 /** ``server._status_update`` and the direct emitters (goal / loop / heartbeat / process). */
 export interface StatusUpdatePayload {
   kind: string
   text: string
 }
-/** ``server._start_usage_ticker``. */
+/** ``usage``: the status-bar view (``server._get_usage``), sent by the embedded backend's ticker (``server._start_usage_ticker``) and by a canonical local viewer's gateway after every API call and at turn end (``gateway/session_usage.py::usage_frame``). Read this. Deprecated: the top-level session-cumulative counters (``usage_stats``, the ``session.stats`` dict) that the gateway frame also carries. They are kept for existing readers; new readers use ``usage``, or ``session.stats`` for the raw counters. The embedded ticker never sends them. */
 export interface SessionUsagePayload {
-  usage: Usage
+  usage?: Usage | null
+  input_tokens?: number | null
+  output_tokens?: number | null
+  cache_read_tokens?: number | null
+  cache_write_tokens?: number | null
+  prompt_tokens?: number | null
+  completion_tokens?: number | null
+  total_tokens?: number | null
+  reasoning_tokens?: number | null
+  api_calls?: number | null
+  last_prompt_tokens?: number | null
+  context_tokens?: number | null
+  context_length?: number | null
+  config_context_length?: number | null
+  context_source?: string | null
+  compression_count?: number | null
+  avg_latency_s?: number | null
+  tokens_per_s?: number | null
+  last_turn_tokens?: number | null
+  rate_limit?: Record<string, unknown> | null
+  active_subagents?: number | null
+  model?: string | null
+  provider?: string | null
+  fallback_model?: string | null
 }
 /** ``prompt_turn._invoke_agent`` ``_on_session_title`` hook. */
 export interface SessionTitlePayload {
@@ -5653,6 +5710,10 @@ export interface ReactionPayload {
 }
 /** ``server`` background_review_callback. */
 export interface ReviewSummaryPayload {
+  text: string
+}
+/** A session-authority local-viewer turn: one line the agent printed through ``_print_fn`` (subagent completion, compaction, errors, budget notices), which main's classic CLI rendered through ``_agent_status_print``. */
+export interface AgentPrintPayload {
   text: string
 }
 /** ``tool_progress._on_tool_start`` (+ ``agent_callbacks._mirror_subagent_to_child`` rows with ``preview`` and empty ``args``). ``todos``/``revision`` are NOT set by the emitter; kept optional because tool.start rows may pass through connector redaction unchanged. */
@@ -5678,12 +5739,6 @@ export interface ToolCompletePayload {
   todos?: unknown[] | null
   revision?: number | null
   labels?: ToolLabel[] | null
-  thumbnail?: ToolThumbnail | null
-}
-export interface ToolThumbnail {
-  id: string
-  url?: string | null
-  title?: string | null
 }
 /** ``agent_callbacks`` tool_gen_callback. */
 export interface ToolGeneratingPayload {
@@ -5697,12 +5752,21 @@ export interface ToolOutputRiskPayload {
   findings: string[]
   redacted: boolean
 }
+/** ``agent.tool_progress_relay.tool_progress_payload`` — an MCP server's ``notifications/progress`` for a running call, throttled to one per 500 ms per call. */
+export interface ToolProgressPayload {
+  tool_id: string
+  name: string
+  progress: number
+  total?: number | null
+  percent?: number | null
+  message?: string | null
+}
 /** ``tool_progress._normalize_todo_state`` — full task snapshot. */
 export interface TodoUpdatedPayload {
   todos: unknown[]
   revision: number
 }
-/** ``agent/credits_tracker.py::AgentNotice`` via notice_callback, and ``server._await_agent_ready``'s slow-build notice. ``level``: info | warn | error | success; ``kind``: sticky | ttl | agent. */
+/** ``agent/credits_tracker.py::AgentNotice`` via notice_callback, and ``server._await_agent_ready``'s slow-build notice. ``level``: info | warn | error | success; ``kind``: sticky | ttl | agent. ``detail``: the full text behind a short ``text`` (the low-disk auto-prune question): Desktop shows it in the toast's expandable body, the Ink TUI prints it into the transcript. */
 export interface NotificationShowPayload {
   text: string
   level: string
@@ -5710,6 +5774,7 @@ export interface NotificationShowPayload {
   ttl_ms?: number | null
   key?: string | null
   id?: string | null
+  detail?: string | null
 }
 export interface NotificationClearPayload {
   key: string
@@ -5831,10 +5896,6 @@ export interface PaneRevealPayload {
   pane: string
   [key: string]: unknown
 }
-/** ``tools/apply_layout_tool.py``; preset ids are free-form, resolved by the renderer. */
-export interface LayoutApplyPayload {
-  preset: string
-}
 /** ``tools/react_to_message_tool.py``. */
 export interface MessageReactionPayload {
   row_id: number
@@ -5895,7 +5956,7 @@ export interface PetChangedPayload {
   slug?: string | null
   displayName?: string | null
   scale?: number | null
-  spdemoeetRevision?: string | null
+  spritesheetRevision?: string | null
   [key: string]: unknown
 }
 /** ``methods_session`` pet.generate: token-only init frame, then one per draft. */
@@ -5947,54 +6008,6 @@ export interface RpcMethods {
   'bot_relay.reply': { params: BotRelayReplyParams; result: OkResult }
   /** Replace this gateway's view of agents on other connections; answers the accepted row count. */
   'bot_relay.roster.sync': { params: BotRelayRosterSyncParams; result: BotRelayRosterSyncResult }
-  /** List this install's agent-mailbox notes, newest first; 'handle' narrows to one bot. */
-  'bots_mailbox.list': { params: BotsMailboxListParams; result: BotsMailboxListResult }
-  /** File a user-authored task note and deliver it into the target's Bot Chat (local: blocking turn via bot_relay.deliver; remote: queued for the Desktop relay). */
-  'bots_mailbox.send': { params: BotsMailboxSendParams; result: BotsMailboxSendResult }
-  /** Flip a mailbox note's status (open→accepted/declined/done); live sender bots get a one-line ping. */
-  'bots_mailbox.update': { params: BotsMailboxUpdateParams; result: BotsMailboxUpdateResult }
-  /** Board (or the lead, if the team's policy allows) decides; never the requester itself. */
-  'bots_team.approval.decide': { params: BotsTeamApprovalDecideParams; result: BotsTeamApprovalDecideResult }
-  /** A teammate asks the board for a hire, spend, credential grant or risky action. */
-  'bots_team.approval.request': { params: BotsTeamApprovalRequestParams; result: BotsTeamApprovalRequestResult }
-  /** The team's append-only audit trail, newest first. */
-  'bots_team.audit.list': { params: BotsTeamAuditParams; result: BotsTeamAuditResult }
-  /** The session-start context for a teammate: role, boss, mission→goal chain, team lessons. */
-  'bots_team.brief': { params: BotsTeamBriefParams; result: BotsTeamBriefResult }
-  /** May this teammate take on more work now? False when paused or hard-stopped over budget. */
-  'bots_team.budget.check': { params: BotsTeamBudgetParams; result: BotsTeamBudgetResult }
-  /** Add spend to a teammate's month; returns the fresh budget verdict. */
-  'bots_team.budget.record': { params: BotsTeamBudgetRecordParams; result: BotsTeamBudgetResult }
-  /** Create a team. */
-  'bots_team.create': { params: BotsTeamCreateParams; result: TeamView }
-  /** Delete a team (its audit trail is kept). */
-  'bots_team.delete': { params: TeamActorParams; result: OkResult }
-  /** One team with its org tree and goal roll-up (Kanban task status folded into goals). */
-  'bots_team.get': { params: TeamIdParams; result: TeamView }
-  /** Attach or detach a Kanban task id on a goal (the task itself is untouched). */
-  'bots_team.goal.link_task': { params: BotsTeamGoalLinkTaskParams; result: BotsTeamGoalResult }
-  /** Delegate work: create a Kanban card for a teammate (default: the goal's owner) whose body opens with their brief and the mission→goal chain, and link it to the goal. Idempotent per title. */
-  'bots_team.goal.spawn_task': { params: BotsTeamGoalSpawnTaskParams; result: BotsTeamGoalSpawnTaskResult }
-  /** Create (goal_id omitted) or edit a goal; parent_id null hangs it under the mission. */
-  'bots_team.goal.upsert': { params: BotsTeamGoalUpsertParams; result: BotsTeamGoalResult }
-  /** Record a short team lesson; a repeat of the same lesson bumps its count instead of duplicating. */
-  'bots_team.learning.add': { params: BotsTeamLearningAddParams; result: BotsTeamLearningResult }
-  /** Delete a lesson the team no longer wants to carry. */
-  'bots_team.learning.remove': { params: BotsTeamLearningRemoveParams; result: TeamView }
-  /** List this install's teams, newest first. */
-  'bots_team.list': { params: Params; result: TeamListResult }
-  /** Remove a seat by slot or profile; its reports re-attach to its boss, its goals become unowned. */
-  'bots_team.member.remove': { params: BotsTeamMemberRemoveParams; result: TeamView }
-  /** Add or edit a seat (slot omitted = add). Refuses reporting cycles; lead moves the lead badge. */
-  'bots_team.member.upsert': { params: BotsTeamMemberUpsertParams; result: BotsTeamMemberUpsertResult }
-  /** A shareable, data-only org design — no profiles, spend, credential values or learnings. */
-  'bots_team.pack.export': { params: TeamIdParams; result: BotsTeamPackExportResult }
-  /** Create a team from a pack (allow-listed keys only); every seat starts open. */
-  'bots_team.pack.import': { params: BotsTeamPackImportParams; result: TeamView }
-  /** The org-tree lead for a group chat: the single team whose filled seats cover the room's local members, lead included. The room then listens through the lead alone and teammates wake only when addressed. */
-  'bots_team.room_lead': { params: BotsTeamRoomLeadParams; result: BotsTeamRoomLeadResult }
-  /** Rename, re-mission, set the approval policy or the external channel bindings. */
-  'bots_team.update': { params: BotsTeamUpdateParams; result: TeamView }
   /** Hard-detach only the controller owned by this authenticated transport. */
   'browser.controller.detach': { params: BrowserControllerParams; result: BrowserControllerDetachResult }
   /** Acknowledge a heartbeat only for this transport's own attached controller. */
@@ -6057,8 +6070,6 @@ export interface RpcMethods {
   'cron.manage': { params: CronManageParams; result: CronManageResult }
   /** Block/unblock NEW spawns globally (active children keep running); returns the new state. */
   'delegation.pause': { params: DelegationPauseParams; result: DelegationPauseResult }
-  /** Terminal delegations routed to this session, newest first — the sidebar report cards. */
-  'delegation.reports': { params: SessionParams; result: DelegationReportsResult }
   /** Running subagent tree plus the spawn pause flag and limits. */
   'delegation.status': { params: ProfileParams; result: DelegationStatusResult }
   /** Upload a force-redacted debug bundle to Nous-internal diagnostics storage. */
@@ -6083,54 +6094,6 @@ export interface RpcMethods {
   'display.thumbnail': { params: ProfileParams; result: DisplayThumbnailResult }
   /** Stage a non-image file into the session workspace and hand back its @file: ref. */
   'file.attach': { params: FileAttachParams; result: FileAttachResult }
-  /** Answer one pending approval. Idempotent: a request already decided resolves nothing and returns its recorded row. */
-  'fork.approvals.decide': { params: ForkApprovalsDecideParams; result: ForkApprovalsDecideResult }
-  /** Journal rows for one stored session, oldest to newest (at most 50). */
-  'fork.approvals.list': { params: ForkApprovalsListParams; result: ForkApprovalsListResult }
-  /** Read a bot profile's identity (display name, role, instructions, model, revision). */
-  'fork.bot.identity.get': { params: ForkBotIdentityGetParams; result: ForkBotIdentityGetResult }
-  /** Update a bot profile's identity with CAS and model selection guards. */
-  'fork.bot.identity.set': { params: ForkBotIdentitySetParams; result: ForkBotIdentitySetResult }
-  /** Retrieve the snapshot text and metadata for a browser tool step. */
-  'fork.browser.snapshot': { params: BrowserSnapshotParams; result: BrowserSnapshotResult }
-  /** Retrieve the captured thumbnail image and metadata for a browser tool step. */
-  'fork.browser.thumbnail': { params: BrowserThumbnailParams; result: BrowserThumbnailResult }
-  /** Read persisted tool activity and the latest todo checklist from a profile session. */
-  'fork.computer.timeline': { params: ComputerTimelineParams; result: ComputerTimelineResult }
-  /** Append an on-disk memory item and return the fresh list. */
-  'fork.memory.add': { params: ForkMemoryAddParams; result: ForkMemoryListResult }
-  /** List on-disk memories for a bot profile with limits and usage. */
-  'fork.memory.list': { params: ForkMemoryListParams; result: ForkMemoryListResult }
-  /** Remove an on-disk memory item by stable content id and return the fresh list. */
-  'fork.memory.remove': { params: ForkMemoryRemoveParams; result: ForkMemoryListResult }
-  /** Update an on-disk memory item by stable content id and return the fresh list. */
-  'fork.memory.update': { params: ForkMemoryUpdateParams; result: ForkMemoryListResult }
-  /** Create the setup profile under the setup lock (mirroring launch credentials), or no-op. */
-  'fork.onboarding.ensure_setup_profile': { params: ForkOnboardingEmptyParams; result: EnsureSetupProfileResult }
-  /** Find the setup chat by title or create it; empty is true only before its first turn. */
-  'fork.onboarding.ensure_setup_session': { params: EnsureSetupSessionParams; result: EnsureSetupSessionResult }
-  /** Latch the intro as seen so it does not replay. */
-  'fork.onboarding.mark_seen': { params: ForkOnboardingEmptyParams; result: ForkOnboardingStateResult }
-  /** Count a failed guide start (capped); at the cap the intro latches seen. */
-  'fork.onboarding.record_failed_start': { params: ForkOnboardingEmptyParams; result: ForkOnboardingStateResult }
-  /** Clear the setup profile's sessions and reset its state; refused when none exists. */
-  'fork.onboarding.reset_setup_profile': { params: ForkOnboardingEmptyParams; result: ResetSetupProfileResult }
-  /** Fork setup-profile state (eligible/intro/failed_starts/completed_at/profile). */
-  'fork.onboarding.state': { params: ForkOnboardingEmptyParams; result: ForkOnboardingStateResult }
-  /** Create a recurring schedule or condition watch delivered to this bot's canonical chat. */
-  'fork.routines.create': { params: CreateRoutineParams; result: CreateRoutineResult }
-  /** List this profile's persisted bot routines, including paused routines. */
-  'fork.routines.list': { params: ListRoutinesParams; result: ListRoutinesResult }
-  /** Pause a bot routine. */
-  'fork.routines.pause': { params: PauseRoutineParams; result: PauseRoutineResult }
-  /** Remove a bot routine. */
-  'fork.routines.remove': { params: RemoveRoutineParams; result: RemoveRoutineResult }
-  /** Resume a bot routine. */
-  'fork.routines.resume': { params: ResumeRoutineParams; result: ResumeRoutineResult }
-  /** Start a bot routine manually in the background. */
-  'fork.routines.run_now': { params: RunRoutineNowParams; result: RunRoutineNowResult }
-  /** Update a bot routine without replacing its cron job or run history. */
-  'fork.routines.update': { params: UpdateRoutineParams; result: UpdateRoutineResult }
   /** Mark the one-time availability notice as shown on the free-tier identity. */
   'free_tier.ack_notice': { params: ProfileParams; result: FreeTierAckNoticeResult }
   /** Report a browser window outcome for the matching pending attempt; mint remains authoritative. */
@@ -6199,7 +6162,7 @@ export interface RpcMethods {
   'image.generate': { params: ImageGenerateParams; result: ImageGenerateResult }
   /** Recognise a terminal file drop pasted into the composer and turn it into an attachment. */
   'input.detect_drop': { params: InputDetectDropParams; result: InputDetectDropResult }
-  /** Session/message counts over the last ``days`` for the (optionally scoped) profile store; ``report`` adds the /insights token + cost breakdown (``empty``, ``overview``, ``models``). */
+  /** Session/message counts over the last ``days`` for the (optionally scoped) profile store. */
   'insights.get': { params: InsightsGetParams; result: InsightsGetResult }
   /** Archive a skill (restorable via curator) or remove a memory chunk. */
   'learning.delete': { params: LearningNodeParams; result: LearningMutationResult }
@@ -6235,12 +6198,6 @@ export interface RpcMethods {
   'mcp.servers.status': { params: ProfileParams; result: McpServersStatusResult }
   /** Connect, list tools, disconnect — an OAuth server with no token on disk is reported as not ok. */
   'mcp.servers.test': { params: McpServerNameParams; result: McpServersTestResult }
-  /** A tool call made by an app iframe: same server, the tool's visibility must include ``app``, and write-capable calls on an untrusted server are refused. */
-  'mcp_apps.call': { params: McpAppsCallParams; result: McpAppsCallResult }
-  /** Tools on the connected MCP servers that carry an MCP App (``_meta.ui.resourceUri``). */
-  'mcp_apps.list': { params: _AppScoped; result: McpAppsListResult }
-  /** The app document behind a ``ui://`` URI (other schemes are refused). */
-  'mcp_apps.read_ui': { params: McpAppsReadUiParams; result: McpAppsReadUiResult }
   /** Set/clear one author's emoji reaction on a message; returns the row's full reaction list. */
   'message.react': { params: MessageReactParams; result: MessageReactResult }
   /** Remove every credential (env keys and OAuth state) for a provider. */
@@ -6275,9 +6232,9 @@ export interface RpcMethods {
   'pet.generate': { params: PetGenerateParams; result: PetGenerateResult }
   /** Whether pet generation is possible (a reference-capable image backend) and which providers. */
   'pet.generate.status': { params: ProfileParams; result: PetGenerateStatusResult }
-  /** Turn a base draft into a full spdemoeet pet; progress streams via pet.hatch.progress. */
+  /** Turn a base draft into a full spritesheet pet; progress streams via pet.hatch.progress. */
   'pet.hatch': { params: PetHatchParams; result: PetHatchResult }
-  /** Active pet for sprite renderers: spdemoeet (base64) + frame geometry + state-row taxonomy. */
+  /** Active pet for sprite renderers: spritesheet (base64) + frame geometry + state-row taxonomy. */
   'pet.info': { params: PetInfoParams; result: PetInfoResult }
   /** Cheap active-pet metadata used to avoid full payload refreshes. */
   'pet.info.meta': { params: ProfileParams; result: PetInfoMetaResult }
@@ -6305,7 +6262,7 @@ export interface RpcMethods {
   'process.kill': { params: ProcessKillParams; result: ProcessKillResult }
   /** Background processes owned by the caller's session (desktop status stack poll). */
   'process.list': { params: ProcessListParams; result: ProcessListResult }
-  /** Kill every background process in the registry (``/stop``), answering the count killed. */
+  /** ``/stop``: on the shared owner, kill the background processes ``session_id`` owns (required); a standalone sidecar kills every process it holds. Answers the count killed. */
   'process.stop': { params: ProcessStopParams; result: ProcessStopResult }
   /** Editor Save: apply any subset of a profile's sections and report each one. */
   'profiles.configure': { params: ProfilesConfigureParams; result: ProfilesConfigureResult }
@@ -6365,7 +6322,7 @@ export interface RpcMethods {
   'request.answer': { params: RequestAnswerParams; result: RequestAnswerResult }
   /** Diff between a checkpoint and the working tree, with an ANSI rendering sized to the TUI. */
   'rollback.diff': { params: RollbackDiffParams; result: RollbackDiffResult }
-  /** Checkpoints for the session's cwd; ``enabled: false`` when checkpointing is off. Entries may carry ``sid``/``turn``/``user_row_id`` identifying the user prompt the snapshot precedes. */
+  /** Checkpoints for the session's cwd; ``enabled: false`` when checkpointing is off. */
   'rollback.list': { params: RollbackListParams; result: RollbackListResult }
   /** Restore the working tree (or one file) to a checkpoint by hash or 1-based index. */
   'rollback.restore': { params: RollbackRestoreParams; result: RollbackRestoreResult }
@@ -6375,8 +6332,6 @@ export interface RpcMethods {
   'session.active_list': { params: SessionActiveListParams; result: SessionActiveListResult }
   /** Set/clear archived (soft-hide, messages kept) on a session + lineage; Desktop PATCH parity. */
   'session.archive': { params: SessionArchiveParams; result: SessionArchiveResult }
-  /** Answer a question ABOUT a session's transcript via the auxiliary model; the live conversation is never read or mutated. */
-  'session.ask': { params: SessionAskParams; result: SessionAskResult }
   /** Fork a live session into a new stored child that shares the parent's history so far. */
   'session.branch': { params: SessionBranchParams; result: SessionBranchResult }
   /** Whole-session branch of a stored parent: the owning backend reads and copies the transcript, which never crosses the wire (a separate method so an older gateway fails loudly, not with an empty branch). */
@@ -6417,8 +6372,6 @@ export interface RpcMethods {
   'session.list': { params: SessionListParams; result: SessionListResult }
   /** Most recent human-facing session; errors fold into a null session_id. */
   'session.most_recent': { params: SessionMostRecentParams; result: SessionMostRecentResult }
-  /** Draft the user's likely next composer message (Tab to accept); empty is normal. */
-  'session.predict_next': { params: SessionPredictNextParams; result: SessionPredictNextResult }
   /** Redirect the active turn (queued for the next turn while the agent is still building). */
   'session.redirect': { params: SessionCorrectionParams; result: SessionCorrectionResult }
   /** Attach to a stored session: reuse it if live here, else lazy / deferred / cold / eager rebuild. */
@@ -6559,30 +6512,6 @@ export const RPC_METHODS = [
   'bot_relay.outbox.drain',
   'bot_relay.reply',
   'bot_relay.roster.sync',
-  'bots_mailbox.list',
-  'bots_mailbox.send',
-  'bots_mailbox.update',
-  'bots_team.approval.decide',
-  'bots_team.approval.request',
-  'bots_team.audit.list',
-  'bots_team.brief',
-  'bots_team.budget.check',
-  'bots_team.budget.record',
-  'bots_team.create',
-  'bots_team.delete',
-  'bots_team.get',
-  'bots_team.goal.link_task',
-  'bots_team.goal.spawn_task',
-  'bots_team.goal.upsert',
-  'bots_team.learning.add',
-  'bots_team.learning.remove',
-  'bots_team.list',
-  'bots_team.member.remove',
-  'bots_team.member.upsert',
-  'bots_team.pack.export',
-  'bots_team.pack.import',
-  'bots_team.room_lead',
-  'bots_team.update',
   'browser.controller.detach',
   'browser.controller.heartbeat',
   'browser.controller.register',
@@ -6614,7 +6543,6 @@ export const RPC_METHODS = [
   'connectors.tools',
   'cron.manage',
   'delegation.pause',
-  'delegation.reports',
   'delegation.status',
   'diagnostics.share_nous',
   'display.install',
@@ -6627,30 +6555,6 @@ export const RPC_METHODS = [
   'display.switchSandboxImage',
   'display.thumbnail',
   'file.attach',
-  'fork.approvals.decide',
-  'fork.approvals.list',
-  'fork.bot.identity.get',
-  'fork.bot.identity.set',
-  'fork.browser.snapshot',
-  'fork.browser.thumbnail',
-  'fork.computer.timeline',
-  'fork.memory.add',
-  'fork.memory.list',
-  'fork.memory.remove',
-  'fork.memory.update',
-  'fork.onboarding.ensure_setup_profile',
-  'fork.onboarding.ensure_setup_session',
-  'fork.onboarding.mark_seen',
-  'fork.onboarding.record_failed_start',
-  'fork.onboarding.reset_setup_profile',
-  'fork.onboarding.state',
-  'fork.routines.create',
-  'fork.routines.list',
-  'fork.routines.pause',
-  'fork.routines.remove',
-  'fork.routines.resume',
-  'fork.routines.run_now',
-  'fork.routines.update',
   'free_tier.ack_notice',
   'free_tier.challenge_result',
   'free_tier.claim_nudge',
@@ -6703,9 +6607,6 @@ export const RPC_METHODS = [
   'mcp.servers.set_api_key',
   'mcp.servers.status',
   'mcp.servers.test',
-  'mcp_apps.call',
-  'mcp_apps.list',
-  'mcp_apps.read_ui',
   'message.react',
   'model.disconnect',
   'model.options',
@@ -6773,7 +6674,6 @@ export const RPC_METHODS = [
   'session.activate',
   'session.active_list',
   'session.archive',
-  'session.ask',
   'session.branch',
   'session.branch_stored',
   'session.branch_whole',
@@ -6794,7 +6694,6 @@ export const RPC_METHODS = [
   'session.interrupt',
   'session.list',
   'session.most_recent',
-  'session.predict_next',
   'session.redirect',
   'session.resume',
   'session.save',
@@ -6859,6 +6758,139 @@ export const RPC_METHODS = [
   'wake.stop'
 ] as const satisfies readonly RpcMethod[]
 
+// ── Canonical (hermes-gateway-v1) methods only the session authority serves ──
+export interface CanonicalRpcMethods {
+  /** Forward one A2A input into the conversation its identity tuple names. */
+  'a2a.forward': { params: A2aForwardParams; result: A2aForwardResult }
+  'approval.respond': { params: CanonicalApprovalParams; result: PromptResponseResult }
+  'bot_relay.deliver': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
+  'bot_relay.settle': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
+  /** Lock one answer of the owner's batch clarify request (editable until every question is locked); only a viewer attached to that session with session:respond may lock. */
+  'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
+  /** Generation-fenced answer to a pending clarify prompt (empty answer = skipped). */
+  'clarify.respond': { params: ClarifyRespondParams; result: PromptResponseResult }
+  /** Fire-only: a recognized command the classic CLI or the TUI runs itself; the gateway fires `pre_command` for it in the session's profile after replying (`queued` false: not fired). */
+  'command.observe': { params: CommandObserveParams; result: CommandObserveResult }
+  'config.get': { params: ConfigGetParams; result: CanonicalConfigGetResult }
+  'config.set': { params: CanonicalConfigSetParams; result: ConfigSetResult }
+  /** Cancel a queued cron admission or latch cancellation on a started one. */
+  'cron.cancel': { params: CronAdmissionParams; result: CronCancelResult }
+  /** Re-observe a firing after a scheduler restart (same request identity). */
+  'cron.recover': { params: CronRunParams; result: CronStatusResult }
+  /** Status and, once terminal, the result of one cron admission. */
+  'cron.status': { params: CronAdmissionParams; result: CronStatusResult }
+  /** Admit one cron firing into the owning profile's durable FIFO. */
+  'cron.submit': { params: CronRunParams; result: CronSubmitResult }
+  'groups.approve': { params: CanonicalRoomApproveParams; result: GroupsApproveResult }
+  /** Read one committed attachment for a live room viewer. */
+  'groups.attachment.download': { params: GroupsAttachmentDownloadParams; result: RoomAttachmentBytes }
+  /** Store one attachment for a later groups.send manifest (idempotent per upload_id). */
+  'groups.attachment.upload': { params: GroupsAttachmentUploadParams; result: RoomAttachment }
+  'groups.create': { params: CanonicalRoomCreateParams; result: GroupsCreateResult }
+  /** Discard one indeterminate room task after explicit user confirmation. */
+  'groups.discard': { params: GroupsDiscardParams; result: GroupsDiscardResult }
+  'groups.retry': { params: CanonicalRoomAttemptParams; result: GroupsRetryResult }
+  'image.attach_bytes': { params: ImageAttachBytesParams; result: CanonicalAttachedImageResult }
+  /** Native-owner only: admit the dispatcher's current claim on a kanban task. */
+  'kanban.run': { params: KanbanRunParams; result: KanbanRunResult }
+  'profiles.list': { params: CanonicalProfilesParams; result: CanonicalProfilesResult }
+  /** Retire a still-queued admission; a started one is unaffected. */
+  'prompt.cancel': { params: PromptCancelParams; result: AdmissionStatus }
+  /** Current receipt of one admission the caller submitted (or controls). */
+  'prompt.receipt': { params: PromptReceiptParams; result: PromptReceiptResult }
+  /** Cancel a still-queued admission and admit the edited prompt as a new admission at the back of the FIFO, in one write bound to the replaced admission. Refusals: admission_started, admission_conflict (the submission_id replaced another admission), queue_full, unsupported_control, not_found. */
+  'prompt.replace_queued': { params: CanonicalReplaceQueuedParams; result: AdmissionStatus }
+  /** Acknowledge a turn lost across an owner restart; the FIFO behind it resumes. Never requeues the lost input. */
+  'prompt.resolve_unknown': { params: PromptResolveUnknownParams; result: AdmissionStatus }
+  /** Hand a still-queued admission's text to the running turn's agent as a steer. The admission reads 'started' with that turn (pending snapshots mark it 'steering') and never runs on its own; it settles terminal 'steered' when the turn completes with its text, else 'interrupted' (its completion frame says 'cancelled', as an interrupted turn's does); a text the turn never consumed goes back to its queue place. Refusals: admission_started, session_idle, steer_unavailable (no agent to take it: the admission stays queued), unsupported_control, not_found. */
+  'prompt.steer_queued': { params: CanonicalSteerQueuedParams; result: AdmissionStatus }
+  'prompt.submit': { params: CanonicalSubmitParams; result: CanonicalSubmitResult }
+  /** The classic CLI's /diff session: everything changed since the session's earliest retained checkpoint, as data for its terminal renderer. */
+  'rollback.session_diff': { params: RollbackSessionDiffParams; result: RollbackSessionDiffResult }
+  /** Owner identity and the canonical capabilities a client may rely on. */
+  'runtime.describe': { params: RuntimeDescribeParams; result: RuntimeDescribeResult }
+  /** The classic CLI's /goal, /subgoal, /loop, /heartbeat manager calls (state writes, the goal judge, quality gates), run by the owner on the session's row. */
+  'session.automation': { params: SessionAutomationParams; result: SessionAutomationResult }
+  'session.create': { params: CanonicalCreateParams; result: CanonicalSnapshot }
+  /** Drop this connection's subscription; a stale subscription id answers detached=false. end_reason (snake_case): the viewer is closing the conversation; the last viewer leaving an idle local session ends its row with that reason. */
+  'session.detach': { params: SessionDetachParams; result: SessionDetachResult }
+  'session.events.since': { params: CanonicalEventsParams; result: CanonicalEventsResult }
+  /** The /save transcript rendered for the client to write (the gateway writes nothing). */
+  'session.export': { params: SessionExportParams; result: SessionExportResult }
+  /** Frozen launch policy projection of one local session. */
+  'session.info': { params: CanonicalSessionInfoParams; result: CanonicalSessionInfo }
+  'session.interrupt': { params: CanonicalControlParams; result: CanonicalSessionHandle }
+  'session.list': { params: CanonicalListParams; result: CanonicalListResult }
+  /** Revision-fenced, retry-idempotent session edit (rename, archive, sidebar, branch, delete, rewind, reset, model, reasoning, workspace, edit_policy, compress, import). */
+  'session.mutate': { params: SessionMutateParams; result: SessionMutateResult }
+  /** Local operator only: the owner deletes the ended sessions `hermes sessions prune` selected, skipping busy sessions and retained reset owners. */
+  'session.prune': { params: SessionPruneParams; result: SessionPruneResult }
+  'session.redirect': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
+  'session.resume': { params: CanonicalResumeParams; result: CanonicalSnapshot }
+  /** The session.usage dict on demand: what main's classic CLI read off its agent. */
+  'session.stats': { params: SessionStatsParams; result: SessionStats }
+  'session.steer': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
+  /** Ink ``!cmd`` / ``{!cmd}`` on the shared owner: one safe command for a local session, in its frozen launch cwd (``gateway/session_shell.py``). */
+  'shell.exec': { params: CanonicalShellExecParams; result: ShellExecResult }
+  /** Adopt a registered execution after verifying the live producer claim. */
+  'worker.adopt': { params: WorkerScopeParams; result: WorkerExecution }
+  /** Sequence-fenced typed persistence write from an adopted worker. */
+  'worker.persist': { params: WorkerPersistParams; result: WorkerPersistResult }
+  /** Register a compute worker execution on an idle session. */
+  'worker.register': { params: WorkerRegisterParams; result: WorkerExecution }
+}
+export type CanonicalRpcMethod = keyof CanonicalRpcMethods
+export const CANONICAL_RPC_METHODS = [
+  'a2a.forward',
+  'approval.respond',
+  'bot_relay.deliver',
+  'bot_relay.settle',
+  'clarify.lock',
+  'clarify.respond',
+  'command.observe',
+  'config.get',
+  'config.set',
+  'cron.cancel',
+  'cron.recover',
+  'cron.status',
+  'cron.submit',
+  'groups.approve',
+  'groups.attachment.download',
+  'groups.attachment.upload',
+  'groups.create',
+  'groups.discard',
+  'groups.retry',
+  'image.attach_bytes',
+  'kanban.run',
+  'profiles.list',
+  'prompt.cancel',
+  'prompt.receipt',
+  'prompt.replace_queued',
+  'prompt.resolve_unknown',
+  'prompt.steer_queued',
+  'prompt.submit',
+  'rollback.session_diff',
+  'runtime.describe',
+  'session.automation',
+  'session.create',
+  'session.detach',
+  'session.events.since',
+  'session.export',
+  'session.info',
+  'session.interrupt',
+  'session.list',
+  'session.mutate',
+  'session.prune',
+  'session.redirect',
+  'session.resume',
+  'session.stats',
+  'session.steer',
+  'shell.exec',
+  'worker.adopt',
+  'worker.persist',
+  'worker.register'
+] as const satisfies readonly CanonicalRpcMethod[]
+
 // ── Server→client requests ──
 export interface ServerRequestMap {
   /** A dangerous command awaits the user's decision. */
@@ -6871,8 +6903,6 @@ export interface ServerRequestMap {
   'preview.act': { params: PreviewActRequestParams; result: ValueResult }
   /** Read the in-app browser preview's text (JSON text answer). */
   'preview.read': { params: ReadRangeRequestParams; result: ValueResult }
-  /** Read the active preview pane's console log and answer pass/fail with the error list. */
-  'preview.verify': { params: PreviewVerifyRequestParams; result: PreviewVerifyResult }
   /** Masked value for a named env var (skills / setup flows). */
   secret: { params: SecretRequestParams; result: ValueResult }
   /** The onboarding chat's card for one beat; blocks setup_beat until answered (300 s). */
@@ -6903,7 +6933,6 @@ export const SERVER_REQUEST_METHODS = [
   'display.install.sudo',
   'preview.act',
   'preview.read',
-  'preview.verify',
   'secret',
   'setup_beat',
   'sudo',
@@ -6919,6 +6948,8 @@ export const SERVER_REQUEST_METHODS = [
 
 // ── Notifications (`event` frames) ──
 export interface BackendGatewayEventMap {
+  /** A status line the agent printed during a local viewer's turn. */
+  'agent.print': AgentPrintPayload
   /** Output chunk from an agent-owned background process. */
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
@@ -6957,18 +6988,16 @@ export interface BackendGatewayEventMap {
   'free_tier.challenge': FreeTierChallengePayload
   /** First frame of a connection: the resolved skin, the change-event capability and the replay epoch. */
   'gateway.ready': GatewayReadyPayload
-  /** Apply a saved layout preset in the desktop GUI. */
-  'layout.apply': LayoutApplyPayload
   /** The turn ended: final text, usage and outcome. */
   'message.complete': MessageCompletePayload
-  /** One streamed chunk of the assistant reply. */
-  'message.delta': StreamDeltaPayload
+  /** One streamed chunk of the assistant reply (null text: segment boundary). */
+  'message.delta': MessageDeltaPayload
   /** Interim assistant commentary (text beside tool calls) sealed as its own segment. */
   'message.interim': MessageInterimPayload
   /** The agent reacted to a message; paint it live. */
   'message.reaction': MessageReactionPayload
-  /** A turn began streaming; no payload. */
-  'message.start': Record<string, never>
+  /** A turn began streaming; an automation turn carries its async-result card. */
+  'message.start': MessageStartPayload
   /** The MoA aggregator started. */
   'moa.aggregating': MoaAggregatingPayload
   /** MoA phase transition (currently only ``aggregator``). */
@@ -6989,7 +7018,7 @@ export interface BackendGatewayEventMap {
   'pairing.changed': ChangeSignalPayload
   /** Focus / reveal a named desktop pane. */
   'pane.reveal': PaneRevealPayload
-  /** The active pet / its spdemoeet changed (watcher). */
+  /** The active pet / its spritesheet changed (watcher). */
   'pet.changed': PetChangedPayload
   /** Pet base-draft generation progress. */
   'pet.generate.progress': PetGenerateProgressPayload
@@ -7033,6 +7062,8 @@ export interface BackendGatewayEventMap {
   'sessions.changed': ChangeSignalPayload
   /** The free-tier bootstrap finished (broadcast); the desktop's setup gate reads the record. */
   'setup.ready': SetupReadyPayload
+  /** A skill root moved (installed/removed elsewhere); refetch commands.catalog from the gateway. */
+  'skills.changed': ChangeSignalPayload
   /** The active skin moved (name switch or live colour edit); repaint from this palette. */
   'skin.changed': SkinPayload
   /** Transient status line (kind: status, lifecycle, compacting, goal, loop, heartbeat, process, …). */
@@ -7063,6 +7094,8 @@ export interface BackendGatewayEventMap {
   'tool.generating': ToolGeneratingPayload
   /** Tool output was classified as risky (prompt-injection / secret findings). */
   'tool.output_risk': ToolOutputRiskPayload
+  /** Live progress of a running tool call (MCP notifications/progress). */
+  'tool.progress': ToolProgressPayload
   /** A tool call began (stable id + full args). */
   'tool.start': ToolStartPayload
   /** Barge-in: the spoken interjection interrupted the turn; no payload. */
@@ -7078,6 +7111,7 @@ export interface BackendGatewayEventMap {
 }
 export type BackendGatewayEventName = keyof BackendGatewayEventMap
 export const GATEWAY_EVENT_TYPES = [
+  'agent.print',
   'agent.terminal.output',
   'approval.cancelled',
   'background.complete',
@@ -7097,7 +7131,6 @@ export const GATEWAY_EVENT_TYPES = [
   'error',
   'free_tier.challenge',
   'gateway.ready',
-  'layout.apply',
   'message.complete',
   'message.delta',
   'message.interim',
@@ -7135,6 +7168,7 @@ export const GATEWAY_EVENT_TYPES = [
   'session.usage',
   'sessions.changed',
   'setup.ready',
+  'skills.changed',
   'skin.changed',
   'status.update',
   'subagent.complete',
@@ -7150,6 +7184,7 @@ export const GATEWAY_EVENT_TYPES = [
   'tool.complete',
   'tool.generating',
   'tool.output_risk',
+  'tool.progress',
   'tool.start',
   'voice.interrupted',
   'voice.partial',

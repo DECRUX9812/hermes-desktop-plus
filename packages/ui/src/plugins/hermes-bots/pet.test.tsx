@@ -1,10 +1,10 @@
 /**
- * Pet tiles: frame 0 of a petdex spdemoeet, cropped server-side by the
+ * Pet tiles: frame 0 of a petdex spritesheet, cropped server-side by the
  * gateway's `pet.thumb` RPC and cached per slug.
  *
  * Why the tile goes through the gateway rather than fetching the CDN sheet
  * itself: a locally hatched pet has no manifest entry, so `pet.gallery` reports
- * an EMPTY spdemoeetUrl — a client-side fetch could never render or select
+ * an EMPTY spritesheetUrl — a client-side fetch could never render or select
  * it ("Could not load that pet"). `pet.thumb` reads the installed sheet off
  * disk, so the slug alone is enough.
  *
@@ -74,7 +74,7 @@ async function loadPetTab() {
 beforeEach(() => {
   vi.clearAllMocks()
   thumbs.length = 0
-  useQueryMock.mockReturnValue({ data: { pets: [{ displayName: 'Axolotl', slug: 'axolotl', spdemoeetUrl: SHEET }] } })
+  useQueryMock.mockReturnValue({ data: { pets: [{ displayName: 'Axolotl', slug: 'axolotl', spritesheetUrl: SHEET }] } })
   stubThumb(async () => ({ ok: true, dataUri: ICON }))
 })
 
@@ -89,7 +89,7 @@ describe('the pet gallery', () => {
         pets: Array.from({ length: 60 }, (_, i) => ({
           displayName: `Pet ${i}`,
           slug: `pet-${i}`,
-          spdemoeetUrl: SHEET
+          spritesheetUrl: SHEET
         }))
       }
     })
@@ -118,12 +118,12 @@ describe('the pet gallery', () => {
 })
 
 describe('the pet thumb cache', () => {
-  it('selects a locally hatched pet that has no spdemoeet URL', async () => {
+  it('selects a locally hatched pet that has no spritesheet URL', async () => {
     // Generator-hatched pets are absent from the petdex manifest, so the
-    // gallery reports spdemoeetUrl: "". The gateway crops the installed
+    // gallery reports spritesheetUrl: "". The gateway crops the installed
     // sheet off disk — the slug is the identity, not the URL.
     useQueryMock.mockReturnValue({
-      data: { pets: [{ displayName: 'Mine', installed: true, slug: 'mine', spdemoeetUrl: '' }] }
+      data: { pets: [{ displayName: 'Mine', installed: true, slug: 'mine', spritesheetUrl: '' }] }
     })
 
     const PetTab = await loadPetTab()

@@ -314,7 +314,7 @@ export function PetOverlayApp() {
     window.hermesDesktop?.petOverlay?.control({ scale: next, type: 'scale' })
   }, [])
 
-  usePetZoomGesture(petRef, onScale, Boolean(info.enabled && info.spdemoeetBase64))
+  usePetZoomGesture(petRef, onScale, Boolean(info.enabled && info.spritesheetBase64))
 
   // Grow/shrink the OS overlay window to fit the pet at its current scale so the
   // sprite is never cropped — covers both the wheel gesture here and a scale
@@ -324,7 +324,7 @@ export function PetOverlayApp() {
   // bounds are persisted so the pet reopens at the right size.
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {
-    if (!info.enabled || !info.spdemoeetBase64) {
+    if (!info.enabled || !info.spritesheetBase64) {
       return
     }
 
@@ -362,9 +362,9 @@ export function PetOverlayApp() {
 
     window.hermesDesktop?.petOverlay?.setBounds(bounds)
     window.hermesDesktop?.petOverlay?.control({ bounds, type: 'bounds' })
-  }, [info.enabled, info.spdemoeetBase64, info.scale, info.frameW, info.frameH])
+  }, [info.enabled, info.spritesheetBase64, info.scale, info.frameW, info.frameH])
 
-  if (!info.enabled || !info.spdemoeetBase64) {
+  if (!info.enabled || !info.spritesheetBase64) {
     return null
   }
 

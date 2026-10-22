@@ -19,19 +19,24 @@ export function labeled(label: ReactNode, control: ReactNode) {
   )
 }
 
+// Module-level so the ref callback is stable and fires on mount only.
+const revealOnMount = (el: HTMLDivElement | null) => el?.scrollIntoView?.({ block: 'nearest' })
+
+/** The embedded Capabilities viewport: tall enough for the installed list AND
+ *  the Skills Hub picker stacked under it (a fixed few hundred pixels left the
+ *  list a sliver), with the native vertical resize handle. Scrolled into view
+ *  on mount, since it opens below the dialog's identity fields. */
 interface ResizableFrameProps {
   children: ReactNode
-  /** CSS `resize` has nothing to drag from without a concrete height, and the
-   *  two surfaces that embed Capabilities budget it different room. */
-  height: number
-  minHeight: number
+  height?: number | string
+  minHeight?: number | string
 }
 
-/** A fixed-height viewport with the native vertical resize handle. */
-export function ResizableFrame({ children, height, minHeight }: ResizableFrameProps) {
+export function ResizableFrame({ children, height = 'min(85vh, 960px)', minHeight = 360 }: ResizableFrameProps) {
   return (
     <div
       className="resize-y overflow-auto rounded-md border border-(--ui-stroke-secondary)"
+      ref={revealOnMount}
       style={{
         height,
         minHeight

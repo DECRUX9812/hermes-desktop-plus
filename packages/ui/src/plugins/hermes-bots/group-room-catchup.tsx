@@ -152,14 +152,14 @@ export function RecapCard({
   return (
     <section
       aria-label={r.title}
-      className="flex flex-col gap-1.5 rounded-card border border-line bg-surface-raised px-4 py-3"
+      className="ml-11 flex flex-col gap-1.5 rounded-xl border border-violet-500/25 bg-violet-500/5 px-3 py-2"
       data-testid="group-recap-card"
     >
       <div className="flex items-center gap-2">
-        <Codicon className="text-fg-muted" name="sparkle" />
-        <span className="text-ui-sm font-medium">{r.title}</span>
+        <Codicon className="text-violet-600 dark:text-violet-300" name="sparkle" />
+        <span className="text-[0.75rem] font-semibold text-violet-700 dark:text-violet-300">{r.title}</span>
         <Button
-          className="ml-auto"
+          className="ml-auto h-6 px-2 text-[0.6875rem]"
           disabled={busy || !entries.length}
           onClick={() => void run()}
           size="sm"
@@ -171,7 +171,10 @@ export function RecapCard({
       </div>
       {state ? (
         <div
-          className="text-ui-xs leading-relaxed whitespace-pre-line text-fg-muted"
+          className={cn(
+            'text-[0.75rem] leading-relaxed whitespace-pre-line',
+            state.error ? 'text-(--ui-text-tertiary)' : 'text-(--ui-text-secondary)'
+          )}
           data-testid="group-recap-text"
         >
           {state.text.replace(/\*\*/g, '')}
@@ -196,15 +199,15 @@ export function CatchUpCard({ catchUp, missed, nameOf, onDismiss, onOpen }: Catc
   return (
     <section
       aria-label={c.title}
-      className="flex flex-col gap-2 rounded-card border border-line bg-surface-raised px-4 py-3"
+      className="mx-2 mt-1 mb-2 flex flex-col gap-2 rounded-xl border border-(--ui-accent)/25 bg-(--ui-accent)/5 px-3 py-2.5"
       data-testid="group-catchup-card"
     >
       <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-ui-sm font-medium">{c.title}</span>
-        <span className="text-ui-xs text-fg-muted">
+        <span className="text-[0.8125rem] font-semibold text-foreground">{c.title}</span>
+        <span className="text-[0.6875rem] text-(--ui-text-tertiary)">
           {c.summary(catchUp.total, catchUp.lines.length, relativeTime(catchUp.since))}
         </span>
-        <Button className="ml-auto" onClick={onDismiss} size="sm" variant="ghost">
+        <Button className="ml-auto h-6 px-2 text-[0.6875rem]" onClick={onDismiss} size="sm" variant="ghost">
           {c.dismiss}
         </Button>
       </div>
@@ -212,7 +215,7 @@ export function CatchUpCard({ catchUp, missed, nameOf, onDismiss, onOpen }: Catc
         {catchUp.lines.map(line => (
           <li key={line.thread}>
             <button
-              className="flex w-full cursor-pointer items-start gap-2 rounded-row px-2 py-1.5 text-left transition-colors hover:bg-hover"
+              className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-(--chrome-action-hover)"
               data-testid="group-catchup-line"
               onClick={() => onOpen(line.thread)}
               type="button"
@@ -222,15 +225,15 @@ export function CatchUpCard({ catchUp, missed, nameOf, onDismiss, onOpen }: Catc
                 className={cn(
                   'mt-1.5 size-2 shrink-0 rounded-full',
                   line.escalated || line.question
-                    ? 'bg-warning'
+                    ? 'bg-amber-500'
                     : line.working.length
-                      ? 'bg-brand'
-                      : 'bg-success'
+                      ? 'bg-(--ui-accent)'
+                      : 'bg-emerald-500/70'
                 )}
               />
               <span className="flex min-w-0 flex-col">
-                <span className="truncate text-ui-sm font-medium">{line.title}</span>
-                <span className="text-ui-xs text-fg-muted">
+                <span className="truncate text-[0.75rem] font-semibold text-foreground">{line.title}</span>
+                <span className="text-[0.6875rem] text-(--ui-text-tertiary)">
                   {[
                     line.escalated ? c.escalated : '',
                     line.question ? c.question : '',

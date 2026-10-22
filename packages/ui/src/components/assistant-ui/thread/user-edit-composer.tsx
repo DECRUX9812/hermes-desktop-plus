@@ -80,7 +80,8 @@ import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { notifyError } from '@/store/notifications'
 import { $terminalBackend } from '@/store/session'
-import { isSessionRemote } from '@/store/session-states'
+import { ambientRequestFor } from '@/store/session-gone-latch'
+import { isSessionRemote, requestForOwnedSession } from '@/store/session-states'
 import { useForcedTextDirection } from '@/store/text-direction'
 import { notifyThreadEditClose } from '@/store/thread-scroll'
 
@@ -123,7 +124,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
   const expanded = draft.includes('\n')
   const canSubmit = draft.trim().length > 0
   const at = useAtCompletions({ cwd, gateway, sessionId })
-  const slash = useSlashCompletions({ gateway })
+  const slash = useSlashCompletions({ gateway, sessionId })
   const emoji = useEmojiCompletions()
 
   // Timers this composer schedules must not outlive it. Every callback below
@@ -452,7 +453,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
   // read it in remote mode, and an image needs its bytes uploaded for vision.
   // Stage each through the same file.attach/image.attach_bytes pipeline the main
   // composer uses, then insert the *gateway-side* ref the agent can resolve —
-  // never the raw local path (the Finder remote-attach bug, which the main
+  // never the raw local path (the MahmoudR remote-attach bug, which the main
   // composer fixes but this edit composer used to reproduce).
   const uploadOsDropRefs = useCallback(
     async (osDrops: ReturnType<typeof extractDroppedFiles>): Promise<InlineRefInput[]> => {
@@ -463,8 +464,12 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
 
       const remote = isSessionRemote(sessionId)
 
+      // Staged on the edited session's owner: a bare-profile owner otherwise
+      // rides the ambient socket, which refuses another profile's session.
+      const ambient = ambientRequestFor(gateway)
+
       const requestGateway = <T,>(method: string, params?: Record<string, unknown>) =>
-        gateway.request<T>(method, params)
+        requestForOwnedSession<T>(sessionId, ambient, method, params)
 
       const refs: InlineRefInput[] = []
 

@@ -1,6 +1,5 @@
 'use client'
 
-import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { bareChoice, RECOMMENDED_LABEL } from '@/store/clarify'
@@ -54,7 +53,7 @@ export function KeyBadge({
   )
 }
 
-/** A letter-badged option row: a secondary small Button stretched full-width. */
+/** A letter-badged option row. */
 export function ChoiceButton({
   active = false,
   char,
@@ -75,23 +74,26 @@ export function ChoiceButton({
   // `active` is the keyboard cursor on the live card (arrow-key navigation);
   // it highlights the row and previews its key badge.
   return (
-    <Button
+    <button
       aria-current={active || undefined}
       aria-keyshortcuts={keyShortcuts}
       aria-pressed={selected}
-      className={cn('w-full justify-start gap-2 text-left whitespace-normal', active && 'bg-hover')}
+      className={cn(
+        OPTION_ROW_CLASS,
+        'text-(--ui-text-secondary) hover:bg-(--chrome-action-hover) hover:text-(--ui-text-primary)',
+        active && 'bg-(--chrome-action-hover) text-(--ui-text-primary)',
+        selected && 'text-(--ui-text-primary)'
+      )}
       data-choice
       data-highlighted={active || undefined}
       disabled={disabled}
       onClick={onClick}
-      size="sm"
       type="button"
-      variant="secondary"
     >
       <KeyBadge char={char} preview={active} selected={Boolean(selected)} />
       <span className="flex-1 wrap-anywhere">
         <ChoiceLabel choice={choice} />
       </span>
-    </Button>
+    </button>
   )
 }

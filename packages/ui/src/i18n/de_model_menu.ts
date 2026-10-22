@@ -7,7 +7,7 @@ export const deModelMenu = {
   favorites: 'Favoriten',
   addFavorite: 'Zu Favoriten hinzufügen',
   removeFavorite: 'Aus Favoriten entfernen',
-  favoownerortcut: '⇧ Klick',
+  favoriteShortcut: '⇧ Klick',
   fast: 'Schnell',
   free: 'kostenlos',
   cacheRead: 'Cache-Lesung',

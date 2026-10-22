@@ -13,16 +13,15 @@ import { Navigate, Route, Routes, useParams } from 'react-router'
 
 import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
-import { $chatOnboardingSolo } from '@/fork/store/onboarding-intro'
 import { $activeConnectionId } from '@/store/connections'
 import { $gateway } from '@/store/gateway'
+import { $chatOnboardingSolo } from '@/store/onboarding-intro'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $freshDraftReady, $gatewayState } from '@/store/session'
 
 import { ChatView } from '../chat'
 import { ChatSidebar } from '../chat/sidebar'
 import { TerminalPaneChrome } from '../right-sidebar/terminal/chrome'
-import { loadArtifactsView, loadCapabilitiesView, loadMessagingView } from '../route-chunks'
 import { contributedRoutes, NEW_CHAT_ROUTE, ROUTES_AREA, sessionRoute } from '../routes'
 import { ActivityRail } from '../shell/activity-rail'
 import { useStatusSnapshot } from '../shell/hooks/use-status-snapshot'
@@ -38,9 +37,9 @@ import type { SidebarActions, WiringActions } from './types'
 // Same lazy-view split as DesktopController — pages load on demand. The
 // full-page views the workspace route table mounts live here; overlay views
 // (agents/settings/…) are the controller's and stay in wiring.tsx.
-const ArtifactsView = lazy(async () => ({ default: (await loadArtifactsView()).ArtifactsView }))
-const MessagingView = lazy(async () => ({ default: (await loadMessagingView()).MessagingView }))
-const CapabilitiesView = lazy(async () => ({ default: (await loadCapabilitiesView()).CapabilitiesView }))
+const ArtifactsView = lazy(async () => ({ default: (await import('../artifacts')).ArtifactsView }))
+const MessagingView = lazy(async () => ({ default: (await import('../messaging')).MessagingView }))
+const CapabilitiesView = lazy(async () => ({ default: (await import('../capabilities')).CapabilitiesView }))
 
 export function LegacySessionRedirect() {
   const { sessionId } = useParams()

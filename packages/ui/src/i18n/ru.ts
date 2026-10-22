@@ -2,19 +2,12 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { defineLocale, type TranslationOverrides } from './define-locale'
 import { ruAuxTasks } from './ru_aux_tasks'
-import { ruCatalogInstall } from './ru_catalog_install'
-import { ruClarify } from './ru_clarify'
-import { ruConnectors } from './ru_connectors'
-import { ruFirstRun } from './ru_first_run'
 import { ruModelMenu } from './ru_model_menu'
 import { ruNotices } from './ru_notices'
 import { ruOnboarding } from './ru_onboarding'
 import { ruPluginSettings } from './ru_plugins'
 import { ruProjects } from './ru_projects'
 import { ruSharedMetrics } from './ru_shared_metrics'
-import { ruThemePicker } from './ru_theme_picker'
-import { ruToolCards } from './ru_tool_cards'
-import { ruUpdateChannel } from './ru_update_channel'
 
 // RU_PLURAL: (count, one, few, many) — русские формы сущ. падежа
 // RU_NOUN: (count, one, few, many) — формы род. множественного
@@ -38,10 +31,41 @@ const RU_NOUN = (count: number | string, one: string, few: string, many: string)
 }
 
 export const ruOverrides = {
-  connectors: ruConnectors.connectors,
   sharedMetrics: ruSharedMetrics,
-  firstRun: ruFirstRun,
-  sessionImport: ruConnectors.sessionImport,
+  sessionImport: {
+    title: 'Продолжить из другого приложения',
+    subtitle: 'Перенесите разговор в Hermes и продолжите с того места, где остановились.',
+    action: 'Импортировать сессию',
+    readingFrom: 'Читаем с',
+    connectedComputer: 'подключённого компьютера',
+    destination: 'Импорт в',
+    all: 'Все',
+    search: 'Поиск по загруженным сессиям',
+    scanning: 'Поиск разговоров',
+    scanError: 'Не удалось найти сессии',
+    scanHelp: 'Проверьте подключение к серверу и повторите попытку. Старому серверу может требоваться обновление.',
+    empty: 'Разговоров пока нет',
+    emptyHelp: 'Здесь появятся сессии Claude Code и Codex с этого сервера.',
+    noMatches: 'Совпадений нет',
+    searchHelp: 'Попробуйте другой заголовок или папку либо загрузите ещё сессии.',
+    skipped: 'Некоторые журналы пусты, недоступны или слишком велики для просмотра.',
+    more: 'Загрузить ещё сессии',
+    messages: 'сообщений',
+    choose: 'Разговор, который стоит продолжить',
+    chooseHelp: 'Выберите сессию, чтобы прочитать историю перед импортом в Hermes.',
+    previewLoading: 'Открываем просмотр',
+    previewError: 'Просмотр недоступен',
+    previewHelp: 'Исходный файл мог переместиться или измениться. Обновите список и повторите попытку.',
+    previewLimit: 'Просмотр сокращён для удобства чтения. Импортируется весь разговор.',
+    you: 'Вы',
+    snapshot: 'Этот разговор уже есть в Hermes. Откройте существующую копию, чтобы продолжить.',
+    copyNotice:
+      'Копируется текст разговора. Исходные файлы не меняются. Вывод инструментов и рассуждения не переносятся.',
+    importing: 'Импорт…',
+    open: 'Открыть в Hermes',
+    continue: 'Продолжить в Hermes',
+    importError: 'Не удалось импортировать разговор.'
+  },
   common: {
     apply: 'Применить',
     back: 'Назад',
@@ -246,22 +270,12 @@ export const ruOverrides = {
   },
   ...ruNotices,
 
-  billingBlock: {
-    titleNous: 'Кредиты Nous закончились',
-    titleProvider: provider => `Кредиты закончились — ${provider}`,
-    fallbackMessage: 'В вашем аккаунте закончились кредиты. Пополните баланс, чтобы продолжить.',
-    openBilling: 'Открыть биллинг',
-    addCredits: 'Пополнить кредиты',
-    dismiss: 'Скрыть'
-  },
-
   titlebar: {
     hideSidebar: 'Скрыть боковую панель',
     showSidebar: 'Показать боковую панель',
     search: 'Поиск',
     searchTitle: 'Поиск сеансов, видов и действий',
     swapSidebarSides: 'Поменять панели местами',
-    moreTools: 'Другие инструменты',
     hideRightSidebar: 'Скрыть правую панель',
     showRightSidebar: 'Показать правую панель',
     unreadSessions: count =>
@@ -356,9 +370,7 @@ export const ruOverrides = {
       'view.terminalPaste': 'Вставить в терминал',
       'view.closeTab': 'Закрыть вкладку',
       'view.reopenTab': 'Восстановить закрытую вкладку',
-      'view.splitSession': 'Разделить на новую сессию',
       'view.flipPanes': 'Поменять панели местами',
-      'view.sessionOverview': 'Обзор сессий',
       'view.findInPage': 'Найти на странице',
       'view.findNext': 'Следующее вхождение',
       'view.findPrevious': 'Предыдущее вхождение',
@@ -1010,7 +1022,9 @@ export const ruOverrides = {
           'Когда Hermes обновляет себя из приложения (без запроса в терминале), сохранять локальные правки исходников (stash) или выбрасывать (discard). Обновления из терминала всегда спрашивают.'
       }
     }),
-    about: { updates: 'Обновления', channel: ruUpdateChannel },
+    about: {
+      updates: 'Обновления'
+    },
     config: {
       minimizeToTrayTitle: 'Сворачивать в трей',
       minimizeToTrayDesc:
@@ -1062,11 +1076,6 @@ export const ruOverrides = {
       voiceShortcutHintTitle: 'Горячая клавиша записи голоса',
       voiceShortcutHintDesc:
         'Настройте горячую клавишу записи голоса в разделе «Настройки → Горячие клавиши» («Начать / остановить голосовой диалог»). Параметр voice.record_key действует только в CLI и TUI.',
-      developerTitle: 'Разработчик',
-      resetOnboardingTitle: 'Сбросить первичную настройку',
-      resetOnboardingDesc: 'Очистить состояние первичной настройки и запустить мастер первого запуска заново.',
-      resetOnboardingAction: 'Сбросить',
-      resetOnboardingFailed: 'Не удалось сбросить первичную настройку'
     },
     hudModifier: {
       title: 'Вызов HUD коротким нажатием',
@@ -2416,7 +2425,6 @@ export const ruOverrides = {
     switchToConnection: name => `Переключиться на ${name}`,
     switchConnectionFailed: name => `Не удалось подключиться к ${name}`,
     manageProfiles: 'Управлять профилями…',
-    railMore: 'Другие действия с профилями',
     connectGateway: 'Управлять шлюзами…',
     fleet: {
       localDevice: 'Это устройство (локальный бэкенд — установит Hermes, если его нет, иначе откроет новую сессию)',
@@ -2839,7 +2847,6 @@ export const ruOverrides = {
     },
     nav: {
       'new-session': 'Новый сеанс',
-      activity: 'Активность',
       capabilities: 'Возможности',
       messaging: 'Сообщения',
       artifacts: 'Артефакты',
@@ -2856,8 +2863,6 @@ export const ruOverrides = {
     },
     searchAria: 'Поиск сеансов',
     railAria: 'Навигация приложения',
-    railPlugins: 'Плагины',
-    railPluginsHint: 'Плагины: открыть или установить',
     searchPlaceholder: 'Поиск сеансов…',
     clearSearch: 'Очистить поиск',
     noMatch: query => `Нет сеансов по запросу «${query}».`,
@@ -2933,7 +2938,6 @@ export const ruOverrides = {
       needsInput: 'Нужен ваш ввод',
       waitingForAnswer: 'Ждёт вашего ответа',
       finishedUnread: 'Завершён — не прочитан',
-      progressRing: (done, total) => `Выполнено шагов: ${done} из ${total}`,
       backgroundRunning: 'Фоновая задача выполняется',
       draftSession: 'Черновик — ещё ничего не отправлено',
       continueOnPhone: 'Продолжить на телефоне',
@@ -3040,7 +3044,6 @@ export const ruOverrides = {
       thisMonth: 'Ранее в этом месяце'
     },
     statusDivider: {
-      needsYou: 'Ждёт вас',
       working: 'Работает',
       done: 'Готово'
     },
@@ -3058,19 +3061,9 @@ export const ruOverrides = {
       profile: 'Профиль',
       source: 'Источник',
       started: 'Запущен',
-      updated: 'Обновлён',
-      lastTool: 'Последний инструмент',
-      planFraction: (done, total) => `${done} из ${total}`,
-      more: count => `ещё ${count}`,
-      stopFailed: 'Не удалось остановить сессию'
+      updated: 'Обновлён'
     },
     markAllRead: 'Отметить все как прочитанные'
-  },
-
-  sessionOverview: {
-    title: 'Обзор сессий',
-    empty: 'Нет активных сессий',
-    newSession: 'Новая сессия'
   },
   intro: {
     recentSessions: 'Продолжите с того места, где остановились'
@@ -3135,6 +3128,7 @@ export const ruOverrides = {
       `${count.toLocaleString('ru')} ${RU_PLURAL(count, 'результат', 'результата', 'результатов')}`,
     back: 'Назад к результатам'
   },
+
   composer: {
     message: 'Сообщение',
     wakingProfile: profile => `Пробуждаем ${profile}…`,
@@ -3167,24 +3161,6 @@ export const ruOverrides = {
     steerTurn: 'Направить ход',
     stop: 'Стоп',
     send: 'Отправить',
-    broadcastTip: 'Отправить во все панели',
-    broadcastNote: 'Только текст — вложения остаются в этой панели',
-    broadcastOn: 'Все панели',
-    broadcastSummary: (sent, queued, skipped, failed) => {
-      const extras: string[] = []
-
-      if (skipped > 0) {
-        extras.push(`пропущено: ${skipped}`)
-      }
-
-      if (failed > 0) {
-        extras.push(`не доставлено: ${failed}`)
-      }
-
-      return extras.length > 0
-        ? `Отправлено: ${sent + queued}, ${extras.join(', ')}`
-        : `Отправлено: ${sent + queued}`
-    },
     speaking: 'Говорит',
     transcribing: 'Расшифровка',
     thinking: 'Думает',
@@ -3549,7 +3525,6 @@ export const ruOverrides = {
       heartbeatEveryHours: hours => `каждые ${hours}ч`,
       heartbeatEverySeconds: seconds => `каждые ${seconds}с`,
       heartbeatNext: time => `следующий ${time}`,
-      heartbeatDueWaitingForIdle: 'пора — ожидание простоя',
       heartbeatActions: 'Действия пульса',
       pauseHeartbeat: 'Приостановить пульс',
       resumeHeartbeat: 'Возобновить пульс',
@@ -4244,8 +4219,6 @@ export const ruOverrides = {
     closeToRight: 'Закрыть справа',
     closeAll: 'Закрыть все',
     newSessionTab: 'Вкладка нового сеанса',
-    splitSession: 'Разделить сессию',
-    splitSessionCapped: 'До 4 сессий рядом',
     pluginDisabled: pluginId => `Плагин «${pluginId}» отключён`,
     pluginDisabledBody: 'Включите его снова в Возможности → Плагины, чтобы вернуть панель.',
     missingPane: paneId => `нет панели: ${paneId}`,
@@ -4327,6 +4300,12 @@ export const ruOverrides = {
       branchNewChat: 'Ветка в новый чат',
       react: 'Реакция',
       dismissError: 'Скрыть ошибку',
+      errorCodes: {
+        cron_session_read_only: {
+          title: 'Этот чат относится к запланированной задаче',
+          body: 'Он только выполняет эту задачу, поэтому ваше сообщение не было выполнено. Начните новый чат, чтобы отправить его.'
+        }
+      },
       filesChanged: count => `${count} ${RU_PLURAL(count, 'файл изменён', 'файла изменено', 'файлов изменено')}`,
       reviewChanges: 'Проверить',
       readAloudFailed: 'Не удалось зачитать вслух',
@@ -4364,11 +4343,6 @@ export const ruOverrides = {
       command: 'Команда',
       moreOptions: 'Больше опций подтверждения',
       allowSession: 'Разрешить в этом сеансе',
-      allowOnce: 'Разрешить один раз',
-      alwaysAllowHere: 'Всегда разрешать здесь',
-      deny: 'Отклонить',
-      cardTitle: 'Разрешить выполнить эту команду?',
-      cardDetailsTitle: 'Проверьте это изменение',
       alwaysAllowMenu: 'Всегда разрешать…',
       jumpToApproval: 'Нужно подтверждение',
       reject: 'Отклонить',
@@ -4377,10 +4351,46 @@ export const ruOverrides = {
         `Это добавит паттерн «${pattern}» в ваш постоянный список разрешений (~/.hermes/config.yaml). Hermes больше не будет спрашивать о подобных командах — ни в этом сеансе, ни в будущем.`,
       alwaysAllow: 'Всегда разрешать'
     },
-    clarify: ruClarify,
-    toolCards: ruToolCards,
-    themePicker: ruThemePicker,
-    catalogInstall: ruCatalogInstall,
+    clarify: {
+      notReady: 'Запрос уточнения ещё не готов',
+      gatewayDisconnected: 'Шлюз Hermes не подключён',
+      sendFailed: 'Не удалось отправить ответ на уточнение',
+      loadingQuestion: 'Загрузка вопроса…',
+      other: 'Другое (введите ответ)',
+      placeholder: 'Введите ваш ответ…',
+      skip: 'Пропустить',
+      skipped: 'Пропущено',
+      noAnswer: 'Нет ответа',
+      confirmAndContinueLabel: 'Подтвердить и продолжить',
+      singleSelectHint: 'Выберите один',
+      multiSelectHint: 'Выберите все подходящие',
+      oneQuestion: '1 вопрос',
+      questionProgress: (answered, total) => `Ответ дан на ${answered} из ${total}`,
+      notDelivered:
+        'Этот вопрос не дошёл до приложения, поэтому ответить здесь нельзя. Нажмите «Стоп», чтобы завершить ход, и ответьте в чате.'
+    },
+    catalogInstall: {
+      preparing: 'Готовим установку…',
+      install: 'Установить',
+      advanced: 'Дополнительно',
+      skip: 'Пропустить',
+      installing: 'Установка…',
+      installed: 'Установлено',
+      notInstalled: 'Не установлено',
+      failed: 'Ошибка',
+      showNames: 'показать имена',
+      hideNames: 'скрыть имена',
+      skill: name => `навык ${name}`,
+      kind: { plugin: 'плагин', skill: 'навык' },
+      tier: { official: 'официальный', community: 'сообщество' },
+      targetProfile: profile => `Установка в ваш профиль ${profile}`,
+      sendFailed: 'Не удалось отправить ответ. Попробуйте ещё раз.',
+      commitLabel: 'Коммит',
+      subdirLabel: 'Папка',
+      scan: { passed: 'Проверка пройдена', warnings: 'Проверка нашла предупреждения', failed: 'Проверка не пройдена' },
+      requirementsLabel: 'Требования',
+      credentialsHeading: 'Учётные данные'
+    },
     mcpSetup: {
       installTitle: 'Добавить MCP-серверы',
       enableTitle: 'Включить MCP-серверы',

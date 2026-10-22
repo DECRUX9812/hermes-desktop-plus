@@ -6,7 +6,6 @@ export interface OnboardingTranslations {
   setupSlowTitle: string
   setupSlowBody: string
   continueWithoutSetup: string
-  checkingSetup: string
   lookingUpProviders: string
   collapse: string
   otherProviders: string

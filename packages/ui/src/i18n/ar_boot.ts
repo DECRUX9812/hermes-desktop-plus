@@ -255,7 +255,6 @@ export const arBoot = {
     setupSlowTitle: 'يستغرق الإعداد وقتا أطول من المعتاد.',
     setupSlowBody: 'لا يزال Hermes قيد البدء في الخلفية.',
     continueWithoutSetup: 'المتابعة دون إعداد',
-    checkingSetup: 'جار التحقق من إعدادك…',
     lookingUpProviders: 'جار البحث عن المزوّدين...',
     collapse: 'طي',
     otherProviders: 'مزودون آخرون',

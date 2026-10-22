@@ -12,12 +12,10 @@
 import { useStore } from '@nanostores/react'
 import { type CSSProperties, Fragment, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 
-import { $canSplitSession, $splitSessionAction, $splitSessionTab } from '@/app/chat/split-session'
 import { ShellMenuItems } from '@/app/context-menu/shell-menu-items'
 import { TITLEBAR_DRAG_HANDLE_WIDTH, TITLEBAR_HEIGHT } from '@/app/shell/titlebar'
 import { useTouchTitlebar } from '@/app/shell/use-touch-titlebar'
 import { ActionsContextMenu, type MenuKit, renderActionItem } from '@/components/ui/actions-menu'
-import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { DecodeText } from '@/components/ui/decode-text'
 import { DROP_SHEET_BLUR_CLASS, DROP_SHEET_CLASS } from '@/components/ui/drop-affordance'
@@ -30,7 +28,6 @@ import {
   PaneTabLabel,
   PaneTabStrip
 } from '@/components/ui/pane-tab'
-import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
 import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { useI18n } from '@/i18n'
@@ -291,8 +288,6 @@ export function TreeGroup({
   const workspaceMode = useStore($workspaceMode)
   const workspaceOwnerKey = useStore($workspaceOwnerKey)
   const newSessionTabAction = useStore($newSessionTabAction)
-  const splitTab = useStore($splitSessionTab)
-  const splitHint = useKeybindHint('view.splitSession')
   const panesWithCloser = useStore($panesWithCloser)
   // Multi-tab selection (⌥/Ctrl-click, Shift-click) — null for every zone but
   // the one holding it, so this subscription is quiet during normal use.
@@ -327,9 +322,6 @@ export function TreeGroup({
   // also has to accommodate the drag handle and the separate new-tab target.
   const tabsBelowControls = topEdge && (compactTabs || sidebarGroup || measuredBelowControls)
   const tabsInTitlebar = topEdge && !tabsBelowControls
-  // The sessions sidebar's strip (Sessions / Bots) reads as a view switch, not
-  // as editor tabs.
-  const tabVariant = !tabsInTitlebar && node.panes.includes('sessions') ? 'segmented' : 'tabs'
   const pageHeader = paneChrome(active).headerContent
   // The active pane's strip-trailing affordance (a session's skill chip) —
   // pinned right of the tab list, never scrolled away.
@@ -345,15 +337,6 @@ export function TreeGroup({
 
     return mint ? { label: t.zones.newTab, onSelect: mint } : null
   }
-
-  const splitAction = useStore($splitSessionAction)
-  const canSplitSession = useStore($canSplitSession)
-
-  const splitAriaLabel = splitTab.capped
-    ? t.zones.splitSessionCapped
-    : splitHint
-      ? `${t.zones.splitSession} (${splitHint})`
-      : t.zones.splitSession
 
   const newTab =
     ownNewTab(activeId) ??
@@ -596,9 +579,7 @@ export function TreeGroup({
         <div
           className="relative flex min-w-0 shrink-0 bg-(--ui-sidebar-surface-background)"
           data-panel-header=""
-          style={
-            topEdge ? { height: titlebarHeight + (tabsBelowControls && headerVisible ? tabStripHeight : 0) } : undefined
-          }
+          style={topEdge ? { height: titlebarHeight + (tabsBelowControls && headerVisible ? tabStripHeight : 0) } : undefined}
         >
           {topEdge && (
             <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-left, 100%)' }} />
@@ -626,10 +607,7 @@ export function TreeGroup({
                 onSelect={paneId => {
                   clearTabSelection()
 
-                  if (node.minimized) {
-                    restoreTreePane(paneId)
-                  }
-
+                  if (node.minimized) { restoreTreePane(paneId) }
                   activateTreePane(node.id, paneId)
                 }}
                 tabs={shown.map(id => ({ id, title: tabText(id), label: tabLabel(id) }))}
@@ -683,7 +661,6 @@ export function TreeGroup({
                     <StripDropCaret groupId={node.id} stripRef={stripRef} />
                   </>
                 }
-                variant={tabVariant}
               >
                 {shown.map((paneId, index) => {
                   const isActive = paneId === activeId && !node.minimized
@@ -782,7 +759,6 @@ export function TreeGroup({
                       role="tab"
                       selected={isSelected}
                       style={{ cursor: 'grab' }}
-                      variant={tabVariant}
                     >
                       {chrome.tabLead ? (
                         <span className="ml-2 -mr-1 flex shrink-0 items-center">
@@ -831,36 +807,6 @@ export function TreeGroup({
                       label={newTab.label}
                       onSelect={newTab.onSelect}
                     />
-                  </span>
-                )}
-                {splitAction && newSessionTabAction && !node.minimized && !compactTabs && shown.some(isSessionStripPane) && (
-                  <span className="flex shrink-0 items-center [-webkit-app-region:no-drag]">
-                    {/* Same chrome as PaneStripGlyph (ghost icon-xs + Tip), but
-                    the tip carries the live keybind via TipKeybindLabel, which
-                    a plain-string glyph label cannot express. */}
-                    <Tip
-                      label={
-                        splitTab.capped ? (
-                          t.zones.splitSessionCapped
-                        ) : (
-                          <TipKeybindLabel actionId="view.splitSession" text={t.zones.splitSession} />
-                        )
-                      }
-                      placement="toolbar"
-                    >
-                      <Button
-                        aria-label={splitAriaLabel}
-                        className="self-center bg-transparent opacity-60 select-none hover:opacity-100 [-webkit-app-region:no-drag]"
-                        disabled={!canSplitSession || splitTab.capped}
-                        onClick={splitAction}
-                        onPointerDown={event => event.stopPropagation()}
-                        size="icon-xs"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <Codicon name="split-horizontal" size="0.8125rem" />
-                      </Button>
-                    </Tip>
                   </span>
                 )}
               </PaneTabStrip>
@@ -997,11 +943,7 @@ export function TreeGroup({
             className="absolute inset-x-0 bottom-0 z-50 flex cursor-grab items-center justify-center outline-1 -outline-offset-2 outline-dashed backdrop-blur-[2px]"
             onPointerDown={e => startPaneDrag(activeId, e, undefined, undefined, tabText(activeId))}
             style={{
-              top: topEdge
-                ? titlebarHeight + (tabsBelowControls && headerVisible ? tabStripHeight : 0)
-                : headerVisible
-                  ? tabStripHeight
-                  : 0,
+              top: topEdge ? titlebarHeight + (tabsBelowControls && headerVisible ? tabStripHeight : 0) : headerVisible ? tabStripHeight : 0,
               background:
                 'color-mix(in srgb, var(--ui-accent) 6%, color-mix(in srgb, var(--ui-bg-chrome) 55%, transparent))',
               outlineColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)'

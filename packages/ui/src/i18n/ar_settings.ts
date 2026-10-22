@@ -1,4 +1,3 @@
-import { arUpdateChannel } from './ar_update_channel'
 import type { TranslationOverrides } from './define-locale'
 
 export const arSettings = {
@@ -198,22 +197,16 @@ export const arSettings = {
         profileLabel: 'التثبيت للملف الشخصي',
         agentTargetLocal: (profile, dir) => `يُثبّت في خلفية ${profile} (${dir})`,
         agentTargetRemote: profile => `يُثبّت في خلفية ${profile} المتصلة`,
-        catalogPinned: (name, sha) =>
-          `إدخال كتالوج Hermes «${name}» — يُثبّت مكوّن الوكيل عند التثبيت المراجَع${sha ? ` ${sha}` : ''}، وليس رأس الفرع.`,
-        reviewedHeading: 'إدخال كتالوج مراجَع',
-        reviewedIntro: 'رُوجِع هذا الإدخال بشريًا عند commitه المثبّت. يمكنك مع ذلك فحص الكود الدقيق أدناه.',
         missingEnvAction: 'إعداده',
         alreadyInstalled: (name: string) => `${name} مثبّت مسبقًا.`,
         desktopTarget: 'يُثبّت في مجلد desktop-plugins المحلي لهذا التطبيق',
         desktopTargetFromPackage: 'يُحمَّل في هذا التطبيق من الحزمة أعلاه — موحّد لكل الملفات الشخصية',
         desktopOnlyNote: 'حزم سطح المكتب فقط لا تثبّت إضافة وكيل للخلفية.',
         insecureWarning: 'يستخدم هذا العنوان مخططًا غير آمن أو محليًا. يُفضَّل https:// أو git@ للتثبيتات الإنتاجية.',
-        securityHeading: 'قبل التثبيت',
         securityIntro: 'ثبّت من مصادر تثق بها فقط — راجع المستودع أدناه لترى ما سيُضاف.',
         sourceHeading: 'الشيفرة المصدرية',
         viewRepository: 'عرض المستودع',
         viewPluginFiles: 'عرض ملفات الإضافة',
-        gitCloneLabel: 'عنوان استنساخ Git',
         enableAgent: 'تفعيل إضافة الوكيل بعد التثبيت',
         forceReinstall: 'فرض إعادة التثبيت (استبدال إن كانت مثبّتة)',
         pinToCommit: 'تثبيت على commit (اختياري)',
@@ -637,8 +630,7 @@ export const arSettings = {
       'stt.echoTranscripts': 'انشر التفريغ النصي الخام 🎙️ للرسائل الصوتية إلى المحادثة.'
     },
     about: {
-      updates: 'التحديثات',
-      channel: arUpdateChannel
+      updates: 'التحديثات'
     },
 
     config: {
@@ -679,12 +671,7 @@ export const arSettings = {
         'حجم الملف المحلي الذي يحمّله Desktop للمعاينات وإرفاق الصور، بالميغابايت. الافتراضي 16. الإرفاق البعيد غير الصوري يستخدم حدًا منفصلًا 256 MB. ضبطه عاليًا جدًا يحمّل الملف كله في الذاكرة وقد يجمّد التطبيق أو يعطّله.',
       attachmentSizeUnit: 'MB',
       attachmentSizeLabel: 'الحد الأقصى لحجم المعاينة/تحميل الصور بالميغابايت',
-      showOptions: 'إظهار الخيارات',
-      developerTitle: 'مطور',
-      resetOnboardingTitle: 'إعادة تعيين الإعداد الأولي',
-      resetOnboardingDesc: 'مسح حالة الإعداد الأولي وإعادة تشغيل إعداد التشغيل الأول.',
-      resetOnboardingAction: 'إعادة تعيين',
-      resetOnboardingFailed: 'فشل إعادة تعيين الإعداد الأولي'
+      showOptions: 'إظهار الخيارات'
     },
     hudModifier: {
       title: 'استدعاء HUD بضغطة',

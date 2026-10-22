@@ -16,7 +16,7 @@ const SHOWN = 4
  * The home screen's project row (Codex / VS Code welcome): the projects you
  * were in last, one click from a new chat at their root, plus ⌘O's door.
  */
-export function RecentProjects({ onPick }: { onPick?: (cwd: string) => void }) {
+export function RecentProjects() {
   const { t } = useI18n()
   const tree = useStore($projectTree)
   const dismissed = useStore($dismissedAutoProjectIds)
@@ -42,13 +42,6 @@ export function RecentProjects({ onPick }: { onPick?: (cwd: string) => void }) {
               className="max-w-48 rounded-full"
               onClick={() => {
                 triggerHaptic('selection')
-
-                if (onPick) {
-                  onPick(projectRootCwd(project))
-
-                  return
-                }
-
                 goToProject(project.id, { newSession: true })
               }}
               size="sm"
@@ -60,18 +53,16 @@ export function RecentProjects({ onPick }: { onPick?: (cwd: string) => void }) {
             </Button>
           </Tip>
         ))}
-        {!onPick && (
-          <Button
-            className="rounded-full text-(--ui-text-tertiary)"
-            onClick={() => void openFolderAsProject()}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <Codicon className="opacity-70" name="folder-opened" />
-            {t.recentProjects.openFolder}
-          </Button>
-        )}
+        <Button
+          className="rounded-full text-(--ui-text-tertiary)"
+          onClick={() => void openFolderAsProject()}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <Codicon className="opacity-70" name="folder-opened" />
+          {t.recentProjects.openFolder}
+        </Button>
       </div>
     </div>
   )

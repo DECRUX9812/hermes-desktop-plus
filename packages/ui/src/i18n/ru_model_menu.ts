@@ -7,7 +7,7 @@ export const ruModelMenu = {
   favorites: 'Избранное',
   addFavorite: 'Добавить в избранное',
   removeFavorite: 'Убрать из избранного',
-  favoownerortcut: '⇧ Клик',
+  favoriteShortcut: '⇧ Клик',
   fast: 'Быстрая',
   free: 'бесплатно',
   cacheRead: 'чтение из кэша',

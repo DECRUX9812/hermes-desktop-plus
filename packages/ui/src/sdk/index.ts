@@ -56,11 +56,12 @@ import { completeMcpDesktopOAuth } from '@/lib/mcp-dashboard-oauth'
 
 /** Pane, status bar and titlebar slots; see `./areas` for the mount rules. */
 export { PANES_AREA, STATUSBAR_AREAS, TITLEBAR_AREAS } from './areas'
+/** The plugin authoring contract (`HermesPlugin`, `PluginContext`, `ctx.*` door types). */
+export type * from './plugin-contract'
 import { mergeRailArtifacts, type RailArtifactItem, registryArtifactsForSessions } from '@/store/artifact-rail'
 import { $artifactRegistry } from '@/store/artifacts'
 import { $attentionItems, type AttentionItem } from '@/store/attention-inbox'
 import { $attentionCountsByOwner } from '@/store/attention-owner-counts'
-import { $botRoomMascotLayerVisible, toggleBotRoomMascotLayer } from '@/store/botroom-mascot-layer'
 import { $statusItemsBySession, type ComposerStatusItem } from '@/store/composer-status'
 import { $cronJobs } from '@/store/cron'
 import {
@@ -137,8 +138,7 @@ import { planPluginOpenSession } from './plugin-open-session-plan'
 import { sessionsHost } from './sessions'
 import { desktopSettings } from './settings'
 
-/** The plugin authoring contract (`HermesPlugin`, `PluginContext`, `ctx.*` door types). */
-export type * from './plugin-contract'
+export type { DesktopSettingKey, DesktopSettingValues } from './settings'
 
 // -- state: readonly views over the app's live atoms -------------------------
 
@@ -776,10 +776,6 @@ export const host = {
     attentionItems: readonlyAtom<readonly AttentionItem[]>($attentionItems),
     /** True from send until the first assistant payload on the focused chat. */
     awaitingResponse: readonlyAtom<boolean>($focusedAwaitingResponse),
-    /** Browser host only: whether the in-page bot mascot layer is on. Electron
-     *  renders each bot's mascot in its own window main spawns, so this stays
-     *  false there — gate the door on `isBrowserHostedDesktop()`. */
-    botRoomMascotsVisible: readonlyAtom<boolean>($botRoomMascotLayerVisible),
     /**
      * True while the focused chat is working after a send. Covers the wait
      * for the first token and the stream that follows. Follows tile focus —
@@ -867,11 +863,6 @@ export const host = {
   /** Toast into the app's notification stack. */
   notify,
   notifyError,
-
-  /** Browser host only: turn the in-page bot mascot layer on/off — the same
-   *  mascots and task pill Electron puts in per-bot windows. A no-op surface in
-   *  Electron, so gate the door on `isBrowserHostedDesktop()`. */
-  toggleBotRoomMascots: toggleBotRoomMascotLayer,
 
   // NOTE: every host door is async-safe — wrapped so a sync throw from an
   // internal helper (e.g. no desktop bridge in a plain browser) becomes a
@@ -1991,7 +1982,6 @@ export const host = {
 
 // -- react bridge -------------------------------------------------------------
 
-export type { DesktopSettingKey, DesktopSettingValues } from './settings'
 /** THE whole Capabilities surface (Skills / Tools / MCP tabs, installed
  *  lists, full-skill detail pane, embedded hub picker with one-click
  *  installs). For plugin dialogs pass `embedded` (tab state stays local —
@@ -2002,13 +1992,13 @@ export type { DesktopSettingKey, DesktopSettingValues } from './settings'
  *  builds without it would route the pin to the ACTIVE gateway. Bot Mode's
  *  Advanced section is the reference consumer. */
 export { CapabilitiesView } from '@/app/capabilities'
-
 /** THE Connectors tab core Capabilities renders — managed apps, the user's
  *  own MCP servers, plugin servers and the catalog, with per-server enable,
  *  sign-in and live probes. Renders anywhere under the app router (a plugin
  *  dialog); pass a live `gateway` (see `host.getGateway()`) and the `profile`
  *  to scope it to one bot. */
 export { ConnectorsTab } from '@/app/capabilities/connectors/connectors-tab'
+
 // Every contribution surface, plugin-reachable: register keybinds, palette
 // commands, routes, themes, panes, composer extensions, and bar items with
 // the same area ids + payload types core uses.
@@ -2040,7 +2030,8 @@ export { type SessionView, useSessionView } from '@/app/chat/session-view'
  *  Reserve it and your label starts on the same left edge as every session row
  *  above you; spell the classes yourself and the row drifts. The session row is
  *  canonical; `row-geometry.ts` explains what each measurement belongs to. */
-export { SidebarRowLead, SidebarSectionMeta } from '@/app/chat/sidebar/chrome'
+export { SidebarRowLead } from '@/app/chat/sidebar/chrome'
+export { SidebarSectionMeta } from '@/app/chat/sidebar/chrome'
 /** One glyph per gateway kind — device, cloud, terminal, network. The statusbar
  *  switcher, the fleet profile rail and any plugin rail listing gateways share
  *  it, so a connection looks the same wherever it is named. */
@@ -2105,12 +2096,12 @@ export {
  *  look) — use it for colour picking instead of driving app widgets through
  *  React internals; pair it with `host.sessions.setColor` for session colours. */
 export { APPEARANCE_AREAS } from '@/app/settings/appearance-contrib'
-
 /** THE settings rows: `ListRow` is label + description with the control beside
  *  it (wide) or under it (narrow); `ToggleRow` is the one on/off row — a Switch,
  *  never an Off/On pill pair. Use them for preference rows in plugin panes and
  *  dialogs so they line up with core Settings. */
 export { ListRow, ToggleRow } from '@/app/settings/primitives'
+
 /** THE full per-toolset config panel core Settings renders — provider picker,
  *  env vars / API keys, model catalog picker, and post-setup runners. Route-
  *  decoupled (the "manage keys" deep link is a no-op outside the router); pass
@@ -2150,8 +2141,6 @@ export type { TitlebarTool } from '@/app/shell/titlebar-controls'
  * `MEDIA:` delivery directives) and the same rich Markdown/media components as
  * core chat. Prefer this over raw Streamdown for transcript-style messages. */
 export { MessageTextContent } from '@/components/assistant-ui/markdown-text'
-/** Live tool activity cards, one stack per working bot. */
-export { ToolActivityStack, type ToolCardGroup, toolCardsFromParts } from '@/components/assistant-ui/tool-cards'
 /** The oversized Collapse lettering an empty chat is titled with — core writes
  *  "HERMES AGENT" with it, a `chat.empty` contribution writes its own name. */
 export { Wordmark } from '@/components/chat/wordmark'
@@ -2260,13 +2249,13 @@ export type { GatewayEventListener } from '@/contrib/events'
 export { Contribute, type ContributeProps } from '@/contrib/react/contribute'
 /** Settings ▸ Plugins entries (`ctx.registerSettingsPage`); `pluginSettingsHref` deep-links one. */
 export { pluginSettingsHref, SETTINGS_PLUGINS_AREA } from '@/contrib/settings-pages'
-
-// -- contracts ----------------------------------------------------------------
-
 export type { Contribution } from '@/contrib/types'
 /** The live gateway instance type — for typing the `gateway` prop `ConnectorsTab`
  *  takes; obtain the instance from `host.getGateway()`. */
 export type { HermesGateway } from '@/hermes'
+
+// -- contracts ----------------------------------------------------------------
+
 /** Grab-to-pan for overflow containers (boards, timelines, wide tables) —
  *  the shared scrub primitive; don't hand-roll drag-to-scroll. */
 export { type GrabScroll, useGrabScroll } from '@/hooks/use-grab-scroll'
@@ -2317,11 +2306,12 @@ export { CHAT_EMPTY_AREA, type ChatEmptyContribution, type ChatEmptyProps } from
  *  (the props carry the durable session id, owning profile, and shown title;
  *  render `null` for headers the plugin doesn't own). */
 export { CHAT_HEADER_AREAS, type ChatHeaderSlotContribution, type ChatHeaderSlotProps } from '@/lib/chat-header-slots'
-/** `chatMessageText` flattens a message's text parts to a string: the shared read every plugin that scans
- *  a conversation builds on.
- *  `answeredAfter` tells whether a visible user message follows an assistant one.
- *  `upsertToolPart` folds a tool.start / tool.complete payload into a message's parts. */
-export { answeredAfter, chatMessageText, upsertToolPart } from '@/lib/chat-messages'
+/** `chatMessageText` flattens a message's text parts to a string — the shared
+ *  read the transcript-derivation helpers (and every plugin that scans a
+ *  conversation) build on. `answeredAfter` tells whether any visible user
+ *  message follows a given assistant message, the "was this card replied to"
+ *  check transcript cards share. */
+export { answeredAfter, chatMessageText } from '@/lib/chat-messages/parts'
 export type { ChatMessage } from '@/lib/chat-messages/types'
 export { FILE_VIEWERS_AREA, type FileViewerContribution, type FileViewerProps } from '@/lib/file-viewers'
 export { isMissingRpcMethod } from '@/lib/gateway-rpc'
@@ -2345,6 +2335,7 @@ export * as icons from '@/lib/icons'
  *  text field whose bare Enter performs an action. */
 export { isSubmitEnter } from '@/lib/ime'
 export { type KeybindContribution, KEYBINDS_AREA, PLUGIN_APP_ACTIONS } from '@/lib/keybinds/actions'
+
 export { formatModifierToken } from '@/lib/keybinds/combo'
 /** A `Map` with a ceiling, for the module-level caches a plugin keeps across
  *  a renderer that stays open for days. Only for values that can be
@@ -2352,10 +2343,10 @@ export { formatModifierToken } from '@/lib/keybinds/combo'
 export { LruCache } from '@/lib/lru-cache'
 /** Capture a gateway file download alongside a REST read (see the SDK guide). */
 export { captureGatewayFileDownload } from '@/lib/media'
-
 /** True when a saved provider id names this `model.options` row: its slug,
  *  display name, or a custom-provider alias (`custom:<key>` vs the bare key). */
 export { catalogProviderMatches } from '@/lib/model-options'
+
 /** The app's deterministic identity color for a name (profiles, assignees,
  *  authors), its translucent tag fill, and the curated picker swatches — so
  *  plugin-rendered identities read the same hue as everywhere else. The
@@ -2363,10 +2354,6 @@ export { catalogProviderMatches } from '@/lib/model-options'
  *  hand-picked color still sits with the generated ones; reach for them
  *  instead of literal hex, which can't follow the theme. */
 export { PROFILE_SWATCHES, profileColor, profileColorSoft } from '@/lib/profile-color'
-/** True when this renderer is the add-on's browser host rather than Electron.
- *  A shell-specific surface (one the native app renders in its own windows, or
- *  one only a page can render) gates on this instead of sniffing the bridge. */
-export { isBrowserHostedDesktop } from '@/lib/platform'
 /** The shared client itself, for invalidation OUTSIDE React (e.g. a
  *  `ctx.socket` frame invalidating a query). Inside components keep using
  *  `useQueryClient`. */
@@ -2374,11 +2361,11 @@ export { queryClient } from '@/lib/query-client'
 /** Compact labels for the reasoning levels exported from @hermes/shared, so a
  *  plugin surfacing a thinking depth uses the same spelling as the app. */
 export { reasoningEffortLabel } from '@/lib/reasoning-effort'
-
 /** The app's own gateway-readiness evaluation (setup.status +
  *  setup.runtime_check, reconciled) — pass `host.request`. Don't hand-roll
  *  readiness from raw RPC shapes. */
 export { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
+
 /** Row-decoration slots: register a `data` contribution with a `render` for
  *  `SESSION_ROW_AREAS.leading` / `.trailing` to decorate sidebar session rows
  *  (the props carry the row's stored session id). */
@@ -2405,6 +2392,9 @@ export type { RailArtifactItem } from '@/store/artifact-rail'
 export type { AttentionItem } from '@/store/attention-inbox'
 export type { ComposerStatusItem } from '@/store/composer-status'
 export { confirm, type ConfirmRequest } from '@/store/confirm'
+/** The gateway generation counter: a plugin fences a late result to the source it
+ *  read by capturing this and comparing on return. */
+export { gatewayActivationEpoch } from '@/store/gateway'
 export type { SessionDotState } from '@/store/session-dot-state'
 /** Per-owner (bot) notification modes — `'muted'` silences every session the
  *  profile owns (canonical chat, side-chats, cron runs); `'quiet'` holds them
@@ -2489,17 +2479,6 @@ export type { GatewayEvent as RpcEvent } from '@hermes/shared'
 export type { DisplayLease, DisplayObserveResult, DisplayStatus, DisplayThumbnailResult } from '@hermes/shared'
 /** `session.list` / `profiles.list` session rows, generated from `tui_gateway/contracts`. */
 export type { ProfileSessionPreview, SessionListRow } from '@hermes/shared'
-/** Bot identity and on-disk memory RPC contracts from `tui_gateway/contracts/fork_bot.py`. */
-export type {
-  ForkBotIdentityGetResult,
-  ForkBotIdentitySetParams,
-  ForkBotIdentitySetResult,
-  ForkMemoryAddParams,
-  ForkMemoryEntry,
-  ForkMemoryListResult,
-  ForkMemoryRemoveParams,
-  ForkMemoryUpdateParams
-} from '@hermes/shared'
 /** THE compact-number formatter — every user-facing count/token figure goes
  *  through here (1230 → "1.2k", 1_500_000 → "1.5M"). Don't hand-roll `/1000`. */
 export { compactNumber } from '@hermes/shared'

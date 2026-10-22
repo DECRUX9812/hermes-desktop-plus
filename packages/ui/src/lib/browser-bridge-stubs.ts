@@ -32,13 +32,42 @@ function readyBootstrapState(): DesktopBootstrapState {
   }
 }
 
-export function browserUnsupported(feature: string): Error {
+function browserUnsupported(feature: string): Error {
   return new Error(`${feature} is not available in the browser-hosted Desktop`)
 }
 
 // Bridge members that need no per-install state: native-only capabilities
 // answered with a fixed browser result, a refusal, or a no-op.
 export const BROWSER_BRIDGE_STUBS = {
+  // The Bot Room overlay is a transparent native window; a browser tab can't
+  // open one, so it reports not-ok and drops pushes/controls.
+  botroom: {
+    close: async () => ({ ok: false }),
+    control: () => undefined,
+    onControl: () => noopUnsubscribe(),
+    onState: () => noopUnsubscribe(),
+    open: async () => ({ ok: false }),
+    pushState: () => undefined,
+    setFocusable: () => undefined,
+    setIgnoreMouse: () => undefined
+  },
+  // The 3D Pane is a transparent native window; a browser tab can not open
+  // one, so it reports not-ok and drops pushes/controls.
+  pane3d: {
+    captureContext: async () => {
+      throw browserUnsupported("3D Pane")
+    },
+    close: async () => ({ ok: false }),
+    control: () => undefined,
+    dismiss: async () => ({ ok: false }),
+    isOpen: async () => false,
+    notify: async () => ({ id: "", ok: false }),
+    onControl: () => noopUnsubscribe(),
+    onState: () => noopUnsubscribe(),
+    open: async () => ({ ok: false }),
+    playDemo: async () => ({ ok: false }),
+    summon: async () => ({ ok: false })
+  },
   applyConnectionConfig: async () => {
     throw browserUnsupported('Gateway reconfiguration')
   },
@@ -57,8 +86,8 @@ export const BROWSER_BRIDGE_STUBS = {
   continueBootstrapLocal: async () => ({ ok: true }),
   getBootProgress: async () => readyBootProgress(),
   getBootstrapState: async () => readyBootstrapState(),
-  // Electron owns the pool; a browser host must not report a successful native
-  // settings write.
+  // Electron owns the backend pool; a browser host must not report a successful
+  // native settings write, and the store's own tests pin that rejection.
   getPoolLimits: async () => {
     throw browserUnsupported('Desktop backend pool sizing')
   },
@@ -133,7 +162,7 @@ export const BROWSER_BRIDGE_STUBS = {
     fetchMarketplace: async (id: string) => ({ displayName: id, extensionId: id, themes: [] }),
     searchMarketplace: async () => []
   },
-  touchBackend: async () => ({ ok: true }),
+  touchBackend: async (_scope: string, _opts?: { activeTurn?: boolean }) => {},
   uninstall: {
     run: async () => ({ error: 'Run `hermes uninstall` on the server host', ok: false }),
     // The OS apps settings belong to the server host, not this browser tab.
@@ -155,9 +184,7 @@ export const BROWSER_BRIDGE_STUBS = {
   updates: {
     apply: async () => ({ command: 'hermes update', manual: true, message: 'Run `hermes update` on the server host', ok: false }),
     check: async () => ({ message: 'Use `hermes update` on the server host', reason: 'browser-hosted', supported: false }),
-    getBranch: async () => ({ branch: '' }),
-    onProgress: noopUnsubscribe,
-    setBranch: async (branch: string) => ({ branch })
+    onProgress: noopUnsubscribe
   },
   watchPreviewFile: async (url: string) => ({ id: `browser:${url}`, path: url })
 } satisfies Partial<Window['hermesDesktop']>

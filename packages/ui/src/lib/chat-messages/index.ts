@@ -1,7 +1,6 @@
 export { sameAttachmentTurn } from './attachment-turn'
 export { toChatMessages } from './hydration'
 export {
-  answeredAfter,
   appendAssistantTextPart,
   appendReasoningPart,
   assistantTextPart,
@@ -10,6 +9,7 @@ export {
   completeOpenTimelineParts,
   dedupeRepeatedTextInParts,
   finalizeInterruptedMessages,
+  lastTextPartText,
   mergeFinalAssistantText,
   normalizeWs,
   partsText,
@@ -26,6 +26,7 @@ export {
   spliceOlderPreservedRows
 } from './reconciliation'
 export {
+  hasUnresolvedToolCall,
   QUESTION_CARD_TOOLS,
   restorePendingBlockingToolCall,
   restorePendingClarifyToolCall,

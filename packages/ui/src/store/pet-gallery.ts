@@ -34,7 +34,7 @@ export interface GalleryPet {
   slug: string
   displayName: string
   installed: boolean
-  spdemoeetUrl?: string
+  spritesheetUrl?: string
   /** petdex's hand-picked set — used only to rank "popular" pets first. */
   curated?: boolean
   /** Hatched locally by the user (createdBy=generator) — badged + ranked first. */
@@ -241,7 +241,7 @@ export async function applyAdoptedPet(request: GatewayRequest, slug: string, dis
     active: slug,
     pets: gallery.pets.some(p => p.slug === slug)
       ? gallery.pets.map(p => (p.slug === slug ? { ...p, installed: true, displayName } : p))
-      : [...gallery.pets, { slug, displayName, installed: true, spdemoeetUrl: '' }]
+      : [...gallery.pets, { slug, displayName, installed: true, spritesheetUrl: '' }]
   }))
   await syncInfo(request)
 }
@@ -416,7 +416,7 @@ export function setPetScale(request: GatewayRequest, scale: number): void {
   }, 200)
 }
 
-/** Export a pet as a `.zip` (pet.json + spdemoeet) and save it via the browser. */
+/** Export a pet as a `.zip` (pet.json + spritesheet) and save it via the browser. */
 export async function exportPet(request: GatewayRequest, slug: string, fallback: string): Promise<boolean> {
   $petBusy.set(slug)
   $petGalleryError.set(null)
@@ -525,7 +525,7 @@ export function removePet(request: GatewayRequest, slug: string, fallback: strin
           return [p]
         }
 
-        return p.generated || !p.spdemoeetUrl ? [] : [{ ...p, installed: false }]
+        return p.generated || !p.spritesheetUrl ? [] : [{ ...p, installed: false }]
       })
     }))
   })

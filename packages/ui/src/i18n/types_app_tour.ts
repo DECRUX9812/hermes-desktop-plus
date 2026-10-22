@@ -14,15 +14,4 @@ export interface AppTourTranslations {
   capabilities: TourStopCopy
   messaging: TourStopCopy
   rightPane: TourStopCopy
-  /** Fork-only: handoff tour shown after onboarding. */
-  handoffTour: {
-    profileTitle: string
-    profileText: string
-    sessionsTitle: string
-    sessionsText: string
-    stayTitle: string
-    stayText: string
-    localTitle: string
-    localText: string
-  }
 }

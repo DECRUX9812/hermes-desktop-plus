@@ -9,22 +9,21 @@ import type { ErrorCodeKey } from '@/lib/error-surface'
 import type { TipId } from '@/lib/tips/catalog'
 
 import type { AppTourTranslations } from './types_app_tour'
-import type { AuxTaskCopyMap } from './types_aux_tasks'
 import type { BillingTranslations } from './types_billing'
 import type { BootTranslations } from './types_boot'
 import type { CatalogInstallTranslations } from './types_catalog_install'
 import type { ClarifyCopy } from './types_clarify'
 import type { ConnectorAccountsTranslations, ConnectorCardTranslations } from './types_connectors'
+import type { GatewayGroupOpenCopy, SkillDeepLinkCopy } from './types_deep_links'
 import type { FirstRunCopy } from './types_first_run'
 import type { ModelMenuTranslations } from './types_model_menu'
+import type { ModelSettingsTranslations } from './types_model_settings'
 import type { NoticeTranslations } from './types_notices'
 import type { OnboardingTranslations } from './types_onboarding'
+import type { PluginUpdateTranslations } from './types_plugin_update'
 import type { SidebarProjectsTranslations } from './types_projects'
-import type { SessionOverviewTranslations } from './types_session_overview'
 import type { SharedMetricsTranslations } from './types_shared_metrics'
-import type { StartChatCopy } from './types_start_chat'
 import type { ThemePickerCopy } from './types_theme_picker'
-import type { ToolCardsCopy } from './types_tool_cards'
 import type { UninstallSectionTranslations } from './types_uninstall_section'
 import type { UpdateChannelCopy } from './types_update_channel'
 
@@ -626,7 +625,6 @@ export interface Translations extends NoticeTranslations {
     search: string
     searchTitle: string
     swapSidebarSides: string
-    moreTools: string
     hideRightSidebar: string
     showRightSidebar: string
     unreadSessions: (count: number) => string
@@ -730,10 +728,6 @@ export interface Translations extends NoticeTranslations {
         advanced: string
         versionLabel: string
         reviewedPin: (sha: string) => string
-        /** Fork-only: heading for reviewed catalog entries. */
-        reviewedHeading: string
-        /** Fork-only: intro text for reviewed catalog entries. */
-        reviewedIntro: string
         latestCommit: string
         nothingToInstall: string
         includesHeading: string
@@ -753,8 +747,6 @@ export interface Translations extends NoticeTranslations {
         desktopOnlyNote: string
         insecureWarning: string
         securityIntro: string
-        /** Fork-only: security heading for reviewed catalog entries. */
-        securityHeading: string
         sourceHeading: string
         viewRepository: string
         viewPluginFiles: string
@@ -764,8 +756,6 @@ export interface Translations extends NoticeTranslations {
         pinToCommitPlaceholder: string
         pinToCommitHint: string
         pinToCommitInvalid: string
-        /** Fork-only: Git clone label for the install dialog. */
-        gitCloneLabel: string
         install: string
         installing: string
         probing: string
@@ -778,8 +768,6 @@ export interface Translations extends NoticeTranslations {
         installUncertain: string
         desktopFailed: string
         missingEnv: (name: string, vars: string) => string
-        /** Fork-only: shown for pinned catalog entries. */
-        catalogPinned: (name: string, sha: string) => string
       }
     }
     vault: {
@@ -1161,12 +1149,6 @@ export interface Translations extends NoticeTranslations {
       voiceShortcutHintTitle: string
       voiceShortcutHintDesc: string
       showOptions: string
-      /** Fork-only: developer settings for onboarding reset. */
-      developerTitle: string
-      resetOnboardingTitle: string
-      resetOnboardingDesc: string
-      resetOnboardingAction: string
-      resetOnboardingFailed: string
     }
     hudModifier: {
       title: string
@@ -1488,63 +1470,7 @@ export interface Translations extends NoticeTranslations {
       deepLinkErrorUrl: string
       deepLinkErrorTooLarge: string
     }
-    model: {
-      setupProviderFallback: string
-      setUpProvider: (name: string) => string
-      staleAuxBefore: (count: number, names: string) => string
-      staleAuxAfter: string
-      staleAuxOtherProviders: string
-      moaEnabled: string
-      moaSetDefault: string
-      moaNewPresetPlaceholder: string
-      moaAddPreset: string
-      customModel: string
-      customModelPlaceholder: string
-      chooseFromList: string
-      moaDefault: string
-      moaReferenceToggle: (enabled: boolean, index: number) => string
-      moaReferenceTitle: (index: number) => string
-      moaAddReference: string
-      loading: string
-      appliesDesc: string
-      provider: string
-      model: string
-      applying: string
-      mainAppliedTitle: string
-      mainAppliedMessage: (model: string) => string
-      defaultsLabel: string
-      reasoning: string
-      reasoningOff: string
-      speed: string
-      speedStandard: string
-      defaultsFailed: string
-      loadFailed: string
-      restartRequired: string
-      restartBackend: string
-      restartingBackend: string
-      restartFailed: string
-      auxiliaryTitle: string
-      resetAllToMain: string
-      staleAuxDismiss: string
-      auxiliaryDesc: string
-      setToMain: string
-      change: string
-      autoUseMain: string
-      inheritMainEffort: string
-      inheritsFrom: (task: string) => string
-      followTask: (task: string) => string
-      providerDefault: string
-      fallbackAdd: string
-      fallbackEmpty: string
-      notInCatalog: string
-      moaTitle: string
-      moaPreset: string
-      moaDescription: string
-      moaAggregator: string
-      moaAggregatorBilled: string
-      moaReferenceHint: string
-      tasks: AuxTaskCopyMap
-    }
+    model: ModelSettingsTranslations
     localModels: {
       connectionChanged: string
       title: string
@@ -2041,17 +1967,7 @@ export interface Translations extends NoticeTranslations {
     }
   }
 
-  skillDeepLink: {
-    installTitle: (name: string) => string
-    installDescription: string
-    installTo: string
-    thisComputer: string
-    installing: string
-    installComplete: (name: string) => string
-    destinationChanged: string
-    installed: string
-    source: string
-  }
+  skillDeepLink: SkillDeepLinkCopy
   skills: {
     tabSkills: string
     tabToolsets: string
@@ -2103,7 +2019,7 @@ export interface Translations extends NoticeTranslations {
     skillArchivedTitle: string
     skillArchivedMessage: string
     tabPlugins: string
-    plugins: {
+    plugins: PluginUpdateTranslations & {
       agentTitle: string
       agentBlurb: string
       pageBlurb: string
@@ -2151,14 +2067,6 @@ export interface Translations extends NoticeTranslations {
       catalogProvenance: (sha: string) => string
       pinnedProvenance: (sha: string) => string
       pinnedBadge: (sha: string) => string
-      tierOfficial: string
-      tierCommunity: string
-      updateToPin: (sha: string) => string
-      updateFailed: (name: string) => string
-      updated: (name: string) => string
-      updateConsentTitle: (name: string) => string
-      updateConsentBody: (name: string, sha: string) => string
-      updateConsentConfirm: string
       uninstall: string
       uninstallTip: (name: string, profile: string) => string
       uninstallConfirmTitle: (name: string) => string
@@ -2269,6 +2177,7 @@ export interface Translations extends NoticeTranslations {
     liveOff: string
     openSession: string
   }
+  gatewayGroupOpen: GatewayGroupOpenCopy
   agents: {
     extendedTranscript: string
     transcriptTruncated: string
@@ -2781,7 +2690,6 @@ export interface Translations extends NoticeTranslations {
     switchToConnection: (name: string) => string
     switchConnectionFailed: (name: string) => string
     manageProfiles: string
-    railMore: string
     connectGateway: string
     fleet: {
       allOnGateway: string
@@ -3226,8 +3134,6 @@ export interface Translations extends NoticeTranslations {
     }
     searchAria: string
     railAria: string
-    railPlugins: string
-    railPluginsHint: string
     searchPlaceholder: string
     clearSearch: string
     noMatch: (query: string) => string
@@ -3310,8 +3216,6 @@ export interface Translations extends NoticeTranslations {
       needsInput: string
       waitingForAnswer: string
       finishedUnread: string
-      /** Row progress ring's accessible name: "2 of 5 steps done". */
-      progressRing: (done: number, total: number) => string
       backgroundRunning: string
       draftSession: string
       /** "Continue on phone" submenu — hand this session off to a messaging
@@ -3433,7 +3337,6 @@ export interface Translations extends NoticeTranslations {
       thisMonth: string
     }
     statusDivider: {
-      needsYou: string
       working: string
       done: string
     }
@@ -3454,19 +3357,9 @@ export interface Translations extends NoticeTranslations {
       source: string
       started: string
       updated: string
-      /** "Last tool" label above the latest tool-call line. */
-      lastTool: string
-      /** Plan fraction in the live header ("2 of 5"). */
-      planFraction: (done: number, total: number) => string
-      /** Overflow line for long checklists ("+3 more"). */
-      more: (count: number) => string
-      /** Fallback when stopping a session fails without an Error message. */
-      stopFailed: string
     }
     markAllRead: string
   }
-
-  sessionOverview: SessionOverviewTranslations
 
   composer: {
     message: string
@@ -3482,12 +3375,9 @@ export interface Translations extends NoticeTranslations {
     queueWithAttachments: string
     steer: string
     steerTurn: string
+    redirect: string
     stop: string
     send: string
-    broadcastTip: string
-    broadcastNote: string
-    broadcastOn: string
-    broadcastSummary: (sent: number, queued: number, skipped: number, failed: number) => string
     speaking: string
     transcribing: string
     thinking: string
@@ -3551,6 +3441,11 @@ export interface Translations extends NoticeTranslations {
     queueSteer: string
     queueRemoved: string
     queueDelete: string
+    queueLostNote: string
+    restoreImageDraft: string
+    queueCancelFailed: string
+    queueLostDiscard: string
+    queueLostDiscardTip: string
     queueResume: string
     queueResumeTip: string
     queueStuckTitle: string
@@ -3774,7 +3669,7 @@ export interface Translations extends NoticeTranslations {
       heartbeatEveryHours: (hours: number) => string
       heartbeatEverySeconds: (seconds: number) => string
       heartbeatNext: (time: string) => string
-      heartbeatDueWaitingForIdle: string
+      dueWaitingForIdle: string
       heartbeatActions: string
       pauseHeartbeat: string
       resumeHeartbeat: string
@@ -4576,8 +4471,6 @@ export interface Translations extends NoticeTranslations {
     closeToRight: string
     closeAll: string
     newSessionTab: string
-    splitSession: string
-    splitSessionCapped: string
     newTab: string
     pluginDisabled: (pluginId: string) => string
     pluginDisabledBody: string
@@ -4771,11 +4664,6 @@ export interface Translations extends NoticeTranslations {
       command: string
       commandDetails: string
       moreOptions: string
-      allowOnce: string
-      alwaysAllowHere: string
-      deny: string
-      cardTitle: string
-      cardDetailsTitle: string
       allowSession: string
       alwaysAllowMenu: string
       jumpToApproval: string
@@ -4784,19 +4672,7 @@ export interface Translations extends NoticeTranslations {
       alwaysDescription: (pattern: string) => string
       alwaysAllow: string
     }
-    /** Fork-only: setup_choose tool copy (retired upstream, ported to fork.onboarding). */
-    setupChoose: {
-      kinds: Record<'accent' | 'connectors' | 'layout' | 'plugins' | 'theme', string>
-      loading: string
-      unavailable: string
-      findApp: string
-      customColor: string
-      plugin: string
-      startsLater: string
-    }
-    startChat: StartChatCopy
     clarify: ClarifyCopy
-    toolCards: ToolCardsCopy
     themePicker: ThemePickerCopy
     catalogInstall: CatalogInstallTranslations
     mcpSetup: {

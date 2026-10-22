@@ -7,7 +7,7 @@ export const esModelMenu = {
   favorites: 'Favoritos',
   addFavorite: 'Añadir a favoritos',
   removeFavorite: 'Quitar de favoritos',
-  favoownerortcut: '⇧ Clic',
+  favoriteShortcut: '⇧ Clic',
   fast: 'Rápido',
   free: 'gratis',
   cacheRead: 'lectura en caché',

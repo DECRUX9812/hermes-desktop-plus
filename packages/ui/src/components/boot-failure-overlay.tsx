@@ -5,10 +5,9 @@ import { type ComponentProps, lazy, type ReactNode, Suspense, useEffect, useStat
 import { Button } from '@/components/ui/button'
 import { DialogCloseButton } from '@/components/ui/dialog'
 import { DialogPortalContainerContext } from '@/components/ui/dialog-portal-context'
-import { ErrorState } from '@/components/ui/error-state'
+import { ErrorIcon } from '@/components/ui/error-state'
 import { Loader } from '@/components/ui/loader'
 import { LogView } from '@/components/ui/log-view'
-import { $desktopOnboarding } from '@/fork/store/onboarding'
 import type { DesktopConnectionConfig, DesktopOauthLoginResult } from '@/global'
 import { useI18n } from '@/i18n'
 import { reestablishCloudAgentSession } from '@/lib/cloud-agent-session'
@@ -17,6 +16,7 @@ import { openExternalLink } from '@/lib/external-link'
 import { ChevronLeft, ExternalLink, FileText, Loader2, LogIn, RefreshCw, SlidersHorizontal, Wrench } from '@/lib/icons'
 import { $desktopBoot } from '@/store/boot'
 import { notify, notifyError } from '@/store/notifications'
+import { $desktopOnboarding } from '@/store/onboarding'
 
 import { classifyLocalBootFailure, type LocalBootFailureCopy, localBootFailureCopy } from './boot-failure-cause'
 import type { RemoteReauth } from './boot-failure-reauth'
@@ -475,12 +475,12 @@ export function BootFailureOverlay() {
   if (view === 'connect') {
     return (
       <BootFailureModal onDismiss={dismiss} title={copy.gatewaySettings}>
-        <div className="relative flex max-h-[86vh] w-full max-w-[46rem] flex-col overflow-hidden rounded-dialog bg-surface-raised shadow-e3">
+        <div className="relative flex max-h-[86vh] w-full max-w-[46rem] flex-col overflow-hidden rounded-xl border border-(--stroke-nous) bg-(--ui-chat-bubble-background) shadow-nous">
           <DialogCloseButton />
           {/* Subtle back affordance (projects/overlay idiom): muted → foreground
               on hover, no divider. */}
           <button
-            className="focus-ring flex w-full items-center gap-1.5 px-4 pt-4 text-left text-ui-xs text-fg-muted transition-colors hover:text-fg"
+            className="flex w-full items-center gap-1.5 px-4 pt-4 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
             onClick={() => setView('recovery')}
             type="button"
           >
@@ -488,7 +488,7 @@ export function BootFailureOverlay() {
             {copy.back}
           </button>
           <div className="min-h-0 flex-1 pt-4">
-            <Suspense fallback={<Loader className="mx-auto my-16 size-6 text-fg-muted" />}>
+            <Suspense fallback={<Loader className="mx-auto my-16 size-6 text-(--ui-text-tertiary)" />}>
               <GatewaySettings embedded />
             </Suspense>
           </div>
@@ -497,86 +497,71 @@ export function BootFailureOverlay() {
     )
   }
 
-  const [primary, ...rest] = actions
-
   return (
     <BootFailureModal onDismiss={dismiss}>
-      <div className="relative w-full max-w-[40rem] overflow-hidden rounded-dialog bg-surface-raised p-6 shadow-e3">
+      <div className="relative w-full max-w-[40rem] overflow-hidden rounded-xl border border-(--stroke-nous) bg-(--ui-chat-bubble-background) shadow-nous">
         <DialogCloseButton />
-        <ErrorState
-          description={
-            <>
-              <p>
-                {remoteReauth
-                  ? copy.remoteDescription
-                  : cloudDown
-                    ? copy.cloudDownDescription
-                    : copy.description}
-              </p>
-              <p className="mt-1 text-ui-xs text-danger">{failureCopy.headline}</p>
-            </>
-          }
-          details={failureCopy.rawDetail}
-          detailsLabel={copy.details}
-          hideDetailsLabel={copy.details}
-          primaryAction={
-            primary
-              ? {
-                  label: (
-                    <>
-                      {primary.busy && busy === primary.busy ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        primary.icon
-                      )}
-                      {primary.label}
-                    </>
-                  ),
-                  onClick: primary.onClick,
-                  disabled: Boolean(busy)
-                }
-              : undefined
-          }
-          secondaryActions={[
-            ...rest.map(action => ({
-              label: (
-                <>
-                  {action.busy && busy === action.busy ? <Loader2 className="animate-spin" /> : action.icon}
-                  {action.label}
-                </>
-              ),
-              onClick: action.onClick,
-              disabled: Boolean(busy)
-            })),
-            { label: (<><FileText />{copy.openLogs}</>), onClick: openLogs }
-          ]}
-          title={
+        <div className="flex items-start gap-3 px-5 py-4 pr-12">
+          <ErrorIcon className="mt-0.5" size="1.25rem" />
+          <div>
             <DialogPrimitive.Title asChild>
-              <h2 className="text-ui-sm font-semibold">
+              <h2 className="text-[0.9375rem] font-semibold tracking-tight">
                 {remoteReauth ? copy.remoteTitle : cloudDown ? copy.cloudDownTitle : copy.title}
               </h2>
             </DialogPrimitive.Title>
-          }
-        />
-        {hint || logs.length > 0 ? (
-          <div className="mt-2 grid gap-2">
-            {hint ? <p className="text-center text-ui-xs text-fg-muted">{hint}</p> : null}
-            {logs.length > 0 ? (
-              <div className="grid gap-2">
-                <Button
-                  className="-ml-2 self-start font-medium"
-                  onClick={() => setShowLogs(v => !v)}
-                  size="xs"
-                  type="button"
-                  variant="text"
+            <p className="mt-1 text-[0.8125rem] leading-5 text-(--ui-text-tertiary)">
+              {remoteReauth ? copy.remoteDescription : cloudDown ? copy.cloudDownDescription : copy.description}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 p-5 pt-0">
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-xs text-destructive">
+            {failureCopy.headline}
+            {failureCopy.rawDetail ? (
+              <details className="mt-2 text-muted-foreground">
+                <summary className="cursor-pointer select-none font-medium">{copy.details}</summary>
+                <pre
+                  className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-[0.6875rem] leading-relaxed"
+                  data-selectable-text="true"
                 >
-                  {showLogs ? copy.hideRecentLogs : copy.showRecentLogs}
-                </Button>
-                {showLogs ? <LogView className="max-h-48">{logs.slice(-40).join('')}</LogView> : null}
-              </div>
+                  {failureCopy.rawDetail}
+                </pre>
+              </details>
             ) : null}
           </div>
-        ) : null}
+
+          <div className="grid gap-2">
+            <div className="flex flex-wrap gap-2">
+              {actions.map(action => (
+                <Button disabled={Boolean(busy)} key={action.key} onClick={action.onClick} variant={action.variant}>
+                  {action.busy && busy === action.busy ? <Loader2 className="animate-spin" /> : action.icon}
+                  {action.label}
+                </Button>
+              ))}
+              <Button onClick={openLogs} variant="ghost">
+                <FileText />
+                {copy.openLogs}
+              </Button>
+            </div>
+            {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+          </div>
+
+          {logs.length > 0 ? (
+            <div className="grid gap-2">
+              <Button
+                className="-ml-2 self-start font-medium"
+                onClick={() => setShowLogs(v => !v)}
+                size="xs"
+                type="button"
+                variant="text"
+              >
+                {showLogs ? copy.hideRecentLogs : copy.showRecentLogs}
+              </Button>
+              {showLogs ? <LogView className="max-h-48">{logs.slice(-40).join('')}</LogView> : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     </BootFailureModal>
   )

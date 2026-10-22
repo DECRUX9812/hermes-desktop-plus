@@ -9,6 +9,7 @@ import { useSessionView } from '@/app/chat/session-view'
 import { SCAFFOLD_LABEL_CLASS, ScaffoldRow } from '@/components/chat/scaffold-row'
 import { Button } from '@/components/ui/button'
 import { CardStack, type CardStackAction } from '@/components/ui/card-stack'
+import { Codicon } from '@/components/ui/codicon'
 import {
   Dialog,
   DialogContent,
@@ -17,12 +18,11 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { LogView } from '@/components/ui/log-view'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Loader2 } from '@/lib/icons'
+import { ChevronDown, Loader2 } from '@/lib/icons'
 import { releaseApprovalKey } from '@/lib/keybinds/approval-keys'
-import { useStoresSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { $gateway } from '@/store/gateway'
 import { reconnectAction } from '@/store/gateway-reconnect'
@@ -35,7 +35,6 @@ import {
   sessionApprovalRequests,
   sessionApprovalStackSize
 } from '@/store/prompts'
-import { $botChatSessionIds, $sessionStates, $sessionTiles, isBotChatSession } from '@/store/session-states'
 import { $showToolActivity } from '@/store/tool-activity'
 import { setToolDisclosureOpen } from '@/store/tool-view'
 
@@ -81,11 +80,6 @@ function ApprovalActivity({ floating, visible }: { floating: boolean; visible: b
   const { t } = useI18n()
   const reduced = useReducedMotion()
   const showToolActivity = useStore($showToolActivity)
-  const sessionId = useStore(useSessionView().$runtimeId)
-
-  const botChat = useStoresSelector([$botChatSessionIds, $sessionStates, $sessionTiles], () =>
-    isBotChatSession(sessionId)
-  )
 
   const summary = useAuiState(state => {
     if (!visible) {
@@ -126,10 +120,9 @@ function ApprovalActivity({ floating, visible }: { floating: boolean; visible: b
       .join('\n')
   })
 
-  // The pending approval stays. The run summary is tool feed that follows
-  // display.tool_progress, and a Bot Chat drops it because its tool cards
-  // already show the call waiting for approval.
-  if (!showToolActivity || botChat) {
+  // The pending approval stays. The run summary beside it is tool feed and
+  // follows display.tool_progress alongside the other process rows.
+  if (!showToolActivity) {
     return null
   }
 
@@ -218,8 +211,8 @@ export function ApprovalQueue({
           })
       }}
       surfaceClassName={cn(
-        'rounded-card border border-line bg-surface-raised p-4',
-        floating && 'shadow-e2'
+        'rounded-xl border bg-(--ui-chat-surface-background)',
+        floating ? 'border-(--stroke-nous) shadow-nous' : 'border-(--ui-stroke-secondary)'
       )}
       swipeDirections={['left']}
     >
@@ -283,11 +276,12 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
     }
   }, [])
 
-  // false when the backend won't honor a permanent allow → hide "Always allow here".
+  // false when the backend won't honor a permanent allow → hide "Always allow".
   const allowPermanent = request.allowPermanent !== false
   const choices = request.choices ?? (request.smartDenied ? ['once', 'deny'] : undefined)
   const allowSession = choices ? choices.includes('session') : true
   const allowAlways = choices ? choices.includes('always') : allowPermanent
+  const hasMoreOptions = allowSession || allowAlways
   const hasCommand = request.command.trim().length > 0
   // A plugin `approve` rule escalates through the same gate with a synthetic
   // display target (`<tool> (plugin approval rule)`) while the real command /
@@ -340,41 +334,56 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
       onPointerDownCapture={rememberFocusOrigin}
       ref={cardRef}
     >
-      <p className="text-ui-sm font-medium text-fg">
-        {showsDescription ? copy.cardDetailsTitle : copy.cardTitle}
+      <div className="flex items-center gap-2 px-2.5 pt-2 text-xs text-(--ui-text-secondary)">
+        <Codicon name="terminal" size="0.875rem" />
+        <span>{showsDescription ? copy.commandDetails : copy.command}</span>
         {total > 1 && (
-          <span className="ml-2 text-ui-2xs tabular-nums text-fg-muted">
+          <span className="ml-auto text-[0.6875rem] tabular-nums text-(--ui-text-tertiary)">
             {position} / {total}
           </span>
         )}
-      </p>
-      {details.length > 0 && <LogView className="mt-2 max-h-28">{details}</LogView>}
-      <div className="mt-3 flex items-center justify-end gap-2" data-slot="tool-approval-actions">
-        <Button data-approval-deny="" disabled={busy} onClick={() => void respond('deny')} size="sm" variant="ghost">
-          {submitting === 'deny' ? <Loader2 className="size-3 animate-spin" /> : copy.deny}
+      </div>
+      {details.length > 0 && (
+        <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words px-2.5 py-2 font-mono text-xs leading-relaxed text-(--ui-text-primary)">
+          {details}
+        </pre>
+      )}
+      <div className="flex items-center justify-end gap-1.5 px-2 pb-2 pt-1" data-slot="tool-approval-actions">
+        <Button data-approval-deny="" disabled={busy} onClick={() => void respond('deny')} size="sm" variant="text">
+          {submitting === 'deny' ? <Loader2 className="size-3 animate-spin" /> : copy.reject}
         </Button>
-        {allowAlways && (
-          <Button
-            disabled={busy}
-            onClick={() => {
-              // Defer one tick so focus settles before the dialog mounts —
-              // otherwise Radix's focus-return races the dialog and dismisses
-              // it via onInteractOutside.
-              setTimeout(() => setConfirmAlways(true), 0)
-            }}
-            size="sm"
-            variant="ghost"
-          >
-            {copy.alwaysAllowHere}
-          </Button>
-        )}
-        {allowSession && (
-          <Button disabled={busy} onClick={() => void respond('session')} size="sm" variant="secondary">
-            {submitting === 'session' ? <Loader2 className="size-3 animate-spin" /> : copy.allowSession}
-          </Button>
+        {hasMoreOptions && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button aria-label={copy.moreOptions} disabled={busy} size="sm" variant="secondary">
+                {copy.alwaysAllowMenu}
+                <ChevronDown className="size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44">
+              {allowSession && (
+                <DropdownMenuItem onSelect={() => void respond('session')}>{copy.allowSession}</DropdownMenuItem>
+              )}
+              {allowAlways && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    // Defer one tick so the menu fully unmounts before the dialog
+                    // mounts — otherwise Radix's focus-return races the dialog and
+                    // dismisses it via onInteractOutside.
+                    setTimeout(() => setConfirmAlways(true), 0)
+                  }}
+                >
+                  {copy.alwaysAllowMenu}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => void respond('deny')} variant="destructive">
+                {copy.reject}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         <Button data-approval-run="" disabled={busy} onClick={() => void respond('once')} size="sm">
-          {submitting === 'once' ? <Loader2 className="size-3 animate-spin" /> : copy.allowOnce}
+          {submitting === 'once' ? <Loader2 className="size-3 animate-spin" /> : copy.run}
           <span className="opacity-60">↵</span>
         </Button>
       </div>
@@ -386,7 +395,11 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
             <DialogDescription>{copy.alwaysDescription(request.description)}</DialogDescription>
           </DialogHeader>
 
-          {request.command.trim() && <LogView className="max-h-32">{request.command.trim()}</LogView>}
+          {request.command.trim() && (
+            <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background) px-2.5 py-1.5 font-mono text-xs leading-snug text-foreground">
+              {request.command.trim()}
+            </pre>
+          )}
 
           <DialogFooter>
             <Button onClick={() => setConfirmAlways(false)} size="sm" variant="ghost">

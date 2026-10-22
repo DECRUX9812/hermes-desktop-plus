@@ -171,7 +171,6 @@ function fakeDesktop() {
     }),
     revalidateConnection: vi.fn(async () => ({ ok: true, rebuilt: false })),
     onWindowStateChanged: vi.fn(() => () => undefined),
-    touchBackend: vi.fn(async () => undefined),
     profile: { get: vi.fn(async () => ({ profile: 'default' })) }
   }
 }
@@ -2023,7 +2022,7 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
 
     desktop.settings = {
       getDefaultProjectDir: vi.fn(async () => ({
-        defaultLabel: 'C:\\Users\\Me',
+        defaultLabel: 'C:\\Users\\sonny',
         dir: 'C:\\Hermes',
         resolvedCwd: 'C:\\Hermes'
       })),

@@ -17,19 +17,20 @@ import type {
 } from '@hermes/shared'
 import { atom, computed } from 'nanostores'
 
-import { clearFreeTierIntro } from '@/fork/store/onboarding'
-import { $decideExit } from '@/fork/store/onboarding-intro'
-import { markOnboardingDecided, ONBOARDING_DECIDE_OFFER_MS, setOnboardingSurfaceActive } from '@/fork/store/onboarding-presence'
 import { getRuntimeI18nLocale } from '@/i18n/runtime'
 import type { GatewayRequester } from '@/lib/yolo-session'
 
 import { ackFreeTierNotice } from './free-tier'
 import { activeGatewayConnectionId } from './gateway'
 import { $gatewayReadyAt } from './live-sync'
+import { clearFreeTierIntro } from './onboarding'
+import { $decideExit } from './onboarding-intro'
 import { $onboardingPhase } from './onboarding-phase'
+import { markOnboardingDecided, ONBOARDING_DECIDE_OFFER_MS, setOnboardingSurfaceActive } from './onboarding-presence'
 import { $onboardingSession } from './onboarding-session'
 import { ensureGatewayProfile, newSessionInProfile } from './profile'
 import { $connection, $gatewayState, $selectedStoredSessionId } from './session'
+import { requestForOwnedSession } from './session-states'
 import { dropSetupBeat } from './setup-beat'
 
 export type OnboardingRequest = <T = unknown>(
@@ -312,7 +313,8 @@ export function endOnboarding(outcome: 'done' | 'skipped'): void {
 /** Skip setup: the backend ends the run and closes the card that waits, and a new chat opens. A failed
  *  skip leaves the run going, so Skip setup stays on offer; the caller reports the error. */
 export async function skipOnboarding(request: OnboardingRequest, runtimeId: string): Promise<void> {
-  await request('onboarding.skip', { session_id: runtimeId })
+  // The run's chat may belong to a non-launch profile; only its owner can end it.
+  await requestForOwnedSession(runtimeId, request, 'onboarding.skip', { session_id: runtimeId })
   leaveSkipped()
 }
 

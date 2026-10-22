@@ -185,7 +185,7 @@ export function PetSettings() {
                               alt={pet.displayName}
                               load={(slug, url) => loadPetThumb(requestGateway, slug, url)}
                               slug={pet.slug}
-                              url={pet.spdemoeetUrl}
+                              url={pet.spritesheetUrl}
                             />
                             <span className="min-w-0 flex-1">
                               <span className="flex items-center gap-1.5">

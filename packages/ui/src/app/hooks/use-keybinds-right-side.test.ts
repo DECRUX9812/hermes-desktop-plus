@@ -45,7 +45,6 @@ beforeEach(() => {
         archiveSelectedSession: () => undefined,
         openNewSessionTab: () => undefined,
         requestGateway: <T>() => Promise.resolve(undefined as T),
-        splitSession: () => undefined,
         startFreshSession: () => undefined,
         toggleCommandCenter: () => undefined,
         toggleSelectedPin: () => undefined

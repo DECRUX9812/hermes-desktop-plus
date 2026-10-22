@@ -34,12 +34,14 @@ import { OverlayView } from '../overlays/overlay-view'
 
 import { MaintenancePanel } from './maintenance'
 
-export type CommandCenterSection = 'maintenance' | 'notices' | 'system'
+export type CommandCenterSection = 'maintenance' | 'notices' | 'sessions' | 'system' | 'usage'
 
 export const COMMAND_CENTER_SECTIONS = [
   'system',
   'maintenance',
-  'notices'
+  'notices',
+  'sessions',
+  'usage'
 ] as const satisfies readonly CommandCenterSection[]
 
 const SECTIONS = COMMAND_CENTER_SECTIONS

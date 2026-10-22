@@ -19,7 +19,6 @@ const paths = vi.hoisted(() => [
 ])
 
 const getSessionMessages = vi.hoisted(() => vi.fn())
-
 const listAllProfileSessions = vi.hoisted(() =>
   vi.fn(async () => ({
     sessions: [{ id: 'artifact-session', title: 'Fixture', profile: 'origin-profile' }]

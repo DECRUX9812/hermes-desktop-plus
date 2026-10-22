@@ -7,7 +7,7 @@ export const zhModelMenu = {
   favorites: '收藏',
   addFavorite: '添加到收藏',
   removeFavorite: '从收藏中移除',
-  favoownerortcut: '⇧ 单击',
+  favoriteShortcut: '⇧ 单击',
   fast: '快速',
   free: '免费',
   cacheRead: '缓存读取',

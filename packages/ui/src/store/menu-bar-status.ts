@@ -1,8 +1,7 @@
 /**
  * MENU-BAR STATUS (#38) — derives the payload the primary renderer pushes into
- * the main process for the tray icon: a status line, a needs-you badge, a
- * needs-input count for the app badge, and the handful of recent sessions
- * the tray menu can jump to.
+ * the main process for the tray icon: a status line, a needs-you badge, and
+ * the handful of recent sessions the tray menu can jump to.
  *
  * Everything is derived from `$sessionDotStateById` (the same single status
  * map the sidebar, pane tabs, and switcher paint) so the menu bar can never
@@ -45,7 +44,6 @@ export function buildMenuBarStatus(
 ): TrayStatusPush {
   let activeRuns = 0
   let needsYou = 0
-  let needsInput = 0
   const recent: TrayStatusSession[] = []
 
   for (const session of sessions) {
@@ -57,10 +55,6 @@ export function buildMenuBarStatus(
 
     if (state && ACTIVE_RUN_STATES.has(state)) {
       activeRuns += 1
-    }
-
-    if (state === 'needs-input') {
-      needsInput += 1
     }
 
     if (state && NEEDS_YOU_STATES.has(state)) {
@@ -80,7 +74,6 @@ export function buildMenuBarStatus(
 
   return {
     activeRuns,
-    needsInput,
     needsYou,
     sessions: recent,
     strings: {

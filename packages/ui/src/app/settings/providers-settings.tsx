@@ -3,10 +3,6 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { runInTerminal } from '@/app/right-sidebar/store'
-import { Button } from '@/components/ui/button'
-import { RowButton } from '@/components/ui/row-button'
-import { SearchField } from '@/components/ui/search-field'
-import { Tip } from '@/components/ui/tooltip'
 import {
   FEATURED_ID,
   FeaturedProviderRow,
@@ -16,8 +12,11 @@ import {
   ProviderRow,
   providerTitle,
   sortProviders
-} from '@/fork/components/onboarding-index'
-import { $desktopOnboarding, startManualLocalEndpoint, startManualProviderOAuth } from '@/fork/store/onboarding'
+} from '@/components/onboarding'
+import { Button } from '@/components/ui/button'
+import { RowButton } from '@/components/ui/row-button'
+import { SearchField } from '@/components/ui/search-field'
+import { Tip } from '@/components/ui/tooltip'
 import { disconnectOAuthProvider, listOAuthProviders } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { Check, ChevronDown, ChevronRight, KeyRound, Loader2, Terminal, Trash2 } from '@/lib/icons'
@@ -26,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { confirm } from '@/store/confirm'
 import { $localModelsEnabled } from '@/store/local-models-flag'
 import { notify, notifyError } from '@/store/notifications'
+import { $desktopOnboarding, startManualLocalEndpoint, startManualProviderOAuth } from '@/store/onboarding'
 import { $settingsRequestProfile } from '@/store/settings-scope'
 import type { EnvVarInfo, OAuthProvider } from '@/types/hermes'
 

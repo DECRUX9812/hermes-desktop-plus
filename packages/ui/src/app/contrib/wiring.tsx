@@ -13,8 +13,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type CSSProperties, lazy, type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
-import { BotRoomMascotLayerHost } from '@/app/botroom/mascot-layer-host'
-import { $splitSessionAction, splitFocusedSession } from '@/app/chat/split-session'
 import { formatRefValue } from '@/components/assistant-ui/directive-text'
 import { BootFailureOverlay } from '@/components/boot-failure-overlay'
 import { ConfirmHost } from '@/components/confirm-host'
@@ -24,7 +22,9 @@ import { FindBar } from '@/components/find-bar'
 import { FreeTierSignInDialog } from '@/components/free-tier/sign-in-dialog'
 import { GatewayConnectingOverlay } from '@/components/gateway-connecting-overlay'
 import { NotificationStack } from '@/components/notifications'
+import { DesktopOnboardingOverlay } from '@/components/onboarding'
 import { firstRunIntro } from '@/components/onboarding/first-run/kickoff'
+import { OnboardingEnd } from '@/components/onboarding/onboarding-end'
 import { PageLoader } from '@/components/page-loader'
 import { $newSessionTabAction, type NewSessionTabOptions, registerPaneCloser } from '@/components/pane-shell/tree/store'
 import {
@@ -40,13 +40,9 @@ import { SharedMetricsConsentDialog } from '@/components/shared-metrics/consent-
 import { TipHost } from '@/components/tips'
 import { UpdateHoldOverlay } from '@/components/update-hold-overlay'
 import { emitGatewayEvent } from '@/contrib/events'
-import { OnboardingEnd } from '@/fork/components/onboarding-end'
-import { DesktopOnboardingOverlay } from '@/fork/components/onboarding-index'
-import { markOnboardingDecided } from '@/fork/store/onboarding-presence'
 import { translateNow } from '@/i18n'
 import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
 import { isMessagingSource } from '@/lib/session-source'
-import { useStoresSelector } from '@/lib/use-session-slice'
 import { activateWakeIndicator } from '@/lib/wake-indicator'
 import { playWakeSound } from '@/lib/wake-sound'
 import { $billingSettingsRequest } from '@/store/billing-block'
@@ -58,13 +54,13 @@ import { reconnectGateway } from '@/store/gateway-reconnect'
 import { $interfaceMode, shownInMode } from '@/store/interface-mode'
 import { $pinnedSessionIds, pinSession, restoreWorktree, unpinSession } from '@/store/layout'
 import { notifyError } from '@/store/notifications'
+import { markOnboardingDecided } from '@/store/onboarding-presence'
 import {
   $onboardingChatOpener,
   decideOnboarding,
   type OnboardingRequest,
   type OnboardingResume
 } from '@/store/onboarding-run'
-import { $poolLimitsSettingsRequest } from '@/store/pool-limits'
 import { $previewTarget } from '@/store/preview'
 import {
   $activeGatewayProfile,
@@ -98,12 +94,7 @@ import {
   setBusy,
   setMessages
 } from '@/store/session'
-import {
-  $sessionTiles,
-  discardSessionTile,
-  sessionTileDelegate,
-  type TileDock
-} from '@/store/session-states'
+import { sessionTileDelegate } from '@/store/session-states'
 import { reportPendingUpdateRun } from '@/store/shared-metrics'
 import { $archivedSessions } from '@/store/sidebar-archive'
 import { $titlebarAppActionsSide, titlebarAppActionsClusterCounts } from '@/store/titlebar-app-actions'
@@ -113,7 +104,6 @@ import { useSkinCommand } from '@/themes/use-skin-command'
 import type { SessionInfo } from '@/types/hermes'
 
 import { closeWorkspaceTab } from '../chat/close-tab'
-import { focusComposerWhenMounted } from '../chat/composer/floating-target'
 import { requestComposerInsert, requestComposerInsertRefs } from '../chat/composer/focus'
 import { useComposerActions } from '../chat/hooks/use-composer-actions'
 import { CommandPalette } from '../command-palette'
@@ -134,7 +124,6 @@ import { resetProjectTreeState } from '../right-sidebar/files/use-project-tree'
 import { PersistentTerminal } from '../right-sidebar/terminal/persistent'
 import { closeAllTerminals } from '../right-sidebar/terminal/terminals'
 import type { FanOutTarget } from '../roster/fan-out-model'
-import { loadCronView, loadSettingsView } from '../route-chunks'
 import {
   CRON_ROUTE,
   navigateToWorkspacePage,
@@ -203,7 +192,6 @@ import {
   useOpenKeybindsListener,
   usePublishRestartPreviewServer
 } from './wiring-effects'
-import { POOL_LIMITS_SETTINGS_ROUTE } from './wiring-routing'
 
 // Overlay views the controller mounts over the shell — lazy, load on demand.
 // The workspace-route full-page views (skills/messaging/artifacts) are the
@@ -212,10 +200,10 @@ const AgentsView = lazy(async () => ({ default: (await import('../agents')).Agen
 const AttentionInboxView = lazy(async () => ({ default: (await import('../attention-inbox')).AttentionInboxView }))
 const MissionControlView = lazy(async () => ({ default: (await import('../mission-control')).MissionControlView }))
 const CommandCenterView = lazy(async () => ({ default: (await import('../command-center')).CommandCenterView }))
-const CronView = lazy(async () => ({ default: (await loadCronView()).CronView }))
+const CronView = lazy(async () => ({ default: (await import('../cron')).CronView }))
 const WebhooksView = lazy(async () => ({ default: (await import('../webhooks')).WebhooksView }))
 const ProfilesView = lazy(async () => ({ default: (await import('../profiles')).ProfilesView }))
-const SettingsView = lazy(async () => ({ default: (await loadSettingsView()).SettingsView }))
+const SettingsView = lazy(async () => ({ default: (await import('../settings')).SettingsView }))
 const StarmapView = lazy(async () => ({ default: (await import('../starmap')).StarmapView }))
 const ActivityView = lazy(async () => ({ default: (await import('../activity')).ActivityView }))
 const RosterView = lazy(async () => ({ default: (await import('../roster')).RosterView }))
@@ -265,18 +253,16 @@ function useFirstRunOnboarding(request: OnboardingRequest, open: OnboardingResum
   }, [open])
 }
 
-// Recovery actions raised by toast buttons (Restart Hermes, Open Billing, pool
-// caps, cron review) fire from stores with no router context. Each counter is
+// Recovery actions raised by toast buttons (Restart Hermes, Open Billing, cron
+// review) fire from stores with no router context. Each counter is
 // consumed here: the ref skips the initial mount value, and only a fresh
 // request navigates or recycles the backend.
 function useRecoveryRequestToasts(): void {
   const navigate = useNavigate()
   const billingSettingsRequest = useStore($billingSettingsRequest)
-  const poolLimitsSettingsRequest = useStore($poolLimitsSettingsRequest)
   const backendRestartRequest = useStore($backendRestartRequest)
   const cronReviewRequest = useStore($cronReviewRequest)
   const billingSettingsSeenRef = useRef(0)
-  const poolLimitsSettingsSeenRef = useRef(0)
   const backendRestartSeenRef = useRef(0)
   const cronReviewSeenRef = useRef(0)
 
@@ -313,22 +299,6 @@ function useRecoveryRequestToasts(): void {
       navigate(`${SETTINGS_ROUTE}?tab=billing`)
     }
   }, [billingSettingsRequest, navigate])
-
-  // Pool-cap recovery is fired by the notification action, which has no router
-  // context. Keep navigation user-initiated: the counter changes only when the
-  // user clicks "Open Advanced Settings" on a pool-slot failure.
-  // eslint-disable-next-line no-restricted-syntax -- one-shot request-seen sentinel, not an atom mirror
-  useEffect(() => {
-    if (poolLimitsSettingsRequest === poolLimitsSettingsSeenRef.current) {
-      return
-    }
-
-    poolLimitsSettingsSeenRef.current = poolLimitsSettingsRequest
-
-    if (poolLimitsSettingsRequest > 0) {
-      navigate(POOL_LIMITS_SETTINGS_ROUTE)
-    }
-  }, [navigate, poolLimitsSettingsRequest])
 
   // eslint-disable-next-line no-restricted-syntax -- one-shot request-seen sentinel, not an atom mirror
   useEffect(() => {
@@ -378,6 +348,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   const resumeExhaustedSessionId = useStore($resumeExhaustedSessionId)
   const sessionResumeRequest = useStore($sessionResumeRequest)
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
+  const messagingSessions = useStore($messagingSessions)
   const sessions = useStore($sessions)
   const activeConnectionId = useStore($activeConnectionId)
   const activeGatewayProfile = useStore($activeGatewayProfile)
@@ -957,16 +928,9 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     profile: activeGatewayProfile
   })
 
-  // A boolean selector, not the list: the messaging list refreshes on its own
-  // poll, and subscribing to it re-rendered this whole controller each time.
-  const activeIsMessaging = useStoresSelector([$messagingSessions, $selectedStoredSessionId], () => {
-    const storedId = $selectedStoredSessionId.get()
-
-    return (
-      !!storedId &&
-      isMessagingSource($messagingSessions.get().find(s => sessionMatchesStoredId(s, storedId))?.source)
-    )
-  })
+  const activeIsMessaging =
+    !!selectedStoredSessionId &&
+    isMessagingSource(messagingSessions.find(s => sessionMatchesStoredId(s, selectedStoredSessionId))?.source)
 
   useTranscriptPeerSync({
     activeSessionIdRef,
@@ -1063,35 +1027,10 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       const workspaceNewSessionTarget = $workspaceNewSessionTarget.get()
       const cwd = options?.cwd?.trim() ? { cwd: options.cwd.trim() } : {}
 
-      const slot = options?.replaceStoredSessionId
-        ? $sessionTiles.get().find(tile => tile.storedSessionId === options.replaceStoredSessionId)
-        : undefined
-
-      const dock: { anchor?: string; before?: null | string; dir: TileDock } = options?.placement
-        ? { anchor: options.placement.anchor, dir: options.placement.dir }
-        : { anchor: slot?.anchor, before: slot?.before, dir: slot?.dir ?? 'center' }
-
-      const launch = (extra: Partial<Parameters<typeof openNewSessionTile>[1]>) => {
-        void openNewSessionTile(dock.dir, {
-          ...cwd,
-          anchor: dock.anchor,
-          before: dock.before,
-          listed: false,
-          ...extra
-        }).then(created => {
-          if (created && slot) {
-            discardSessionTile(slot.storedSessionId)
-          }
-
-          // A split is opened to type into, so its composer takes the keyboard.
-          if (created && options?.placement) {
-            focusComposerWhenMounted(`tile:${created.storedSessionId}`)
-          }
-        })
-      }
-
       if ($workspaceMode.get() === 'bots' && workspaceNewSessionTarget?.kind === 'route' && workspaceOwnerKey) {
-        launch({
+        void openNewSessionTile('center', {
+          ...cwd,
+          listed: false,
           route: workspaceNewSessionTarget.route,
           workspaceScope: {
             ownerRoute: workspaceNewSessionTarget.route,
@@ -1103,7 +1042,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
         return
       }
 
-      launch({})
+      void openNewSessionTile('center', { ...cwd, listed: false })
     },
     [openNewSessionTile]
   )
@@ -1153,19 +1092,10 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     archiveSelectedSession,
     openNewSessionTab,
     requestGateway,
-    splitSession: splitFocusedSession,
     startFreshSession: startFreshSessionDraft,
     toggleCommandCenter,
     toggleSelectedPin
   })
-
-  // Register the split action beside it: the strip's split glyph reads this
-  // atom, so it hides until wired and never imports chat code itself.
-  useEffect(() => {
-    $splitSessionAction.set(splitFocusedSession)
-
-    return () => $splitSessionAction.set(null)
-  }, [])
 
   // Register the tab-strip "+" action (the generic renderer stays
   // session-agnostic; null until wired hides the glyph).
@@ -1592,12 +1522,6 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       {/* Petdex floating mascot — renders nothing unless installed + enabled.
           Never in the HUD: that window is the chat bar and nothing else. */}
       {!isHudWindow() && !isBrowserWindow() && <FloatingPet />}
-
-      {/* Bot mascots over the app (browser host only): Electron spawns one
-          always-on-top window per bot, which a tab cannot do, so the same
-          surfaces float here instead. Renders nothing until the user turns it
-          on, and never in the HUD or a popped-out Browser window. */}
-      {!isHudWindow() && !isBrowserWindow() && <BotRoomMascotLayerHost />}
 
       {/* In-app tips. Renders nothing until the app is quiet and has something
           to point at, and nothing at all once they're off or all retired. The

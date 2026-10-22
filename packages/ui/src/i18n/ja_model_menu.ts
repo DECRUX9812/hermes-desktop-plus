@@ -7,7 +7,7 @@ export const jaModelMenu = {
   favorites: 'お気に入り',
   addFavorite: 'お気に入りに追加',
   removeFavorite: 'お気に入りから削除',
-  favoownerortcut: '⇧ クリック',
+  favoriteShortcut: '⇧ クリック',
   fast: '高速',
   free: '無料',
   cacheRead: 'キャッシュ読み取り',

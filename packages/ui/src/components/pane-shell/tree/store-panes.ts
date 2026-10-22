@@ -11,7 +11,6 @@ import { clearAllPaneSizeOverrides } from '@/store/panes'
 
 import {
   allPaneIds,
-  anchorsFirst,
   type DropPosition,
   findGroup,
   findGroupOfPane,
@@ -217,7 +216,7 @@ export function adoptContributedPanes(): void {
 
   let next = healed
 
-  for (const pane of anchorsFirst(missing, id => dataOf(id)?.dock?.pane)) {
+  for (const pane of missing) {
     const dock = dataOf(pane.id)?.dock
     const placement = placementOf(pane.id) ?? 'right'
 

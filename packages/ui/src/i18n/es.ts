@@ -3,27 +3,50 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 import { defineLocale, type TranslationOverrides } from './define-locale'
 import { esAuxTasks } from './es_aux_tasks'
 import { esBoot } from './es_boot'
-import { esCatalogInstall } from './es_catalog_install'
-import { esClarify } from './es_clarify'
-import { esConnectorAccounts } from './es_connector_accounts'
-import { esConnectorCard } from './es_connector_card'
-import { esFirstRun } from './es_first_run'
 import { esLocalModels } from './es_local_models'
 import { esModelMenu } from './es_model_menu'
 import { esNotices } from './es_notices'
 import { esOnboarding } from './es_onboarding'
+import { esPluginUpdate } from './es_plugin_update'
 import { esProjects } from './es_projects'
 import { esSharedMetrics } from './es_shared_metrics'
-import { esThemePicker } from './es_theme_picker'
-import { esToolCards } from './es_tool_cards'
-import { esUpdateChannel } from './es_update_channel'
 import { introEs } from './intro-es'
 
 export const esOverrides = {
   sharedMetrics: esSharedMetrics,
-  firstRun: esFirstRun,
   intro: introEs,
-  connectors: esConnectorCard,
+  connectors: {
+    title: 'Conecta tus apps',
+    connect: 'Conectar',
+    skip: 'Ahora no',
+    cancel: 'Dejar de esperar',
+    retry: 'Reintentar',
+    grant: 'Volver a conectar',
+    connected: 'Conectado',
+    checking: 'Comprobando tus apps…',
+    notConnected: 'No conectado',
+    skipped: 'Omitido',
+    disabled: 'No disponible',
+    failed: 'No se pudo conectar',
+    needsAuth: 'Acceso caducado',
+    opening: 'Abriendo el inicio de sesión…',
+    waiting: 'Esperando a tu navegador…',
+    timeout: 'Seguimos esperando la autorización.',
+    refresh: 'Actualizar estado',
+    connectError: 'No se pudo iniciar la autorización. Inténtalo de nuevo.',
+    connectErrorFor: (app: string) => `No se pudo iniciar la autorización para ${app}.`,
+    unavailable: 'Los conectores no están disponibles en esta sesión.',
+    ownerMissing: 'Vuelve a abrir esta conversación para gestionar sus conexiones.',
+    search: 'Buscar una app',
+    empty: 'No hay apps que coincidan',
+    disclaimer: 'Conectar es opcional. Autoriza solo las apps que quieras que use Hermes.',
+    execution: 'Herramientas de conectores',
+    setup: server => `Configurar ${server}`,
+    openInBrowser: 'Abrir en el navegador',
+    setupCancel: 'Cancelar',
+    authorizedToolsUnavailable: 'Autorizado. Herramientas no disponibles.',
+    required: 'Obligatorio'
+  },
   connectorsPage: {
     title: 'Conectores',
     searchPlaceholder: (count: number) => `Buscar entre ${count} apps`,
@@ -180,9 +203,6 @@ export const esOverrides = {
       advanced: 'Avanzado',
       advancedHint: 'la entrada de mcp.json y los registros'
     },
-
-    accounts: esConnectorAccounts,
-
     tools: {
       title: 'Herramientas',
       notInstalledBody: 'Instálalo en este dispositivo para ver las herramientas que incluye.',
@@ -511,14 +531,6 @@ export const esOverrides = {
     }
   },
   ...esNotices,
-  billingBlock: {
-    titleNous: 'Sin créditos de Nous',
-    titleProvider: provider => `Sin créditos — ${provider}`,
-    fallbackMessage: 'Tu cuenta se quedó sin créditos. Añade créditos para continuar.',
-    openBilling: 'Abrir facturación',
-    addCredits: 'Añadir créditos',
-    dismiss: 'Descartar'
-  },
   sendDiagnostics: {
     title: 'Enviar diagnóstico a Nous',
     privacyNotice:
@@ -548,7 +560,6 @@ export const esOverrides = {
     search: 'Buscar',
     searchTitle: 'Buscar sesiones, vistas y acciones',
     swapSidebarSides: 'Intercambiar lados de las barras laterales',
-    moreTools: 'Más herramientas',
     hideRightSidebar: 'Ocultar barra lateral derecha',
     showRightSidebar: 'Mostrar barra lateral derecha',
     unreadSessions: count => (count === 1 ? '1 sesión sin leer' : `${count} sesiones sin leer`),
@@ -639,9 +650,7 @@ export const esOverrides = {
       'view.terminalPaste': 'Pegar en terminal',
       'view.closeTab': 'Cerrar pestaña',
       'view.reopenTab': 'Reabrir pestaña cerrada',
-      'view.splitSession': 'Dividir en una sesión nueva',
       'view.flipPanes': 'Intercambiar lados de las barras laterales',
-      'view.sessionOverview': 'Vista general de sesiones',
       'view.findInPage': 'Buscar en la página',
       'view.findNext': 'Siguiente coincidencia',
       'view.findPrevious': 'Coincidencia anterior',
@@ -832,7 +841,6 @@ export const esOverrides = {
           'Esta URL usa un esquema inseguro o local. Para instalaciones de producción, usa https:// o git@.',
         securityIntro:
           'Instala solo desde fuentes de confianza; revisa el repositorio de abajo si quieres ver qué se añadirá.',
-        securityHeading: 'Revisión de seguridad',
         sourceHeading: 'Código fuente',
         viewRepository: 'Ver repositorio',
         viewPluginFiles: 'Ver archivos del plugin',
@@ -856,20 +864,7 @@ export const esOverrides = {
           'Hermes dejó de esperar el resultado de la instalación, pero es posible que el plugin siga instalándose. Cierra este cuadro y actualiza la lista de plugins antes de volver a instalarlo.',
         desktopFailed: 'Error al instalar el plugin de escritorio',
         missingEnv: (name, vars) =>
-          `${name} está instalado, pero necesita una clave para funcionar: ${vars}. Añádela ahora o las herramientas del plugin fallarán.`,
-        verified: 'Verificado',
-        unverified: 'Sin verificar',
-        reviewedByNous: 'Revisado por Nous.',
-        installsAndEnables: profile => `Se instala para ${profile} y se activa al momento.`,
-        installsOnly: profile => `Se instala para ${profile}.`,
-        advanced: 'Avanzado',
-        versionLabel: 'Versión',
-        reviewedPin: sha => (sha ? `Pin revisado ${sha}` : 'Pin revisado'),
-        reviewedHeading: 'Entrada de catálogo revisada',
-        reviewedIntro: 'Esta entrada fue revisada por un humano en el commit fijado. Aún puedes inspeccionar el código exacto abajo.',
-        catalogPinned: (name, sha) => `Entrada del catálogo de Hermes "${name}" — instala el componente de agente revisado en ${sha ? sha : 'el commit fijado'}, no la cabeza de la rama.`,
-        latestCommit: 'Último commit',
-        nothingToInstall: 'Este paquete no tiene nada que instalar aquí.'
+          `${name} está instalado, pero necesita una clave para funcionar: ${vars}. Añádela ahora o las herramientas del plugin fallarán.`
       }
     },
     vault: {
@@ -1618,7 +1613,9 @@ export const esOverrides = {
       screenRecording: 'Grabación de pantalla',
       driverHealth: 'Estado del controlador'
     },
-    about: { updates: 'Actualizaciones', channel: esUpdateChannel },
+    about: {
+      updates: 'Actualizaciones'
+    },
     config: {
       minimizeToTrayTitle: 'Minimizar a la bandeja',
       minimizeToTrayDesc:
@@ -1664,12 +1661,7 @@ export const esOverrides = {
         'Tamaño máximo de archivo local que el escritorio cargará para vistas previas y adjuntos de imagen, en MB. El valor por defecto es 16. Los adjuntos remotos no-imagen usan un límite separado de 256 MB. Un valor muy alto carga el archivo completo en memoria y puede congelar o bloquear la app.',
       attachmentSizeUnit: 'MB',
       attachmentSizeLabel: 'Tamaño máximo de vista previa / carga de imagen en megabytes',
-      showOptions: 'Mostrar opciones',
-      developerTitle: 'Desarrollador',
-      resetOnboardingTitle: 'Restablecer configuración inicial',
-      resetOnboardingDesc: 'Borrar el estado de la configuración inicial y volver a ejecutar la configuración del primer inicio.',
-      resetOnboardingAction: 'Restablecer',
-      resetOnboardingFailed: 'Error al restablecer la configuración inicial'
+      showOptions: 'Mostrar opciones'
     },
     hudModifier: {
       title: 'Pulsar para mostrar el HUD',
@@ -2677,16 +2669,7 @@ export const esOverrides = {
       pinnedProvenance: (sha: string) =>
         `Fijado al commit ${sha}. Las actualizaciones se rechazan hasta que se reinstale con un nuevo commit fijado.`,
       pinnedBadge: (sha: string) => `fijado @ ${sha}`,
-      tierOfficial: 'oficial',
-      tierCommunity: 'comunidad',
-      updateToPin: (sha: string) => `Actualizar a ${sha}`,
-      updateFailed: (name: string) => `No se pudo actualizar ${name}`,
-      updated: (name: string) =>
-        `${name} se actualizó al commit fijado actual del catálogo. Reinicia el gateway para aplicarlo.`,
-      updateConsentTitle: (name: string) => `${name} pide más`,
-      updateConsentBody: (name: string, sha: string) =>
-        `El nuevo commit fijado de ${name} en el catálogo (${sha}) añade superficies que la versión instalada no tiene. Aplícalo solo si confías en ellas:`,
-      updateConsentConfirm: 'Aplicar actualización',
+      ...esPluginUpdate,
       uninstall: 'Desinstalar',
       uninstallTip: (name: string, profile: string) => `Desinstalar ${name} de ${profile}`,
       uninstallConfirmTitle: (name: string) => `¿Desinstalar ${name}?`,
@@ -3524,7 +3507,6 @@ export const esOverrides = {
     switchToConnection: name => `Cambiar a ${name}`,
     switchConnectionFailed: name => `No se pudo conectar a ${name}`,
     manageProfiles: 'Gestionar perfiles...',
-    railMore: 'Más acciones de perfil',
     connectGateway: 'Gestionar gateways…',
     fleet: {
       allOnGateway: 'Todos los perfiles de este gateway',
@@ -4003,7 +3985,6 @@ export const esOverrides = {
     profileRail: 'Barra de perfiles',
     nav: {
       'new-session': 'Nueva sesión',
-      activity: 'Actividad',
       capabilities: 'Capacidades',
       messaging: 'Mensajería',
       artifacts: 'Artefactos',
@@ -4012,8 +3993,6 @@ export const esOverrides = {
     },
     searchAria: 'Buscar sesiones',
     railAria: 'Navegación de la app',
-    railPlugins: 'Plugins',
-    railPluginsHint: 'Plugins: abrir o instalar',
     searchPlaceholder: 'Buscar sesiones…',
     clearSearch: 'Limpiar búsqueda',
     noMatch: query => `Ninguna sesión coincide con “${query}”.`,
@@ -4096,7 +4075,6 @@ export const esOverrides = {
       needsInput: 'Necesita tu respuesta',
       waitingForAnswer: 'Esperando tu respuesta',
       finishedUnread: 'Finalizada — sin leer',
-      progressRing: (done, total) => `${done} de ${total} pasos completados`,
       backgroundRunning: 'Tarea en segundo plano en ejecución',
       draftSession: 'Borrador — aún no se ha enviado nada',
       continueOnPhone: 'Continuar en el teléfono',
@@ -4204,7 +4182,6 @@ export const esOverrides = {
       thisMonth: 'Este mes'
     },
     statusDivider: {
-      needsYou: 'Te necesita',
       working: 'En progreso',
       done: 'Completado'
     },
@@ -4222,19 +4199,9 @@ export const esOverrides = {
       profile: 'Perfil',
       source: 'Origen',
       started: 'Iniciado',
-      updated: 'Actualizado',
-      lastTool: 'Última herramienta',
-      planFraction: (done, total) => `${done} de ${total}`,
-      more: count => `+${count} más`,
-      stopFailed: 'No se pudo detener la sesión'
+      updated: 'Actualizado'
     },
     markAllRead: 'Marcar todo como leído'
-  },
-
-  sessionOverview: {
-    title: 'Resumen de sesiones',
-    empty: 'No hay sesiones activas',
-    newSession: 'Nueva sesión'
   },
   composer: {
     message: 'Mensaje',
@@ -4268,26 +4235,6 @@ export const esOverrides = {
     steerTurn: 'Guiar el turno',
     stop: 'Detener',
     send: 'Enviar',
-    broadcastTip: 'Enviar a todos los paneles',
-    broadcastNote: 'Solo texto — los adjuntos se quedan en este panel',
-    broadcastOn: 'Todos los paneles',
-    broadcastSummary: (sent, queued, skipped, failed) => {
-      const delivered = sent + queued
-      const panes = delivered === 1 ? 'panel' : 'paneles'
-      const extras: string[] = []
-
-      if (skipped > 0) {
-        extras.push(`${skipped} omitidos`)
-      }
-
-      if (failed > 0) {
-        extras.push(`${failed} fallidos`)
-      }
-
-      return extras.length > 0
-        ? `Enviado a ${delivered} ${panes}, ${extras.join(', ')}`
-        : `Enviado a ${delivered} ${panes}`
-    },
     speaking: 'Hablando',
     transcribing: 'Transcribiendo',
     thinking: 'Pensando',
@@ -4662,7 +4609,6 @@ export const esOverrides = {
       heartbeatEveryHours: (hours: number) => `cada ${hours} h`,
       heartbeatEverySeconds: (seconds: number) => `cada ${seconds} s`,
       heartbeatNext: (time: string) => `próximo ${time}`,
-      heartbeatDueWaitingForIdle: 'pendiente: esperando inactividad',
       heartbeatActions: 'Acciones del heartbeat',
       pauseHeartbeat: 'Pausar heartbeat',
       resumeHeartbeat: 'Reanudar heartbeat',
@@ -5492,8 +5438,6 @@ export const esOverrides = {
     closeToRight: 'Cerrar las de la derecha',
     closeAll: 'Cerrar todo',
     newSessionTab: 'Nueva pestaña de sesión',
-    splitSession: 'Dividir la sesión',
-    splitSessionCapped: 'Hasta 4 sesiones en paralelo',
     newTab: 'Nueva pestaña',
     pluginDisabled: pluginId => `Plugin "${pluginId}" desactivado`,
     pluginDisabledBody: 'Vuelve a activarlo en Capacidades → Plugins para recuperar el panel.',
@@ -5707,6 +5651,10 @@ export const esOverrides = {
           title: 'Hermes se quedó atascado en un bucle',
           body: 'La respuesta repetía los mismos pasos, así que Hermes la detuvo. Reinténtalo o empieza un chat nuevo si vuelve a ocurrir.'
         },
+        cron_session_read_only: {
+          title: 'Este chat pertenece a una tarea programada',
+          body: 'Solo ejecuta esa tarea, así que tu mensaje no se ejecutó. Empieza un chat nuevo para enviarlo.'
+        },
         SESSION_NOT_OWNED: {
           title: 'Este chat está abierto en otro sitio',
           body: 'Este chat está abierto en otra ventana de Hermes o en un terminal. Ciérralo allí y vuelve a enviar el mensaje, o empieza un chat nuevo aquí.'
@@ -5822,11 +5770,6 @@ export const esOverrides = {
       command: 'Comando',
       moreOptions: 'Más opciones de aprobación',
       allowSession: 'Permitir esta sesión',
-      allowOnce: 'Permitir una vez',
-      alwaysAllowHere: 'Permitir siempre aquí',
-      deny: 'Denegar',
-      cardTitle: '¿Permitir que se ejecute este comando?',
-      cardDetailsTitle: 'Revisa este cambio',
       alwaysAllowMenu: 'Permitir siempre…',
       jumpToApproval: 'Aprobación necesaria',
       reject: 'Rechazar',
@@ -5835,10 +5778,56 @@ export const esOverrides = {
         `Esto añade el patrón “${pattern}” a tu allowlist permanente (~/.hermes/config.yaml). Hermes no volverá a preguntar por comandos como este, ni en esta sesión ni en futuras.`,
       alwaysAllow: 'Permitir siempre'
     },
-    clarify: esClarify,
-    toolCards: esToolCards,
-    themePicker: esThemePicker,
-    catalogInstall: esCatalogInstall,
+    clarify: {
+      notReady: 'La solicitud de aclaración aún no está lista',
+      gatewayDisconnected: 'Hermes está sin conexión ahora mismo. Reconéctate y vuelve a enviarlo.',
+      sendFailed: 'No se pudo enviar la respuesta de aclaración',
+      loadingQuestion: 'Cargando pregunta…',
+      other: 'Otro (escribe tu respuesta)',
+      placeholder: 'Escribe tu respuesta…',
+      skip: 'Omitir',
+      skipped: 'Omitido',
+      noAnswer: 'Sin respuesta',
+      confirmAndContinueLabel: 'Confirmar y continuar',
+      singleSelectHint: 'Elige una',
+      multiSelectHint: 'Elige todas las que correspondan',
+      oneQuestion: '1 pregunta',
+      questionProgress: (answered, total) => `${answered} de ${total} respondidas`,
+      notDelivered:
+        'Esta pregunta no llegó a la app, así que no se puede responder aquí. Pulsa Detener para terminar el turno y luego responde en el chat.'
+    },
+    catalogInstall: {
+      preparing: 'Preparando la instalación…',
+      install: 'Instalar',
+      advanced: 'Avanzado',
+      skip: 'Omitir',
+      installing: 'Instalando…',
+      installed: 'Instalado',
+      notInstalled: 'No instalado',
+      failed: 'Falló',
+      showNames: 'mostrar nombres',
+      hideNames: 'ocultar nombres',
+      skill: (name: string) => `skill ${name}`,
+      kind: {
+        plugin: 'plugin',
+        skill: 'skill'
+      },
+      tier: {
+        official: 'oficial',
+        community: 'comunidad'
+      },
+      targetProfile: (profile: string) => `Se instala en tu perfil ${profile}`,
+      sendFailed: 'No se pudo enviar tu respuesta. Vuelve a intentarlo.',
+      commitLabel: 'Commit',
+      subdirLabel: 'Carpeta',
+      scan: {
+        passed: 'Análisis superado',
+        warnings: 'El análisis encontró advertencias',
+        failed: 'Falló el análisis'
+      },
+      requirementsLabel: 'Requiere',
+      credentialsHeading: 'Credenciales'
+    },
     mcpSetup: {
       installTitle: 'Añadir servidores MCP',
       enableTitle: 'Activar servidores MCP',

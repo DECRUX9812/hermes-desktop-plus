@@ -1,10 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { $desktopOnboarding } from '@/fork/store/onboarding'
 import { en } from '@/i18n/en'
 import { $desktopBoot } from '@/store/boot'
 import { $notifications } from '@/store/notifications'
+import { $desktopOnboarding } from '@/store/onboarding'
 
 import { BootFailureOverlay } from './boot-failure-overlay'
 
@@ -61,7 +61,7 @@ const remoteToken = {
   remoteOauthConnected: false,
   remoteTokenPreview: null,
   remoteTokenSet: true,
-  remoteUrl: 'http://100.64.0.1:9191',
+  remoteUrl: 'http://100.116.104.53:9191',
   cloudOrg: ''
 }
 
@@ -213,7 +213,7 @@ describe('BootFailureOverlay', () => {
   })
 
   it('clears and signs in only the failed gateway once', async () => {
-    const gatewayUrl = 'http://100.64.0.1:9191'
+    const gatewayUrl = 'http://100.116.104.53:9191'
     const logout = vi.fn().mockResolvedValue({ ok: true, connected: false })
     const login = vi.fn().mockResolvedValue({ ok: true, connected: false })
 

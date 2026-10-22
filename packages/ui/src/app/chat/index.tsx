@@ -6,7 +6,6 @@ import { memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useStat
 import { useLocation } from 'react-router'
 
 import { ChatHeaderSlot } from '@/app/chat/chat-header-slot'
-import { $chatZoneCount } from '@/app/chat/split-session'
 import { RegionCaptureOverlay } from '@/app/region-capture/overlay'
 import type { SubmitTextOptions } from '@/app/session/hooks/use-prompt-actions/utils'
 import { sessionShouldHaveTranscript } from '@/app/session/hooks/use-session-actions/utils'
@@ -21,8 +20,6 @@ import { usePaneGroup, usePaneVisible } from '@/components/pane-shell/pane-visib
 import { $hoveredTreeGroup, $sessionTileDragging, $sessionTileEdgeHover } from '@/components/pane-shell/tree/store'
 import { PromptOverlays } from '@/components/prompt-overlays'
 import { TitleMenuTrigger } from '@/components/ui/title-menu-trigger'
-import { $guideOpening } from '@/fork/store/onboarding-gate'
-import { $introView } from '@/fork/store/onboarding-intro'
 import { type HermesGateway, type ResolvedOwner } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { CHAT_HEADER_AREAS } from '@/lib/chat-header-slots'
@@ -36,6 +33,7 @@ import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
 import { $homeFeedItems } from '@/store/home-feed'
 import { $introSplash } from '@/store/intro-splash'
 import { $pinnedSessionIds } from '@/store/layout'
+import { $introView } from '@/store/onboarding-intro'
 import { $petActive } from '@/store/pet'
 import { $petOverlayActive } from '@/store/pet-overlay'
 import { $activeGatewayProfile, $gatewaySwapTarget, $hydrationSyncProfile, $profiles } from '@/store/profile'
@@ -63,7 +61,6 @@ import { isAuxiliaryWindow, isMainWindow } from '@/store/windows'
 import { primaryRouteSelectedSessionId, routeSessionId } from '../routes'
 import { titlebarHeaderBaseClass, titlebarHeaderShadowClass, titlebarHeaderTitleClass } from '../shell/titlebar'
 
-import { BlankTileQuickStarts } from './blank-tile-quick-start'
 import { ChatDropOverlay } from './chat-drop-overlay'
 import { dropOverlayKind, useShowChatBar } from './chat-surface-state'
 import { ChatSwapOverlay, ChatSyncBadge } from './chat-swap-overlay'
@@ -122,7 +119,7 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onPickFolders: () => void
   onPickImages: () => void
   onRemoveAttachment: (id: string) => void
-  onSteer: (text: string) => Promise<boolean> | boolean
+  onSteer: (text: string, mode?: 'interrupt' | 'steer') => Promise<boolean> | boolean
   onSteerHidden?: (text: string) => Promise<boolean> | boolean
   onSubmit: (text: string, options?: SubmitTextOptions) => Promise<boolean> | boolean
   onThreadMessagesChange: (messages: readonly ThreadMessage[]) => void
@@ -539,8 +536,6 @@ const ChatViewContent = memo(function ChatViewContent({
   const composerSurfaceId = useComposerSurfaceId()
   const isPrimary = view.kind === 'primary'
   const introHoldsThread = useStore($introHoldsThread) && isPrimary && isMainWindow()
-  // The guided first run owns the transcript while the setup chat opens.
-  const guideOpening = useStore($guideOpening)
   const guideStarted = useStoreSelector($introView, introView => introView === 'intro' || introView === 'ended')
   const activeSessionId = useStore(view.$runtimeId)
 
@@ -562,13 +557,6 @@ const ChatViewContent = memo(function ChatViewContent({
   // Dock anchor for a session drop onto this surface: the workspace pane for the
   // primary, this tile's pane id for a tile. Read by the session-drop bridge.
   const sessionAnchor = isPrimary ? 'workspace' : `session-tile:${storedId ?? ''}`
-  const chatZoneCount = useStore($chatZoneCount)
-
-  const blankQuickStarts = useMemo(
-    () => (isPrimary || !storedId ? undefined : <BlankTileQuickStarts storedSessionId={storedId} />),
-    [isPrimary, storedId]
-  )
-
   const awaitingResponse = useStore(view.$awaitingResponse)
   const busy = useStore(view.$busy)
   const activeGatewayProfile = useStore($activeGatewayProfile)
@@ -829,7 +817,6 @@ const ChatViewContent = memo(function ChatViewContent({
         'relative isolate flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
         className
       )}
-      data-chat-focused={surfaceFocused && chatZoneCount >= 2 ? '' : undefined}
       data-chat-surface=""
       data-chat-unfocused={surfaceFocused || surfaceHovered ? undefined : ''}
       data-composer-surface-id={composerSurfaceId}
@@ -856,18 +843,6 @@ const ChatViewContent = memo(function ChatViewContent({
           stalling to timeout. */}
       <PromptOverlays sessionId={activeSessionId} />
 
-      {/* "Where it left off" recap (#13) — only once the transcript is
-          settled: gating on loadingSession/routeSessionMismatch/
-          resumeExhausted/messagesEmpty keeps it dark through resume and
-          hydration flicker; SessionRecapCard reads view.$messages
-          one-shot at mount (the atom is far too hot to subscribe here). It sits
-          in the column above the transcript, so it takes its own height. */}
-      {!guideOpening &&
-        !loadingSession &&
-        !routeSessionMismatch &&
-        !resumeExhausted &&
-        !messagesEmpty &&
-        storedId && <SessionRecapCard storedSessionId={storedId} />}
       <ChatRuntimeBoundary
         busy={busy}
         onCancel={haltRun}
@@ -882,23 +857,31 @@ const ChatViewContent = memo(function ChatViewContent({
           data-slot="composer-bounds"
           {...dropHandlers}
         >
-          {!guideOpening && (
-            <Thread
-              blankQuickStarts={blankQuickStarts}
-              clampToComposer={showChatBar}
-              cwd={currentCwd}
-              gateway={gateway}
-              intro={showIntro ? { composer: composerDock, personality: introPersonality, seed: introSeed } : undefined}
-              loading={threadLoading}
-              onBranchInNewChat={onBranchInNewChat}
-              onCancel={haltRun}
-              onDismissError={onDismissError}
-              onRestoreToMessage={onRestoreToMessage}
-              scrollProfile={modelOptionsProfile || activeGatewayProfile}
-              sessionId={activeSessionId}
-              sessionKey={threadKey}
-            />
-          )}
+          <Thread
+            clampToComposer={showChatBar}
+            cwd={currentCwd}
+            gateway={gateway}
+            intro={showIntro ? { composer: composerDock, personality: introPersonality, seed: introSeed } : undefined}
+            loading={threadLoading}
+            onBranchInNewChat={onBranchInNewChat}
+            onCancel={haltRun}
+            onDismissError={onDismissError}
+            onRestoreToMessage={onRestoreToMessage}
+            scrollProfile={modelOptionsProfile || activeGatewayProfile}
+            sessionId={activeSessionId}
+            sessionKey={threadKey}
+          />
+          {/* "Where it left off" recap (#13) — only once the transcript is
+              settled: gating on loadingSession/routeSessionMismatch/
+              resumeExhausted/messagesEmpty keeps it dark through resume and
+              hydration flicker; SessionRecapCard reads view.$messages
+              one-shot at mount (the atom is far too hot to subscribe here). */}
+          {!loadingSession &&
+            !routeSessionMismatch &&
+            !resumeExhausted &&
+            !messagesEmpty &&
+            storedId && <SessionRecapCard storedSessionId={storedId} />}
+
           {isPrimary && isMainWindow() && <IntroCopy />}
           {resumeExhausted && routedSessionId && (
             <ResumeExhaustedOverlay onRetryResume={onRetryResume} sessionId={routedSessionId} />

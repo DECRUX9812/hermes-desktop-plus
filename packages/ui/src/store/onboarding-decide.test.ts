@@ -8,8 +8,8 @@ async function freshStores() {
 
   const [run, presence, intro, liveSync, session] = await Promise.all([
     import('./onboarding-run'),
-    import('@/fork/store/onboarding-presence'),
-    import('@/fork/store/onboarding-intro'),
+    import('./onboarding-presence'),
+    import('./onboarding-intro'),
     import('./live-sync'),
     import('./session')
   ])

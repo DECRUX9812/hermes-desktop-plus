@@ -55,7 +55,6 @@ export function ProfilesView({ onClose }: ProfilesViewProps) {
 
   const refresh = useCallback(async () => {
     setRefreshing(true)
-
     try {
       const list = await refreshProfiles()
       setProfiles(list)

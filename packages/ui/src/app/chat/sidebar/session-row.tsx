@@ -39,7 +39,6 @@ import { sessionPinId } from '@/store/session'
 import { $sessionDigestById } from '@/store/session-digest'
 import { $sessionDotStateById, hasLiveTurn, showsRunningArc } from '@/store/session-dot-state'
 import { $sessionListDensity } from '@/store/session-list-density'
-import { sessionLiveSummary } from '@/store/session-live'
 import {
   $selectedSessionKeys,
   selectionKeyForSession,
@@ -66,7 +65,6 @@ import {
 import { shellOwnsPress } from './reorderable-list'
 import { SessionActionsMenu, SessionContextMenu } from './session-actions-menu'
 import { SessionPeek } from './session-peek'
-import { SessionProgressRing } from './session-progress-ring'
 import { sessionRowDetails } from './session-row-details'
 import { resolveSessionRowClick } from './session-row-gesture'
 import { SessionRowSlot } from './session-row-slots'
@@ -276,7 +274,7 @@ function SidebarSessionRowImpl({
         key: 'worktree',
         node: (
           <Tip label={peekOpen ? '' : r.worktreeTag(worktreeBranch)} side="top">
-            <span className="pointer-events-none inline-flex items-center gap-0.5 whitespace-nowrap tabular-nums text-ui-2xs leading-none text-fg-muted">
+            <span className="pointer-events-none inline-flex items-center gap-0.5 whitespace-nowrap tabular-nums text-[0.625rem] leading-none text-(--ui-text-tertiary)">
               <Codicon name="git-branch" size="0.625rem" />
               {worktreeBranch}
             </span>
@@ -300,15 +298,6 @@ function SidebarSessionRowImpl({
   // on one-line rows. A selector keyed to this row: only rows whose own
   // fraction changes repaint on todo events.
   const todoProgress = useStoreSelector($todoProgressBySession, progress => progress[session.id])
-  const live = sessionLiveSummary(session.id)
-  const todoDone = useStoreSelector(live, summary => summary.todoDone)
-  const todoTotal = useStoreSelector(live, summary => summary.todoTotal)
-
-  // The tool a working session is running right now, for the compact row's
-  // trailing slot; '' keeps the slot empty for every other row.
-  const runningTool = useStoreSelector(live, summary =>
-    summary.group === 'working' && summary.tool?.status === 'running' ? summary.tool.name.replaceAll('_', ' ') : ''
-  )
 
   // Chips staged into this session's composer via a file drop on the row —
   // a paperclip count, offered next to the plan progress. Keyed on the pin id
@@ -320,7 +309,7 @@ function SidebarSessionRowImpl({
       key: 'attached',
       node: (
         <Tip label={peekOpen ? '' : r.attachmentCount(attachedCount)} side="top">
-          <span className="inline-flex items-center gap-0.5 whitespace-nowrap tabular-nums text-ui-2xs leading-none text-fg-muted">
+          <span className="inline-flex items-center gap-0.5 whitespace-nowrap tabular-nums text-[0.625rem] leading-none text-(--ui-text-tertiary)">
             <Codicon name="attach" size="0.625rem" />
             {attachedCount}
           </span>
@@ -332,37 +321,21 @@ function SidebarSessionRowImpl({
   // The one-line row's progress chip sits in the trailing slot so a working
   // row reads its plan without opening the chat. (todoProgress is only set
   // while a plan exists, so it self-clears when the last item lands.)
-  if (!condensed && !card && todoProgress && todoTotal > 0) {
+  if (!condensed && !card && todoProgress) {
     trailing.push({
       key: 'progress',
       node: (
-        <Tip label={peekOpen ? '' : todoProgress} side="top">
-          <span className="inline-flex">
-            <SessionProgressRing done={todoDone} total={todoTotal} />
-          </span>
-        </Tip>
-      )
-    })
-  }
-
-  // The compact one-line row names the running tool instead of the
-  // age/figures while the session is working — the "what it's doing now" at
-  // a glance. Comfortable/detailed already paint the digest line, and
-  // condensed folds everything into the tooltip, so both keep their own face.
-  const showRunningTool = !card && density === 'compact' && runningTool !== ''
-
-  if (showRunningTool) {
-    trailing.push({
-      key: 'tool',
-      node: (
-        <span className="pointer-events-none max-w-28 truncate whitespace-nowrap text-ui-2xs leading-none text-fg-muted">
-          {runningTool}
+        <span
+          className="pointer-events-none whitespace-nowrap tabular-nums text-[0.625rem] leading-none text-(--ui-text-tertiary)"
+          title={r.todoProgress}
+        >
+          {todoProgress}
         </span>
       )
     })
   }
 
-  if (!condensed && !showRunningTool && (figures.length || showAge)) {
+  if (!condensed && (figures.length || showAge)) {
     // The card's meta lines separate by spacing alone, so its header figures
     // match (non-breaking pair — plain spaces collapse to one); the one-line
     // row keeps the interpunct between joined figures.
@@ -372,7 +345,7 @@ function SidebarSessionRowImpl({
     trailing.push({
       key: 'figures',
       node: (
-        <span className="pointer-events-none whitespace-nowrap text-ui-2xs leading-none text-fg-muted">
+        <span className="pointer-events-none whitespace-nowrap text-[0.625rem] leading-none text-(--ui-text-tertiary)">
           {head}
           {/* The figures own their tail: the separator goes with it. */}
           <span className={cn('inline-block text-right', TAIL_HIDES)}>
@@ -381,7 +354,7 @@ function SidebarSessionRowImpl({
               <Tip label={peekOpen ? '' : absoluteAge} side="top">
                 <time
                   aria-label={`${age}, ${absoluteAge}`}
-                  className="pointer-events-auto focus-visible:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                  className="pointer-events-auto focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                   dateTime={timestampDate.toISOString()}
                   tabIndex={0}
                 >
@@ -455,7 +428,7 @@ function SidebarSessionRowImpl({
     <>
       <span className="block">{title}</span>
       {condensedMeta.map(line => (
-        <span className="block text-fg-muted" key={line}>
+        <span className="block text-(--ui-text-tertiary)" key={line}>
           {line}
         </span>
       ))}
@@ -465,7 +438,7 @@ function SidebarSessionRowImpl({
   // An archived session has no live status to paint, so the archive glyph takes
   // the lead slot the dot would occupy instead of adding a column of its own.
   const lead = session.archived ? (
-    <SidebarRowLeadGlyph className="text-fg-subtle">
+    <SidebarRowLeadGlyph className="text-(--ui-text-quaternary)">
       <Codicon name="archive" size="0.75rem" />
     </SidebarRowLeadGlyph>
   ) : null
@@ -518,7 +491,7 @@ function SidebarSessionRowImpl({
         <Button
           aria-label={r.sessionActions}
           className={cn(
-            'size-5 rounded-[4px] bg-transparent text-transparent transition-colors duration-(--dur-instant) hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg focus-visible:ring-0 data-[state=open]:bg-selected data-[state=open]:text-fg group-hover:text-fg-muted [&_svg]:size-3.5!',
+            'size-5 rounded-[4px] bg-transparent text-transparent transition-colors duration-100 hover:bg-(--ui-control-active-background) hover:text-foreground focus-visible:bg-(--ui-control-active-background) focus-visible:text-foreground focus-visible:ring-0 data-[state=open]:bg-(--ui-control-active-background) data-[state=open]:text-foreground group-hover:text-(--ui-text-tertiary) [&_svg]:size-3.5!',
             trailing.length > 0 && 'absolute right-0',
             pr && KEBAB_YIELDS
           )}
@@ -556,7 +529,7 @@ function SidebarSessionRowImpl({
           !card && (density === 'comfortable' || density === 'detailed') && 'min-h-[2.75rem]',
           !card && density === 'detailed' && 'min-h-[3.875rem]',
           !card && condensed && 'min-h-[1.375rem]',
-          isSelected && 'bg-selected',
+          isSelected && 'bg-(--ui-row-active-background)',
           // In the multi-select set: the "lit but not the focused one" band
           // rows already use for open-in-another-pane.
           multiSelected && !isSelected && 'bg-(--ui-row-open-background)',
@@ -564,15 +537,14 @@ function SidebarSessionRowImpl({
           // token rather than row opacity — dimming the whole row would take
           // the title and the status dot down with it.
           openUnfocused && 'bg-(--ui-row-open-background)',
-          liveTurn && 'text-fg',
+          liveTurn && 'text-foreground',
           // Opaque surface while lifted so the dragged row erases what's under
           // it (translucency let the rows below bleed through). data-glass-opaque
           // keeps that true when window glass thins the field.
           dragging && 'z-10 cursor-grabbing bg-(--ui-sidebar-surface-background)',
-          rowFileDrag === 'files' && 'bg-selected shadow-[inset_0_0_0_1px_var(--dt-composer-ring)]',
+          rowFileDrag === 'files' && 'bg-(--ui-row-active-background) shadow-[inset_0_0_0_1px_var(--dt-composer-ring)]',
           className
         )}
-        data-dragging={dragging ? '' : undefined}
         data-glass-opaque={dragging ? '' : undefined}
         data-working={liveTurn ? 'true' : undefined}
         // The row runs BOTH drags off one press, and each declines outside its
@@ -615,7 +587,7 @@ function SidebarSessionRowImpl({
         {...rest}
       >
         {showsRunningArc(dotState) && <span aria-hidden="true" className="arc-border arc-row" />}
-        <SessionPeek onOpen={onResume} onOpenChange={setPeekOpen} session={session}>
+        <SessionPeek onOpenChange={setPeekOpen} session={session}>
           {/* #38072 finding 3: the row's body is a DIV, not a button — the
               reorder grabber (dnd-kit role="button" + tabIndex, kept for
               keyboard reorder, #83617) and the ⋯ trigger must be SIBLINGS of
@@ -685,7 +657,6 @@ function SidebarSessionRowImpl({
                   {lead ?? (
                     <SessionStatusDot
                       branchStem={branchStem}
-                      checkUnread
                       className="transition-opacity group-hover/handle:opacity-0 group-focus-within/handle:opacity-0"
                       session={session}
                       storedSessionId={session.id}
@@ -694,14 +665,7 @@ function SidebarSessionRowImpl({
                 </SidebarRowGrab>
               ) : (
                 <SidebarRowLead className="overflow-hidden">
-                  {lead ?? (
-                    <SessionStatusDot
-                      branchStem={branchStem}
-                      checkUnread
-                      session={session}
-                      storedSessionId={session.id}
-                    />
-                  )}
+                  {lead ?? <SessionStatusDot branchStem={branchStem} session={session} storedSessionId={session.id} />}
                 </SidebarRowLead>
               )
 
@@ -726,7 +690,7 @@ function SidebarSessionRowImpl({
                   <Tip label={peekOpen ? '' : r.continuationOrigin}>
                     <Codicon
                       aria-hidden="true"
-                      className="size-3.5 shrink-0 text-fg-subtle"
+                      className="size-3.5 shrink-0 text-(--ui-text-quaternary)"
                       name="layers"
                       size="0.75rem"
                     />
@@ -736,7 +700,7 @@ function SidebarSessionRowImpl({
               if (!card) {
                 const titleLabel = (
                   <SidebarRowLabel
-                    className="hover-marquee block font-normal group-hover:text-fg group-data-[working=true]:text-fg/90"
+                    className="hover-marquee block font-normal group-hover:text-foreground group-data-[working=true]:text-foreground/90"
                     onPointerEnter={armMarquee}
                     onPointerLeave={disarmMarquee}
                   >
@@ -782,7 +746,7 @@ function SidebarSessionRowImpl({
                       {(density === 'comfortable' || density === 'detailed') && (digest ?? details.metadata) && (
                         <span
                           className={cn(
-                            'mt-0.5 block truncate text-ui-2xs text-fg-muted',
+                            'mt-0.5 block truncate text-[0.625rem] text-(--ui-text-tertiary)',
                             SIDEBAR_TRUNCATED_LEADING
                           )}
                         >
@@ -792,7 +756,7 @@ function SidebarSessionRowImpl({
                       {density === 'detailed' && details.preview && (
                         <span
                           className={cn(
-                            'mt-1 block truncate text-ui-2xs text-fg-subtle',
+                            'mt-1 block truncate text-[0.625rem] text-(--ui-text-quaternary)',
                             SIDEBAR_TRUNCATED_LEADING
                           )}
                         >
@@ -817,7 +781,7 @@ function SidebarSessionRowImpl({
                     <SessionRowSlot area={SESSION_ROW_AREAS.leading} sessionId={sessionPinId(session)} />
                     <span
                       className={cn(
-                        'min-w-0 flex-1 truncate text-ui-xs text-fg-muted',
+                        'min-w-0 flex-1 truncate text-[0.6875rem] text-(--ui-text-tertiary)',
                         SIDEBAR_TRUNCATED_LEADING
                       )}
                     >
@@ -838,7 +802,7 @@ function SidebarSessionRowImpl({
                       <OverflowTip key={peekOpen ? 'peek' : 'title'} label={peekOpen ? '' : title} placement="row">
                         <SidebarRowLabel
                           className={cn(
-                            'hover-marquee text-ui-sm font-medium text-fg group-data-[working=true]:text-fg',
+                            'hover-marquee text-[0.8125rem] font-medium text-(--ui-text-primary) group-data-[working=true]:text-foreground',
                             SIDEBAR_TRUNCATED_LEADING
                           )}
                           onPointerEnter={armMarquee}
@@ -851,7 +815,7 @@ function SidebarSessionRowImpl({
                     {rowMeta.includes('preview') && (digest ?? session.preview) ? (
                       <span
                         className={cn(
-                          'min-w-0 truncate text-ui-2xs text-fg-subtle',
+                          'min-w-0 truncate text-[0.625rem] text-(--ui-text-quaternary)',
                           SIDEBAR_TRUNCATED_LEADING
                         )}
                       >
@@ -862,7 +826,7 @@ function SidebarSessionRowImpl({
                   {model || size || todoProgress ? (
                     <span
                       className={cn(
-                        'flex min-w-0 items-baseline gap-2 text-ui-2xs text-fg-muted',
+                        'flex min-w-0 items-baseline gap-2 text-[0.625rem] text-(--ui-text-tertiary)',
                         SIDEBAR_TRUNCATED_LEADING
                       )}
                     >

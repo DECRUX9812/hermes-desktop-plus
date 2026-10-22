@@ -1,6 +1,5 @@
 import { useStore } from '@nanostores/react'
 
-import { Codicon } from '@/components/ui/codicon'
 import { type Translations, useI18n } from '@/i18n'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
@@ -18,7 +17,7 @@ type DotVariant = {
   title?: (r: Translations['sidebar']['row']) => string
 }
 
-// Shared base for every dot, idle included: 6px.
+// Shared base for every active dot; idle is smaller and uses its own class.
 const DOT_BASE = 'size-1.5 rounded-full'
 
 // Three colors and one fill/hollow axis, none of it moving. Motion on a 6px
@@ -79,11 +78,13 @@ const DOT_VARIANTS: Record<SessionDotState, DotVariant> = {
     className: `${DOT_BASE} border border-(--ui-text-quaternary) opacity-(--status-idle-opacity)`,
     title: r => r.draftSession
   },
-  // Settled: the project color when there is one, else nothing at all — a
-  // dot appears only when there is something to say. The uncoloured slot is
-  // `invisible`, not removed, so every title keeps one left edge.
+  // Settled: the project color when there is one, else the faintest filled
+  // grey. Classic shows SOME mark on every session — a row with nothing in
+  // the lead slot read as broken next to its neighbours there. The Soft look
+  // lets the grey (and the draft ring) rest via --status-idle-opacity: a dot
+  // appears when there is something to say; a project color always shows.
   idle: {
-    className: `${DOT_BASE} bg-(--ui-text-quaternary) [&:not([style])]:invisible`
+    className: 'size-1 rounded-full bg-(--ui-text-quaternary) [&:not([style])]:opacity-(--status-idle-opacity)'
   }
 }
 
@@ -111,9 +112,6 @@ export interface SessionStatusDotProps {
   /** Applied to the OUTER wrapper (stem + dot) — e.g. hover-fade on the
    *  reorder handle. */
   className?: string
-  /** Paint an unread finish as a check mark instead of the emerald dot. Opt-in
-   *  so the shared primitive keeps one look on every other surface. */
-  checkUnread?: boolean
 }
 
 /**
@@ -125,7 +123,7 @@ export interface SessionStatusDotProps {
  * An idle session shows its project color; the active states own the dot with
  * their semantic color so an attention cue is never masked by the tint.
  */
-export function SessionStatusDot({ checkUnread, storedSessionId, session, branchStem, className }: SessionStatusDotProps) {
+export function SessionStatusDot({ storedSessionId, session, branchStem, className }: SessionStatusDotProps) {
   const { t } = useI18n()
   const r = t.sidebar.row
 
@@ -149,16 +147,7 @@ export function SessionStatusDot({ checkUnread, storedSessionId, session, branch
           {branchStem}
         </span>
       ) : null}
-      {checkUnread && dotState === 'unread' ? (
-        <span
-          aria-label={r.finishedUnread}
-          className="inline-flex size-1.5 shrink-0 items-center justify-center text-success"
-          role="status"
-          title={r.finishedUnread}
-        >
-          <Codicon name="check" size="0.625rem" />
-        </span>
-      ) : dotState === 'idle' ? (
+      {dotState === 'idle' ? (
         // Rendered even with no color to paint: an empty dot of the same size
         // keeps every row's title on one left edge, so a session finishing
         // can't shift the list under the pointer.

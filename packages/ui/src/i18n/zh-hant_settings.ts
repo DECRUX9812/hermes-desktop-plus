@@ -1,7 +1,6 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import type { TranslationOverrides } from './define-locale'
-import { zhHantUpdateChannel } from './zh-hant_update_channel'
 
 export const zhHantSettings = {
   language: {
@@ -87,22 +86,16 @@ export const zhHantSettings = {
         profileLabel: '安裝到配置文件',
         agentTargetLocal: (profile, dir) => `安裝到 ${profile} 後端（${dir}）`,
         agentTargetRemote: profile => `安裝到已連線的 ${profile} 後端`,
-        catalogPinned: (name, sha) =>
-          `Hermes 目錄條目「${name}」— agent 部分將安裝在經過審覈的釘選提交${sha ? ` ${sha}` : ''}，而不是分支最新程式碼。`,
-        reviewedHeading: '經過審覈的目錄條目',
-        reviewedIntro: '此條目已在其釘選提交處經過人工審覈。你仍可在下方檢查確切程式碼。',
         missingEnvAction: '去設定',
         alreadyInstalled: (name: string) => `${name} 已安裝。`,
         desktopTarget: '安裝到此應用的本地 desktop-plugins 資料夾',
         desktopTargetFromPackage: '從上方的包載入到本應用 — 所有配置相同',
         desktopOnlyNote: '僅桌面包不會安裝後端代理外掛。',
         insecureWarning: '此 URL 使用了不安全的本地 scheme。生產環境請優先使用 https:// 或 git@。',
-        securityHeading: '安裝前須知',
         securityIntro: '請僅安裝你信任的來源 — 如需瞭解將添加的內容，可先查看下方倉庫。',
         sourceHeading: '源程式碼',
         viewRepository: '查看倉庫',
         viewPluginFiles: '查看外掛文件',
-        gitCloneLabel: 'Git 克隆地址',
         enableAgent: '安裝後啟用代理外掛',
         forceReinstall: '強制重裝（替換已存在的安裝）',
         pinToCommit: '釘選到提交（可選）',
@@ -901,8 +894,7 @@ export const zhHantSettings = {
       driverHealth: '驅動程式健康狀態'
     },
     about: {
-      updates: '更新',
-      channel: zhHantUpdateChannel
+      updates: '更新'
     },
     config: {
       minimizeToTrayTitle: '最小化至系統匣',
@@ -946,11 +938,6 @@ export const zhHantSettings = {
         '桌面端為預覽和圖片附件載入本地文件的大小上限（MB）。預設為 16。遠端非圖片附件使用單獨的 256 MB 上限。設定過大會將整個文件讀入記憶體，可能導致應用卡死或崩潰。',
       attachmentSizeLabel: '預覽 / 圖片載入大小上限（MB）',
       attachmentSizeUnit: 'MB',
-      developerTitle: '開發者',
-      resetOnboardingTitle: '重設初始設定',
-      resetOnboardingDesc: '刪除設定聊天、重建設定設定檔，並再次執行首次設定。你自己的設定檔、聊天和外掛都會保留。',
-      resetOnboardingAction: '重設',
-      resetOnboardingFailed: '無法重設初始設定'
     },
     hudModifier: {
       title: '輕按叫出 HUD',

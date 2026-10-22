@@ -82,14 +82,14 @@ describe('roam motion', () => {
 })
 
 describe('pet info metadata cache helpers', () => {
-  it('treats matching slug and spdemoeet revision as a reusable sprite payload', () => {
+  it('treats matching slug and spritesheet revision as a reusable sprite payload', () => {
     const current = {
       enabled: true,
       slug: 'boba',
       displayName: 'Old Boba',
       scale: 0.33,
-      spdemoeetBase64: 'large-sprite-payload',
-      spdemoeetRevision: '100:2048'
+      spritesheetBase64: 'large-sprite-payload',
+      spritesheetRevision: '100:2048'
     }
 
     const meta = {
@@ -97,7 +97,7 @@ describe('pet info metadata cache helpers', () => {
       slug: 'boba',
       displayName: 'Boba',
       scale: 0.5,
-      spdemoeetRevision: '100:2048'
+      spritesheetRevision: '100:2048'
     }
 
     expect(hasPetSpriteForMeta(current, meta)).toBe(true)
@@ -106,8 +106,8 @@ describe('pet info metadata cache helpers', () => {
       slug: 'boba',
       displayName: 'Boba',
       scale: 0.5,
-      spdemoeetBase64: 'large-sprite-payload',
-      spdemoeetRevision: '100:2048'
+      spritesheetBase64: 'large-sprite-payload',
+      spritesheetRevision: '100:2048'
     })
   })
 })

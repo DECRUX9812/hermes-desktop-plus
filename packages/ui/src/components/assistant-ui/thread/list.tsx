@@ -58,6 +58,7 @@ import {
   shouldClampTranscriptBudget,
   transcriptPaneBudget
 } from './list-groups'
+export * from './list-groups'
 import {
   hasTranscriptTextSelection,
   resolveThreadScrollTarget,
@@ -65,6 +66,7 @@ import {
   shouldSnapOnRunStart,
   subscribeToThreadForeground
 } from './list-scroll'
+export * from './list-scroll'
 import { type ThreadMessageComponents, TurnRow } from './list-turn-row'
 import { responseMessageRole } from './response-group'
 import { holdSessionSwitching } from './session-switching'

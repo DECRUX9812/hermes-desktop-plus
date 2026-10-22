@@ -109,35 +109,6 @@ describe('HUD mode', () => {
   })
 })
 
-// The tuning pills sit in a reveal group that fades in on hover or focus. It is
-// hidden by opacity, not display, so its controls keep their place in the DOM
-// and stay reachable by keyboard while the resting composer looks quiet.
-describe('resting composer', () => {
-  it('keeps the reveal group in the DOM and every control in it keyboard reachable', () => {
-    const { container } = renderControls()
-
-    const reveal = container.querySelector<HTMLElement>('[data-slot="composer-reveal"]')
-
-    expect(reveal).toBeTruthy()
-
-    const buttons = reveal!.querySelectorAll('button')
-
-    expect(buttons.length).toBeGreaterThan(0)
-
-    for (const button of buttons) {
-      expect(button.hidden).toBe(false)
-      expect(button.tabIndex).not.toBe(-1)
-    }
-  })
-
-  it('offers voice as the primary control when the draft is empty and idle', () => {
-    renderControls({ hasComposerPayload: false })
-
-    expect(screen.getByLabelText('Start voice conversation')).toBeTruthy()
-    expect(screen.queryByLabelText('Send')).toBeNull()
-  })
-})
-
 // A tile can be narrower than the controls cost, and the row is inside an
 // overflow-hidden surface — so anything that doesn't fold gets clipped off the
 // right edge, send button first. The ladder keeps going past `stacked`: voice
@@ -187,20 +158,6 @@ describe('ComposerControls shortcut tooltips', () => {
     renderControls({ busy: true, busyAction: 'stop', canSubmit: true, hasComposerPayload: false })
 
     await expectShortcutTooltip('Stop', '↵')
-  })
-
-  it('answers a waiting card with Send when the draft has text, and offers no Queue', () => {
-    renderControls({ busy: true, busyAction: 'queue', cardWaiting: true, hasComposerPayload: true })
-
-    expect(screen.getByLabelText('Send')).toBeTruthy()
-    expect(screen.queryByLabelText('Stop')).toBeNull()
-    expect(screen.queryByLabelText('Queue message')).toBeNull()
-  })
-
-  it('keeps Stop enabled while a card waits and the draft is empty', () => {
-    renderControls({ busy: true, busyAction: 'stop', canSubmit: true, cardWaiting: true, hasComposerPayload: false })
-
-    expect(screen.getByLabelText('Stop').hasAttribute('disabled')).toBe(false)
   })
 
   it('shows Ctrl+Enter for Queue as the secondary mid-turn action', async () => {

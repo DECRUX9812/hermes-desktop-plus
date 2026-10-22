@@ -34,6 +34,7 @@ import type { ActivityVerb } from '@hermes/plugin-sdk'
 import { useMemo } from 'react'
 
 import { AVATAR_EN, AVATAR_JA, AVATAR_ZH, AVATAR_ZH_HANT, type AvatarMessages } from './avatar-i18n'
+import { CANONICAL_GROUP_LOCALES, type CanonicalGroupMessages } from './canonical-group-locales'
 import {
   DELIVERABLES_EN,
   DELIVERABLES_JA,
@@ -41,10 +42,10 @@ import {
   DELIVERABLES_ZH_HANT,
   type DeliverablesMessages
 } from './deliverables-i18n'
-import { bind, type Bound } from './i18n-bind'
 import { getPluginCtx } from './shared'
 
 type BotsMessages = {
+  canonical: { [K in keyof CanonicalGroupMessages]: string }
   /** Left rail: the bot + group-chat roster. */
   editor: {
     fullConfigHint: string
@@ -401,8 +402,6 @@ type BotsMessages = {
     replyInThread: string
     replyInThreadPlaceholder: string
     openThread: string
-    showMore: string
-    showLess: string
     collapseThread: string
     collapseThreadLabel: string
     activity: string
@@ -411,9 +410,6 @@ type BotsMessages = {
     hideActivity: string
     stop: string
     stopHint: string
-    stopAll: string
-    stopMember: (name: string) => string
-    stoppedMember: (name: string) => string
     allHeldStatus: (count: number) => string
     heldMembersStatus: (members: string) => string
     holdReleaseHint: string
@@ -426,6 +422,8 @@ type BotsMessages = {
     you: string
     /** How many of a room's members are reachable right now. */
     availableCount: (available: number, total: number) => string
+    /** Team-orchestrated room strip: only the org-tree lead hears the user. */
+    teamListening: (lead: string) => string
     settingsHint: (group: string) => string
     settingsLabel: (group: string) => string
     disbandHint: (group: string) => string
@@ -475,6 +473,7 @@ type BotsMessages = {
     threadWorking: (names: string) => string
     threadPeople: (names: string) => string
     threadNew: (count: number) => string
+    composerReplyingIn: (title: string) => string
     composerNewThreadTo: (name: string) => string
     composerNewThreadEveryone: string
     composerStartNew: string
@@ -482,16 +481,18 @@ type BotsMessages = {
     panelDecisions: string
     decisionsEmpty: string
     decisionQuestion: (name: string) => string
+    deskTitle: string
     deskNeedsYou: string
+    deskFloor: (count: number) => string
     viewRoom: string
     viewBoard: string
     activityLabel: string
     activityTool: (tool: string) => string
+    activityWorking: string
     handoff: {
       label: (from: string, to: string) => string
       title: string
       task: string
-      why: string
       doneWhen: string
       due: (minutes: number) => string
       declinedBecause: (why: string) => string
@@ -617,6 +618,8 @@ type BotsMessages = {
     unsupportedBody: string
     notInstalledTitle: string
     notInstalledBody: string
+    managedNotIncludedTitle: string
+    managedNotIncludedBody: string
     installHint: string
     install: string
     installing: string
@@ -655,8 +658,6 @@ type BotsMessages = {
     portalUnavailable: string
     /** Managed runtimes (Hermes Cloud): updates are the platform's job, not the user's. */
     portalUnavailableManaged: string
-    managedNotIncludedTitle: string
-    managedNotIncludedBody: string
     unavailableTitle: string
     autoOpenMenu: string
     autoOpenOnToast: (name: string) => string
@@ -902,37 +903,6 @@ type BotsMessages = {
     today: string
     yesterday: string
   }
-  identity: {
-    heading: string
-    name: string
-    role: string
-    model: string
-    instructions: string
-    edit: string
-    changedElsewhere: string
-    emptyName: string
-    nextChatNote: string
-    confirm: string
-    confirmModel: string
-    modelSaveFailed: string
-    saveFailed: string
-    loadFailed: string
-  }
-  memory: {
-    heading: string
-    whatItRemembers: string
-    aboutYou: string
-    usage: string
-    add: string
-    placeholder: string
-    removePrompt: string
-    removeYes: string
-    removeNo: string
-    changedElsewhere: string
-    writesOff: string
-    loadFailed: string
-    writeFailed: (message: string) => string
-  }
   /** G5 — the inbound-event strip inside a bot's canonical chat. */
   events: {
     /** Link affordance that opens the thing a card came from. */
@@ -984,6 +954,7 @@ type BotsMessages = {
 }
 
 const en: BotsMessages = {
+  canonical: CANONICAL_GROUP_LOCALES.en,
   editor: {
     fullConfigHint: 'Full configuration needs a newer gateway (restart it after updating Hermes).',
     liveCapabilities: 'Capabilities (applies immediately — skills, tools, MCP)',
@@ -1314,8 +1285,6 @@ const en: BotsMessages = {
     replyInThread: 'Reply in thread',
     replyInThreadPlaceholder: 'Reply in thread…',
     openThread: 'Open this thread',
-    showMore: 'Show more',
-    showLess: 'Show less',
     collapseThread: 'Collapse thread',
     collapseThreadLabel: 'Collapse this thread',
     activity: 'Activity',
@@ -1324,9 +1293,6 @@ const en: BotsMessages = {
     hideActivity: 'Hide room activity',
     stop: 'Stop',
     stopHint: 'Stop this run — interrupts the member on turn and holds the rest',
-    stopAll: 'Stop all',
-    stopMember: name => `Stop ${name}`,
-    stoppedMember: name => `Stopped ${name} — it stays held until you resume`,
     allHeldStatus: count => `All ${count} bots are paused`,
     heldMembersStatus: members => `Paused: ${members}`,
     holdReleaseHint: 'Mention a paused bot or send @all resume to release them.',
@@ -1338,6 +1304,7 @@ const en: BotsMessages = {
     memberCount: count => `${count} bots`,
     you: 'You',
     availableCount: (available, total) => `${available} of ${total} available`,
+    teamListening: lead => `Only ${lead} is listening — @mention teammates to wake them`,
     settingsHint: group => `Group settings — rename ${group} or set a room picture`,
     settingsLabel: group => `Group settings for ${group}`,
     disbandHint: group => `Disband the ${group} group chat`,
@@ -1385,6 +1352,7 @@ const en: BotsMessages = {
     threadWorking: names => `${names} working now`,
     threadPeople: names => `With ${names}`,
     threadNew: count => `${count} new`,
+    composerReplyingIn: title => `Replying in: ${title}`,
     composerNewThreadTo: name => `New thread · ${name} answers, @mention anyone`,
     composerNewThreadEveryone: 'New thread · everyone hears it',
     composerStartNew: 'New thread',
@@ -1392,16 +1360,18 @@ const en: BotsMessages = {
     panelDecisions: 'Decisions',
     decisionsEmpty: 'Nothing waiting on you. Stalled handoffs, loops and questions land here.',
     decisionQuestion: name => `${name} asked you something`,
+    deskTitle: 'Your desk',
     deskNeedsYou: 'Needs you',
+    deskFloor: count => `${count} working`,
     viewRoom: 'Room',
     viewBoard: 'Board',
     activityLabel: 'Live activity',
     activityTool: tool => `now: ${tool}`,
+    activityWorking: 'working…',
     handoff: {
       label: (from, to) => `Handoff from ${from} to ${to}`,
       title: 'Handoff',
       task: 'Task',
-      why: 'Why',
       doneWhen: 'Done when',
       due: minutes => `due in ${minutes} min`,
       declinedBecause: why => `declined: ${why}`,
@@ -1536,6 +1506,9 @@ const en: BotsMessages = {
     noMcpServers: 'No MCP servers configured or in the catalog.'
   },
   screen: {
+    managedNotIncludedTitle: 'Screen isn’t included on this bot',
+    managedNotIncludedBody:
+      'Hermes Cloud includes Screen on bots with 8 GB of memory or more. It can’t be installed on a smaller bot.',
     title: 'Screen',
     menu: 'Open Screen',
     unsupportedTitle: 'No bot screen on this host',
@@ -1577,9 +1550,6 @@ const en: BotsMessages = {
     portalUnsupported: 'Not available on this host',
     portalUnavailable: 'Update the bot’s Hermes to use Screen',
     portalUnavailableManaged: 'Screen is not available on this managed Hermes release yet',
-    managedNotIncludedTitle: 'Screen isn’t included on this bot',
-    managedNotIncludedBody:
-      'Hermes Cloud includes Screen on bots with 8 GB of memory or more. It can’t be installed on a smaller bot.',
     unavailableTitle: 'Screen needs a newer Hermes',
     autoOpenMenu: 'Open Screen when the bot uses it',
     autoOpenOnToast: name => `${name}’s Screen opens when it starts using its desktop`,
@@ -1831,37 +1801,6 @@ const en: BotsMessages = {
     today: 'Today',
     yesterday: 'Yesterday'
   },
-  identity: {
-    heading: 'Profile',
-    name: 'Name',
-    role: 'Role',
-    model: 'Model',
-    instructions: 'Instructions',
-    edit: 'Edit',
-    changedElsewhere: 'Changed elsewhere, reloaded',
-    emptyName: 'Name cannot be empty',
-    nextChatNote: 'Changes apply to the bot’s next chat. The current chat keeps its prompt.',
-    confirm: 'Confirm',
-    confirmModel: 'Confirm model change',
-    modelSaveFailed: 'Could not save the model',
-    saveFailed: 'Could not save the profile',
-    loadFailed: 'Could not load this profile'
-  },
-  memory: {
-    heading: 'Memory',
-    whatItRemembers: 'What it remembers',
-    aboutYou: 'About you',
-    usage: 'Memory usage',
-    add: 'Add',
-    placeholder: 'Write a memory…',
-    removePrompt: 'Remove this memory?',
-    removeYes: 'Yes, remove',
-    removeNo: 'No, keep it',
-    changedElsewhere: 'This item changed, list reloaded',
-    writesOff: 'Memory writes are off in settings',
-    loadFailed: 'Could not load memory',
-    writeFailed: message => `Could not save memory: ${message}`
-  },
   events: {
     open: 'Open',
     inflight: 'A message is on its way'
@@ -1899,6 +1838,7 @@ const en: BotsMessages = {
 }
 
 const ja: BotsMessages = {
+  canonical: CANONICAL_GROUP_LOCALES.ja,
   editor: {
     fullConfigHint: 'すべての設定を使うには新しいゲートウェイが必要です（Hermes 更新後に再起動してください）。',
     liveCapabilities: '機能（即時適用 — スキル、ツール、MCP）',
@@ -2231,8 +2171,6 @@ const ja: BotsMessages = {
     replyInThread: 'スレッドで返信',
     replyInThreadPlaceholder: 'スレッドで返信…',
     openThread: 'このスレッドを開く',
-    showMore: 'もっと見る',
-    showLess: '折りたたむ',
     collapseThread: 'スレッドを折りたたむ',
     collapseThreadLabel: 'このスレッドを折りたたむ',
     activity: 'アクティビティ',
@@ -2241,9 +2179,6 @@ const ja: BotsMessages = {
     hideActivity: '部屋のアクティビティを隠す',
     stop: '停止',
     stopHint: 'この実行を停止 — ターン中のメンバーを中断し、残りを保留します',
-    stopAll: 'すべて停止',
-    stopMember: name => `${name}を停止`,
-    stoppedMember: name => `${name}を停止しました — 再開するまで保留されます`,
     allHeldStatus: count => `すべてのボット（${count}体）が一時停止中`,
     heldMembersStatus: members => `一時停止中: ${members}`,
     holdReleaseHint: '一時停止中のボットにメンションするか、@all resume を送信して再開します。',
@@ -2255,6 +2190,7 @@ const ja: BotsMessages = {
     memberCount: count => `ボット${count}体`,
     you: 'あなた',
     availableCount: (available, total) => `${total}体中${available}体が利用可能`,
+    teamListening: lead => `聞いているのは ${lead} だけです — @メンションでチームメイトを起こします`,
     settingsHint: group => `グループ設定 — ${group}の名前変更やルーム画像の設定`,
     settingsLabel: group => `${group}のグループ設定`,
     disbandHint: group => `${group}グループチャットを解散`,
@@ -2302,6 +2238,7 @@ const ja: BotsMessages = {
     threadWorking: names => `${names} が作業中`,
     threadPeople: names => `参加: ${names}`,
     threadNew: count => `新着 ${count}件`,
+    composerReplyingIn: title => `返信先: ${title}`,
     composerNewThreadTo: name => `新しいスレッド · ${name} が応答、@メンションで指名`,
     composerNewThreadEveryone: '新しいスレッド · 全員に届きます',
     composerStartNew: '新しいスレッド',
@@ -2309,16 +2246,18 @@ const ja: BotsMessages = {
     panelDecisions: '決定',
     decisionsEmpty: 'あなた待ちの項目はありません。止まった引き継ぎ、ループ、質問がここに届きます。',
     decisionQuestion: name => `${name} から質問があります`,
+    deskTitle: 'あなたのデスク',
     deskNeedsYou: '要対応',
+    deskFloor: count => `${count} 件作業中`,
     viewRoom: 'ルーム',
     viewBoard: 'ボード',
     activityLabel: 'ライブアクティビティ',
     activityTool: tool => `現在: ${tool}`,
+    activityWorking: '作業中…',
     handoff: {
       label: (from, to) => `${from} から ${to} への引き継ぎ`,
       title: '引き継ぎ',
       task: 'タスク',
-      why: '理由',
       doneWhen: '完了条件',
       due: minutes => `期限 ${minutes} 分`,
       declinedBecause: why => `辞退: ${why}`,
@@ -2446,6 +2385,9 @@ const ja: BotsMessages = {
     noMcpServers: '設定済みまたはカタログ内の MCP サーバーはありません。'
   },
   screen: {
+    managedNotIncludedTitle: 'このボットには Screen が含まれていません',
+    managedNotIncludedBody:
+      'Hermes Cloud では、メモリが 8 GB 以上のボットに Screen が含まれます。これより小さいボットにはインストールできません。',
     title: '画面',
     menu: '画面を開く',
     unsupportedTitle: 'このホストにはボット画面がありません',
@@ -2490,9 +2432,6 @@ const ja: BotsMessages = {
     portalUnsupported: 'このホストでは利用できません',
     portalUnavailable: 'Screen を使うにはボットの Hermes を更新してください',
     portalUnavailableManaged: 'この管理された Hermes リリースではまだ Screen を利用できません',
-    managedNotIncludedTitle: 'このボットには Screen が含まれていません',
-    managedNotIncludedBody:
-      'Hermes Cloud では、メモリが 8 GB 以上のボットに Screen が含まれます。これより小さいボットにはインストールできません。',
     unavailableTitle: 'Screen には新しい Hermes が必要です',
     autoOpenMenu: 'ボットが画面を使い始めたら Screen を開く',
     autoOpenOnToast: name => `${name} がデスクトップを使い始めると Screen が開きます`,
@@ -2771,37 +2710,6 @@ const ja: BotsMessages = {
     today: '今日',
     yesterday: '昨日'
   },
-  identity: {
-    heading: 'プロフィール',
-    name: '名前',
-    role: '役割',
-    model: 'モデル',
-    instructions: '指示',
-    edit: '編集',
-    changedElsewhere: '別の場所で変更されたため、再読み込みしました',
-    emptyName: '名前を空にすることはできません',
-    nextChatNote: '変更は次のチャットから適用されます。進行中のチャットでは現在のプロンプトが使われます。',
-    confirm: '確認',
-    confirmModel: 'モデルの変更を確認',
-    modelSaveFailed: 'モデルを保存できませんでした',
-    saveFailed: 'プロフィールを保存できませんでした',
-    loadFailed: 'プロフィールを読み込めませんでした'
-  },
-  memory: {
-    heading: 'メモリ',
-    whatItRemembers: '覚えていること',
-    aboutYou: 'あなたについて',
-    usage: 'メモリ使用量',
-    add: '追加',
-    placeholder: 'メモリを書く…',
-    removePrompt: 'このメモリを削除しますか？',
-    removeYes: 'はい、削除',
-    removeNo: 'いいえ、そのまま',
-    changedElsewhere: 'この項目は変更されました。リストを再読み込みしました',
-    writesOff: '設定でメモリへの書き込みがオフになっています',
-    loadFailed: 'メモリを読み込めませんでした',
-    writeFailed: message => `メモリを保存できませんでした: ${message}`
-  },
   quick: {
     intro: '名前だけで作成できます — 他はすべて任意です。',
     templates: 'テンプレートから始める',
@@ -2812,6 +2720,7 @@ const ja: BotsMessages = {
 }
 
 const zh: BotsMessages = {
+  canonical: CANONICAL_GROUP_LOCALES.zh,
   editor: {
     fullConfigHint: '完整配置需要更新网关（更新 Hermes 后请重启网关）。',
     liveCapabilities: '功能（立即生效 — 技能、工具、MCP）',
@@ -3131,8 +3040,6 @@ const zh: BotsMessages = {
     replyInThread: '在帖子中回复',
     replyInThreadPlaceholder: '在帖子中回复…',
     openThread: '打开此帖子',
-    showMore: '显示更多',
-    showLess: '收起',
     collapseThread: '收起帖子',
     collapseThreadLabel: '收起此帖子',
     activity: '活动',
@@ -3141,9 +3048,6 @@ const zh: BotsMessages = {
     hideActivity: '隐藏房间活动',
     stop: '停止',
     stopHint: '停止本次运行 — 中断当前回合的成员，并暂停其余成员',
-    stopAll: '全部停止',
-    stopMember: name => `停止${name}`,
-    stoppedMember: name => `已停止${name}——在你恢复之前它将保持暂停`,
     allHeldStatus: count => `全部 ${count} 个机器人已暂停`,
     heldMembersStatus: members => `已暂停：${members}`,
     holdReleaseHint: '提及已暂停的机器人，或发送 @all resume 以恢复它们。',
@@ -3154,6 +3058,7 @@ const zh: BotsMessages = {
     memberCount: count => `${count} 个机器人`,
     you: '你',
     availableCount: (available, total) => `${total} 个中 ${available} 个可用`,
+    teamListening: lead => `只有 ${lead} 在听 — @提及队友即可唤醒它们`,
     settingsHint: group => `群聊设置 — 重命名 ${group} 或设置房间图片`,
     settingsLabel: group => `${group} 的群聊设置`,
     disbandHint: group => `解散 ${group} 群聊`,
@@ -3201,6 +3106,7 @@ const zh: BotsMessages = {
     threadWorking: names => `${names} 正在工作`,
     threadPeople: names => `参与：${names}`,
     threadNew: count => `${count} 条新消息`,
+    composerReplyingIn: title => `回复：${title}`,
     composerNewThreadTo: name => `新话题 · 由 ${name} 回答，@提及 指定成员`,
     composerNewThreadEveryone: '新话题 · 所有人都能收到',
     composerStartNew: '新话题',
@@ -3208,16 +3114,18 @@ const zh: BotsMessages = {
     panelDecisions: '决策',
     decisionsEmpty: '没有等你处理的事。停滞的交接、循环和提问会出现在这里。',
     decisionQuestion: name => `${name} 向你提了问题`,
+    deskTitle: '你的工作台',
     deskNeedsYou: '需要你',
+    deskFloor: count => `${count} 个在工作`,
     viewRoom: '房间',
     viewBoard: '看板',
     activityLabel: '实时动态',
     activityTool: tool => `当前：${tool}`,
+    activityWorking: '工作中…',
     handoff: {
       label: (from, to) => `${from} 交接给 ${to}`,
       title: '交接',
       task: '任务',
-      why: '原因',
       doneWhen: '完成标准',
       due: minutes => `${minutes} 分钟内`,
       declinedBecause: why => `已拒绝：${why}`,
@@ -3345,6 +3253,8 @@ const zh: BotsMessages = {
     noMcpServers: '未配置 MCP 服务器，目录中也没有。'
   },
   screen: {
+    managedNotIncludedTitle: '此机器人不包含屏幕',
+    managedNotIncludedBody: 'Hermes Cloud 为内存 8 GB 及以上的机器人提供屏幕，较小的机器人无法安装。',
     title: '屏幕',
     menu: '打开屏幕',
     unsupportedTitle: '此主机没有机器人屏幕',
@@ -3386,8 +3296,6 @@ const zh: BotsMessages = {
     portalUnsupported: '此主机不可用',
     portalUnavailable: '更新机器人的 Hermes 以使用屏幕',
     portalUnavailableManaged: '此托管 Hermes 版本尚不支持屏幕',
-    managedNotIncludedTitle: '此机器人不包含屏幕',
-    managedNotIncludedBody: 'Hermes Cloud 为内存 8 GB 及以上的机器人提供屏幕，较小的机器人无法安装。',
     unavailableTitle: '屏幕需要更新版的 Hermes',
     autoOpenMenu: '机器人使用屏幕时自动打开',
     autoOpenOnToast: name => `${name} 开始使用桌面时会自动打开屏幕`,
@@ -3665,37 +3573,6 @@ const zh: BotsMessages = {
     today: '今天',
     yesterday: '昨天'
   },
-  identity: {
-    heading: '资料',
-    name: '名称',
-    role: '角色',
-    model: '模型',
-    instructions: '指令',
-    edit: '编辑',
-    changedElsewhere: '已在其他位置更改，现已重新加载',
-    emptyName: '名称不能为空',
-    nextChatNote: '更改会从机器人的下一次聊天开始生效。当前聊天会保留现有提示词。',
-    confirm: '确认',
-    confirmModel: '确认更改模型',
-    modelSaveFailed: '无法保存模型',
-    saveFailed: '无法保存资料',
-    loadFailed: '无法加载此资料'
-  },
-  memory: {
-    heading: '记忆',
-    whatItRemembers: '它记住的内容',
-    aboutYou: '关于你',
-    usage: '记忆用量',
-    add: '添加',
-    placeholder: '写一条记忆…',
-    removePrompt: '要删除这条记忆吗？',
-    removeYes: '是，删除',
-    removeNo: '否，保留',
-    changedElsewhere: '此条目已更改，列表已重新加载',
-    writesOff: '设置中已关闭记忆写入',
-    loadFailed: '无法加载记忆',
-    writeFailed: message => `无法保存记忆：${message}`
-  },
   quick: {
     intro: '只需一个名字即可创建 — 其他都是可选的。',
     templates: '从模板开始',
@@ -3706,6 +3583,7 @@ const zh: BotsMessages = {
 }
 
 const zhHant: BotsMessages = {
+  canonical: CANONICAL_GROUP_LOCALES['zh-hant'],
   editor: {
     fullConfigHint: '完整設定需要更新閘道（更新 Hermes 後請重新啟動閘道）。',
     liveCapabilities: '功能（立即生效 — 技能、工具、MCP）',
@@ -4025,8 +3903,6 @@ const zhHant: BotsMessages = {
     replyInThread: '在討論串中回覆',
     replyInThreadPlaceholder: '在討論串中回覆…',
     openThread: '開啟此討論串',
-    showMore: '顯示更多',
-    showLess: '收合',
     collapseThread: '收合討論串',
     collapseThreadLabel: '收合此討論串',
     activity: '活動',
@@ -4035,9 +3911,6 @@ const zhHant: BotsMessages = {
     hideActivity: '隱藏房間活動',
     stop: '停止',
     stopHint: '停止本次執行 — 中斷目前回合的成員，並暫停其餘成員',
-    stopAll: '全部停止',
-    stopMember: name => `停止${name}`,
-    stoppedMember: name => `已停止${name}——在你恢復之前它將保持暫停`,
     allHeldStatus: count => `全部 ${count} 個機器人已暫停`,
     heldMembersStatus: members => `已暫停：${members}`,
     holdReleaseHint: '提及已暫停的機器人，或傳送 @all resume 以恢復它們。',
@@ -4048,6 +3921,7 @@ const zhHant: BotsMessages = {
     memberCount: count => `${count} 個機器人`,
     you: '您',
     availableCount: (available, total) => `${total} 個中 ${available} 個可用`,
+    teamListening: lead => `只有 ${lead} 在聽 — @提及隊友即可喚醒它們`,
     settingsHint: group => `群組設定 — 重新命名 ${group} 或設定房間圖片`,
     settingsLabel: group => `${group} 的群組設定`,
     disbandHint: group => `解散 ${group} 群組聊天`,
@@ -4095,6 +3969,7 @@ const zhHant: BotsMessages = {
     threadWorking: names => `${names} 正在工作`,
     threadPeople: names => `參與：${names}`,
     threadNew: count => `${count} 則新訊息`,
+    composerReplyingIn: title => `回覆：${title}`,
     composerNewThreadTo: name => `新話題 · 由 ${name} 回答，@提及 指定成員`,
     composerNewThreadEveryone: '新話題 · 所有人都會收到',
     composerStartNew: '新話題',
@@ -4102,16 +3977,18 @@ const zhHant: BotsMessages = {
     panelDecisions: '決策',
     decisionsEmpty: '沒有等你處理的事。停滯的交接、循環和提問會出現在這裡。',
     decisionQuestion: name => `${name} 向你提了問題`,
+    deskTitle: '你的工作台',
     deskNeedsYou: '需要你',
+    deskFloor: count => `${count} 個在工作`,
     viewRoom: '房間',
     viewBoard: '看板',
     activityLabel: '即時動態',
     activityTool: tool => `目前：${tool}`,
+    activityWorking: '工作中…',
     handoff: {
       label: (from, to) => `${from} 交接給 ${to}`,
       title: '交接',
       task: '任務',
-      why: '原因',
       doneWhen: '完成標準',
       due: minutes => `${minutes} 分鐘內`,
       declinedBecause: why => `已拒絕：${why}`,
@@ -4239,6 +4116,8 @@ const zhHant: BotsMessages = {
     noMcpServers: '未設定 MCP 伺服器，目錄中也沒有。'
   },
   screen: {
+    managedNotIncludedTitle: '此機器人不包含螢幕',
+    managedNotIncludedBody: 'Hermes Cloud 為記憶體 8 GB 以上的機器人提供螢幕，較小的機器人無法安裝。',
     title: '螢幕',
     menu: '開啟螢幕',
     unsupportedTitle: '此主機沒有機器人螢幕',
@@ -4280,8 +4159,6 @@ const zhHant: BotsMessages = {
     portalUnsupported: '此主機不可用',
     portalUnavailable: '更新機器人的 Hermes 以使用螢幕',
     portalUnavailableManaged: '此託管 Hermes 版本尚不支援螢幕',
-    managedNotIncludedTitle: '此機器人不包含螢幕',
-    managedNotIncludedBody: 'Hermes Cloud 為記憶體 8 GB 以上的機器人提供螢幕，較小的機器人無法安裝。',
     unavailableTitle: '螢幕需要較新版的 Hermes',
     autoOpenMenu: '機器人使用螢幕時自動開啟',
     autoOpenOnToast: name => `${name} 開始使用桌面時會自動開啟螢幕`,
@@ -4559,37 +4436,6 @@ const zhHant: BotsMessages = {
     today: '今天',
     yesterday: '昨天'
   },
-  identity: {
-    heading: '個人資料',
-    name: '名稱',
-    role: '角色',
-    model: '模型',
-    instructions: '指示',
-    edit: '編輯',
-    changedElsewhere: '已在其他位置變更，現已重新載入',
-    emptyName: '名稱不可為空',
-    nextChatNote: '變更會從機器人的下一次聊天開始生效。目前的聊天會保留現有提示詞。',
-    confirm: '確認',
-    confirmModel: '確認變更模型',
-    modelSaveFailed: '無法儲存模型',
-    saveFailed: '無法儲存個人資料',
-    loadFailed: '無法載入此個人資料'
-  },
-  memory: {
-    heading: '記憶',
-    whatItRemembers: '它記得的事',
-    aboutYou: '關於你',
-    usage: '記憶用量',
-    add: '新增',
-    placeholder: '寫下一則記憶…',
-    removePrompt: '要移除此記憶嗎？',
-    removeYes: '是，移除',
-    removeNo: '否，保留',
-    changedElsewhere: '此項目已變更，清單已重新載入',
-    writesOff: '設定中已關閉記憶寫入',
-    loadFailed: '無法載入記憶',
-    writeFailed: message => `無法儲存記憶：${message}`
-  },
   quick: {
     intro: '只要一個名稱即可建立 — 其他都是選填。',
     templates: '從範本開始',
@@ -4601,6 +4447,32 @@ const zhHant: BotsMessages = {
 
 /** Registered via `ctx.i18n.register` at plugin load (disposer tracked). */
 export const BOTS_LOCALES: PluginLocaleBundles = { en, ja, zh, 'zh-hant': zhHant }
+
+// Bind the message SHAPE to a plugin translator: string leaves resolve now,
+// function leaves forward their args through t(path, …).
+type Bound<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => string
+    ? (...args: A) => string
+    : T[K] extends object
+      ? Bound<T[K]>
+      : string
+}
+
+function bind<T extends object>(t: PluginTranslate, template: T, prefix = ''): Bound<T> {
+  const out = {} as Record<string, unknown>
+
+  for (const [key, value] of Object.entries(template)) {
+    const path = prefix ? `${prefix}.${key}` : key
+    out[key] =
+      typeof value === 'function'
+        ? (...args: unknown[]) => t(path, ...args)
+        : value && typeof value === 'object'
+          ? bind(t, value as object, path)
+          : t(path)
+  }
+
+  return out as Bound<T>
+}
 
 export type BotsText = Bound<BotsMessages>
 

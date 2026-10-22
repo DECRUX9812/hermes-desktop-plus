@@ -29,7 +29,6 @@ const TAG_CLASSES = {
 
 function tagged(Tag: keyof typeof TAG_CLASSES) {
   const base = TAG_CLASSES[Tag]
-
   // Tag is a concrete intrinsic tag at every call site; createElement can't
   // infer props through a generic tag union (it collapses to never via the
   // react-three/fiber JSX.IntrinsicElements augmentation), so type the

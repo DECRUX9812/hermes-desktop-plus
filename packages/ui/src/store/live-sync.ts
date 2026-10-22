@@ -29,7 +29,7 @@ export interface PetChangeMeta {
   slug?: string
   displayName?: string
   scale?: number
-  spdemoeetRevision?: string
+  spritesheetRevision?: string
 }
 
 export const $petChange = atom<{ meta?: PetChangeMeta; tick: number }>({ tick: 0 })

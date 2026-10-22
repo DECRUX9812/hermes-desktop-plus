@@ -11,7 +11,6 @@ import { $narrowViewport } from '@/components/pane-shell/tree/store'
 import { resetLayoutTree } from '@/components/pane-shell/tree/store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
 import { Slot } from '@/contrib/react/slot'
 import { useContributions } from '@/contrib/react/use-contributions'
@@ -34,12 +33,7 @@ import {
 } from '@/store/layout'
 import { REVIEW_PANE_ID } from '@/store/review'
 import { $unreadSessionCount } from '@/store/session-dot-state'
-import {
-  $titlebarAppActionsSide,
-  TITLEBAR_FIXED_TOOLS,
-  TITLEBAR_RIGHT_PRIORITY,
-  TITLEBAR_RIGHT_VISIBLE_MAX
-} from '@/store/titlebar-app-actions'
+import { $titlebarAppActionsSide, TITLEBAR_FIXED_TOOLS } from '@/store/titlebar-app-actions'
 
 import { appViewForPath, hidesFixedTitlebarClusters, isOverlayView } from '../routes'
 
@@ -358,16 +352,9 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
     appActionsSide === 'left' ? [sidebarTool, ...systemTools, ...leftTools] : [sidebarTool, ...leftTools]
   ).filter(visibleTool)
 
+  const visibleSystemTools = appActionsSide === 'right' ? systemTools.filter(visibleTool) : []
   const visiblePaneTools = tools.filter(visibleTool)
-
-  const rightFixedTools = [
-    ...(appActionsSide === 'right' ? systemTools : []),
-    flipTool,
-    panelsTool,
-    rightSidebarTool
-  ].filter(visibleTool)
-
-  const { kept: visibleRightFixedTools, overflow: overflowRightTools } = splitRightOverflow(rightFixedTools)
+  const visibleRightFixedTools = [flipTool, panelsTool, rightSidebarTool].filter(visibleTool)
 
   return (
     <>
@@ -398,10 +385,12 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         className={cn(titlebarToolClusterClass, 'right-(--titlebar-tools-right) top-(--titlebar-controls-top)')}
         data-titlebar-cluster="right"
       >
+        {visibleSystemTools.map(tool => (
+          <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
+        ))}
         {visibleRightFixedTools.map(tool => (
           <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
         ))}
-        {overflowRightTools.length > 0 && <TitlebarOverflowMenu navigate={navigate} tools={overflowRightTools} />}
         <Slot area="titleBar.right" />
       </div>
       <PanelLauncher />
@@ -409,68 +398,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   )
 }
 
-type TitlebarNavigate = ReturnType<typeof useNavigate>
-
-function activateTitlebarTool(tool: TitlebarTool, navigate: TitlebarNavigate, event?: MouseEvent) {
-  if (tool.actionId) {
-    recordAction(tool.actionId, 'click')
-  }
-
-  if (tool.to) {
-    navigate(tool.to)
-  }
-
-  tool.onSelect?.(event)
-}
-
-// Same cap titlebarAppActionsClusterCounts reserves width for.
-function splitRightOverflow(tools: readonly TitlebarTool[]) {
-  const rank = (tool: TitlebarTool) => TITLEBAR_RIGHT_PRIORITY.findIndex(id => id === tool.id)
-  const kept = new Set([...tools].sort((a, b) => rank(a) - rank(b)).slice(0, TITLEBAR_RIGHT_VISIBLE_MAX))
-
-  return {
-    kept: tools.filter(tool => kept.has(tool)),
-    overflow: tools.filter(tool => !kept.has(tool))
-  }
-}
-
-function TitlebarOverflowMenu({ navigate, tools }: { navigate: TitlebarNavigate; tools: readonly TitlebarTool[] }) {
-  const { t } = useI18n()
-
-  return (
-    <DropdownMenu>
-      <Tip label={t.titlebar.moreTools} placement="toolbar">
-        <DropdownMenuTrigger asChild>
-          <Button
-            aria-label={t.titlebar.moreTools}
-            className={cn(titlebarButtonClass, 'bg-transparent select-none')}
-            onPointerDown={event => event.stopPropagation()}
-            size="icon-titlebar"
-            type="button"
-            variant="ghost"
-          >
-            <TitlebarIcon name="ellipsis" />
-          </Button>
-        </DropdownMenuTrigger>
-      </Tip>
-      <DropdownMenuContent align="end" sideOffset={6}>
-        {tools.map(tool => (
-          <DropdownMenuItem
-            className="gap-2"
-            disabled={tool.disabled}
-            key={tool.id}
-            onSelect={() => activateTitlebarTool(tool, navigate)}
-          >
-            {tool.icon}
-            {tool.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function TitlebarToolButton({ navigate, tool }: { navigate: TitlebarNavigate; tool: TitlebarTool }) {
+function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof useNavigate>; tool: TitlebarTool }) {
   // Titlebar actions never show an active background — state reads from the
   // icon itself (e.g. the mute/unmute glyph). aria-pressed still carries it
   // for a11y.
@@ -510,7 +438,17 @@ function TitlebarToolButton({ navigate, tool }: { navigate: TitlebarNavigate; to
         className={className}
         data-tour={tool.tour}
         disabled={tool.disabled}
-        onClick={event => activateTitlebarTool(tool, navigate, event)}
+        onClick={event => {
+          if (tool.actionId) {
+            recordAction(tool.actionId, 'click')
+          }
+
+          if (tool.to) {
+            navigate(tool.to)
+          }
+
+          tool.onSelect?.(event)
+        }}
         onPointerDown={event => event.stopPropagation()}
         size="icon-titlebar"
         type="button"

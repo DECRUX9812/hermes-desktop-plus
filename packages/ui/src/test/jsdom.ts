@@ -24,8 +24,3 @@ export function stubMenuDomApis() {
   Element.prototype.releasePointerCapture ??= () => undefined
   Element.prototype.scrollIntoView ??= () => undefined
 }
-
-// A `hermes.` record marks an install that has run before; empty storage reads as a fresh install (Simple).
-export function seedExistingInstall() {
-  globalThis.localStorage.setItem('hermes.test.existingInstall', '1')
-}

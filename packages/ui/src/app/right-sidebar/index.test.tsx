@@ -63,7 +63,7 @@ describe('RightSidebarPane', () => {
   it('does not read a retained cwd while it belongs to a previous session', async () => {
     $selectedStoredSessionId.set('new-session')
     $workspaceCwdOwner.set('previous-session')
-    setCurrentCwd('/home/User/default-profile-workspace')
+    setCurrentCwd('/home/Doug/default-profile-workspace')
 
     render(<RightSidebarPane onActivateFile={vi.fn()} onActivateFolder={vi.fn()} />)
 

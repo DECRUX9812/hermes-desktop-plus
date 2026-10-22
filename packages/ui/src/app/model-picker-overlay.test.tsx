@@ -3,9 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { WritableAtom } from 'nanostores'
 import { afterEach, expect, it, vi } from 'vitest'
 
-import { startManualOnboarding } from '@/fork/store/onboarding'
 import { I18nProvider } from '@/i18n'
 import { requestModelOptions } from '@/lib/model-options'
+import { startManualOnboarding } from '@/store/onboarding'
 import { $gatewayState, $modelPickerOpen, $selectedStoredSessionId } from '@/store/session'
 import { $focusedTreePaneId as $focusedTreePaneIdMock } from '@/store/session-focus'
 import { $sessionTiles } from '@/store/session-states'
@@ -40,7 +40,7 @@ vi.mock('@/lib/model-options', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
   requestModelOptions: vi.fn().mockResolvedValue({ model: '', provider: '', providers: [] })
 }))
-vi.mock('@/fork/store/onboarding', async importOriginal => ({
+vi.mock('@/store/onboarding', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
   startManualOnboarding: vi.fn()
 }))

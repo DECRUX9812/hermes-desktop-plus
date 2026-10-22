@@ -2,10 +2,8 @@ import { host } from '@hermes/plugin-sdk'
 import type { ReactNode } from 'react'
 
 import { botRosterKey } from './data'
-import type { RoomQuickFilter, RoomStatusSnapshot } from './group-row'
 import type { useBots } from './i18n'
 import type { RosterGroupRow } from './roster-pane-derivation'
-import { GroupRoomsBands } from './roster-pane-groups'
 import { GatewayKindGlyph, GatewaySectionHeading, RosterSectionHeader } from './roster-sections'
 import type { ResolvedRosterGatewaySection } from './roster-sections'
 import type { BotMeta, GroupChat, GroupMember, RosterRow } from './types'
@@ -38,10 +36,6 @@ interface RosterSectionRenderersProps {
   renderBotRow: (bot: RosterRow, keyPrefix?: string) => ReactNode
   renderGroupRow: (row: { members: GroupMember[]; name: string }) => ReactNode
   sortedGroupRows: RosterGroupRow[]
-  /** Quick-filter chips above the rooms; component-local state owned by the pane. */
-  roomFilter: RoomQuickFilter
-  onRoomFilter: (filter: RoomQuickFilter) => void
-  roomStatuses: Record<string, RoomStatusSnapshot>
 }
 
 export function rosterSectionRenderers({
@@ -57,10 +51,7 @@ export function rosterSectionRenderers({
   cardMode,
   renderBotRow,
   renderGroupRow,
-  sortedGroupRows,
-  roomFilter,
-  onRoomFilter,
-  roomStatuses
+  sortedGroupRows
 }: RosterSectionRenderersProps) {
   // The flat rows container vs the card grid — one class switch shared by
   // every section body.
@@ -224,22 +215,7 @@ export function rosterSectionRenderers({
           onToggle={() => toggleRosterSection(sectionId)}
           tip={`${sortedGroupRows.length} global group chat${sortedGroupRows.length === 1 ? '' : 's'}`}
         />
-        {collapsed ? null : (
-          <div className="min-w-0">
-            <GroupRoomsBands
-              cardMode={cardMode}
-              filter={roomFilter}
-              onFilter={onRoomFilter}
-              renderBandRows={(rows, band) => renderUserSections(rows, band === 'active' ? 'groups:' : `groups:${band}:`)}
-              renderRow={renderGroupRow}
-              rooms={groupRooms}
-              rosterSectionCollapsed={rosterSectionCollapsed}
-              rows={sortedGroupRows}
-              statuses={roomStatuses}
-              toggleRosterSection={toggleRosterSection}
-            />
-          </div>
-        )}
+        {collapsed ? null : <div className="min-w-0">{renderUserSections(sortedGroupRows, 'groups:')}</div>}
       </div>
     )
   }
