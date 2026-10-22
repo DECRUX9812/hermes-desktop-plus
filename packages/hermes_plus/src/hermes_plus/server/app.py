@@ -89,6 +89,11 @@ def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
 
         return handler
 
+    async def plugin_ws_proxy(websocket: Any) -> None:
+        # Stock dashboard plugins (e.g. kanban's live board) open their own
+        # sockets under /api/plugins/<name>/...; forward them like the core ones.
+        await proxy.proxy_websocket(websocket, runtime, websocket.url.path)
+
     async def api_proxy(request: Any) -> Any:
         return await proxy.proxy_http(
             request, runtime, runtime.upstream_http_origin, auth_upstream=True
@@ -116,6 +121,7 @@ def build_app(settings: ServeSettings, runtime: Runtime) -> Starlette:
     routes.extend(ROUTERS)
     routes.append(WebSocketRoute("/api/ws", ws_rpc))
     routes.extend(WebSocketRoute(path, ws_proxy(path)) for path in WS_PROXY_PATHS)
+    routes.append(WebSocketRoute("/api/plugins/{path:path}", plugin_ws_proxy))
     routes.append(Route("/api/{path:path}", api_proxy, methods=_API_METHODS))
     routes.append(Route("/{path:path}", spa, methods=["GET", "HEAD"]))
 

@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 SIDECAR_FILE = "sidecar.json"
 _SPOOL_INTERVAL_SECONDS = 2.0
+_WATCHDOG_INTERVAL_SECONDS = 10.0
 
 
 def _websocket_url(url: str) -> str:
@@ -63,6 +64,7 @@ class Runtime:
         self._clients: set[tuple[Any, asyncio.Lock]] = set()
         self._spool_task: asyncio.Task[None] | None = None
         self._spool_ingester: SpoolIngester | None = None
+        self._watchdog_task: asyncio.Task[None] | None = None
         self.started = False
 
     def register_client(self, client: tuple[Any, asyncio.Lock]) -> None:
@@ -135,6 +137,9 @@ class Runtime:
             self.http_client = httpx.AsyncClient(timeout=None, follow_redirects=False)
             self._write_sidecar_json()
             self._start_spool_ingester()
+            if self.dashboard is not None:
+                self._watchdog_task = asyncio.create_task(
+                    self._dashboard_watchdog(), name="hermes-plus-dashboard-watchdog")
             self.started = True
             self._log_login_url()
         except BaseException:
@@ -206,8 +211,80 @@ class Runtime:
                 self._stores[path] = store
             return store
 
+
+    # ---- dashboard self-heal -------------------------------------------------
+    # `hermes update` (and the in-app update chip) restarts every dashboard of the
+    # updated home so the backend matches the new frontend. It relaunches our child
+    # with the same argv but without HERMES_DASHBOARD_SESSION_TOKEN, so the new
+    # process mints its own token and every proxied call gets 401. The watchdog
+    # notices (child gone, or our token rejected) and starts a fresh child with our
+    # token, so an update needs no manual restart of `hermes-plus serve`.
+
+    async def _dashboard_watchdog(self) -> None:
+        while True:
+            await asyncio.sleep(_WATCHDOG_INTERVAL_SECONDS)
+            try:
+                if await self._dashboard_needs_respawn():
+                    await self._respawn_dashboard()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("dashboard watchdog pass failed")
+
+    async def _dashboard_needs_respawn(self) -> bool:
+        dashboard = self.dashboard
+        if dashboard is None:
+            return False
+        if dashboard.process is None or dashboard.process.poll() is not None:
+            log.warning("the stock Hermes dashboard child exited")
+            return True
+        if self.http_client is None:
+            return False
+        try:
+            response = await self.http_client.get(
+                f"{self.upstream_http_origin}/api/profiles/active",
+                headers={"X-Hermes-Session-Token": self.upstream_token},
+                timeout=10,
+            )
+        except httpx.HTTPError:
+            return False
+        if response.status_code == 401:
+            log.warning("the stock Hermes dashboard rejected our session token")
+            return True
+        return False
+
+    async def _respawn_dashboard(self) -> None:
+        old = self.dashboard
+        assert old is not None and self.install is not None
+        old_port = old.port
+        home = old._home()
+        await asyncio.to_thread(old.stop)
+        await asyncio.to_thread(_reap_stray_dashboard, old_port, home)
+        fresh = DashboardProcess(self.install, port=0, token=old.token, profile=self.settings.profile)
+        await asyncio.to_thread(fresh.start)
+        self.dashboard = fresh
+        self.upstream_ws_url = fresh.ws_url
+        self.upstream_token = fresh.token
+        self.upstream_http_origin = _http_origin(self.upstream_ws_url)
+        internal = GatewayClient(self.upstream_ws_url, self.upstream_token)
+        await internal.connect()
+        previous, self.internal = self.internal, internal
+        if previous is not None:
+            try:
+                await previous.close()
+            except Exception:
+                log.exception("Failed to close the previous internal gateway client")
+        log.warning("respawned the stock Hermes dashboard on port %d (was %d)", fresh.port, old_port)
+
     async def stop(self) -> None:
         self._remove_sidecar_json()
+        watchdog, self._watchdog_task = self._watchdog_task, None
+        if watchdog is not None:
+            watchdog.cancel()
+            try:
+                await watchdog
+            except asyncio.CancelledError:
+                pass
         task, self._spool_task = self._spool_task, None
         if task is not None:
             task.cancel()
@@ -250,3 +327,39 @@ class Runtime:
             except Exception:
                 log.exception("Failed to stop the Hermes dashboard child")
         self.started = False
+
+
+def _reap_stray_dashboard(port: int, home: Path) -> None:
+    """Stop a dashboard someone else relaunched on our old port for OUR home only (Linux)."""
+    proc = Path("/proc")
+    if not proc.is_dir() or not port:
+        return
+    import signal
+
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            argv = (entry / "cmdline").read_bytes().split(b"\0")
+            env = dict(
+                item.split(b"=", 1) for item in (entry / "environ").read_bytes().split(b"\0") if b"=" in item
+            )
+        except OSError:
+            continue
+        args = [a.decode("utf-8", "replace") for a in argv]
+        if "dashboard" not in args or "--port" not in args:
+            continue
+        index = args.index("--port")
+        if index + 1 >= len(args) or args[index + 1] != str(port):
+            continue
+        try:
+            same_home = Path(env.get(b"HERMES_HOME", b"").decode()).resolve() == home.resolve()
+        except (OSError, RuntimeError):
+            same_home = False
+        if not same_home:
+            continue
+        try:
+            os.kill(int(entry.name), signal.SIGTERM)
+            log.info("stopped stray dashboard pid %s on port %d", entry.name, port)
+        except OSError:
+            pass
