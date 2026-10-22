@@ -89,6 +89,21 @@ def test_missing_ui_allowed_with_allow_no_ui(tmp_path, monkeypatch):
     assert "force_include" not in build_data
 
 
+def test_editable_install_skips_ui(tmp_path, monkeypatch):
+    hook_class = _load_hook_class()
+    root = tmp_path / "hermes_plus"
+    root.mkdir()
+    monkeypatch.delenv("HERMES_PLUS_SKIP_UI_BUILD", raising=False)
+    monkeypatch.delenv("HERMES_PLUS_ALLOW_NO_UI", raising=False)
+
+    hook = _make_hook(hook_class, root)
+    build_data = {}
+    hook.initialize("editable", build_data)
+
+    assert not (root / "src" / "hermes_plus" / "ui_dist" / "index.html").exists()
+    assert "force_include" not in build_data
+
+
 def test_existing_ui_dist_is_not_recopied(tmp_path):
     hook_class = _load_hook_class()
     root = tmp_path / "hermes_plus"

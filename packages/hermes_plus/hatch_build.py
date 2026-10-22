@@ -25,6 +25,11 @@ class UIBuildHook(BuildHookInterface):
         if self.target_name != "wheel":
             return
 
+        # Editable installs serve the UI from the source tree / --ui-dir and CI
+        # python jobs have no UI, so skip bundling entirely.
+        if version == "editable":
+            return
+
         root = Path(self.root)
         ui_dist = root / "src" / "hermes_plus" / "ui_dist"
         ui_dist_index = ui_dist / "index.html"
