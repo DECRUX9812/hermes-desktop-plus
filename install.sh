@@ -7,7 +7,7 @@
 #
 # POSIX sh, safe to pipe from `curl ... | sh`. Knobs:
 #   HERMES_PLUS_REPO            GitHub repo (default: DECRUX9812/hermes-desktop-plus)
-#   HERMES_PLUS_VERSION         package version (default: 0.1.0; matches pyproject.toml)
+#   HERMES_PLUS_VERSION         package version (default: 0.1.1; matches pyproject.toml)
 #   HERMES_PLUS_SOURCE          package source for uv/pipx (default: GitHub release wheel URL)
 #   HERMES_PLUS_HERMES_BIN      explicit stock hermes binary (checked first)
 #   HERMES_PLUS_INSTALL_HERMES  1 = install stock Hermes when it is missing
@@ -25,7 +25,7 @@ HERMES_INSTALLER_URL="https://hermes-agent.nousresearch.com/install.sh"
 # Hermes Desktop Plus release location on GitHub.
 HERMES_PLUS_REPO="${HERMES_PLUS_REPO:-DECRUX9812/hermes-desktop-plus}"
 # Package version: must match version in packages/hermes_plus/pyproject.toml and bridge/plugin.yaml.
-HERMES_PLUS_VERSION="${HERMES_PLUS_VERSION:-0.1.0}"
+HERMES_PLUS_VERSION="${HERMES_PLUS_VERSION:-0.1.1}"
 # Default source: the wheel from the GitHub release.
 HERMES_PLUS_SOURCE="${HERMES_PLUS_SOURCE:-https://github.com/${HERMES_PLUS_REPO}/releases/download/v${HERMES_PLUS_VERSION}/hermes_plus-${HERMES_PLUS_VERSION}-py3-none-any.whl}"
 HERMES_PLUS_PROFILE="${HERMES_PLUS_PROFILE:-}"

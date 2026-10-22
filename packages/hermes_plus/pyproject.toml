@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hermes-plus"
-version = "0.1.0"
+version = "0.1.1"
 description = "Hermes Desktop Plus: the desktop/web app add-on for stock Hermes Agent"
 readme = "README.md"
 license = "MIT"
@@ -47,6 +47,11 @@ hermes-plus = "hermes_plus.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hermes_plus"]
+# The UI bundle enters the wheel exclusively via the custom hook's
+# force_include; hatchling can't see that it's gitignored (the rule lives in
+# the repo-root .gitignore, above this project), so exclude it from normal
+# selection to avoid adding every file twice.
+exclude = ["src/hermes_plus/ui_dist"]
 include = [
   { path = "src/hermes_plus/bridge/**/*.yaml", from = "src/hermes_plus" },
   { path = "src/hermes_plus/bridge/**/*.json", from = "src/hermes_plus" },
@@ -57,6 +62,9 @@ include = [
   { path = "src/hermes_plus/extras/**/*.jpg", from = "src/hermes_plus" },
   { path = "src/hermes_plus/extras/**/*.js", from = "src/hermes_plus" },
 ]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

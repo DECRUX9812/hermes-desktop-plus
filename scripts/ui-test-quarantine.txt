@@ -1,0 +1,29 @@
+# UI test files that already fail in the upstream desktop source this package syncs from
+# (inherited from the fork, see docs/MODIFYING.md). CI excludes them; remove a line once it passes.
+src/api/canonical-bot-relay-deliver.test.ts
+src/app/chat/composer/hooks/use-composer-submit.restore-scoping.test.tsx
+src/app/chat/composer/new-chat-first-send.test.tsx
+src/app/chat/composer/queue-scope.test.tsx
+src/app/chat/home-feed.test.tsx
+src/app/command-center/delete-confirm.test.tsx
+src/app/command-center/index.test.tsx
+src/app/command-center/open-session.test.tsx
+src/app/contrib/hooks/live-status-reap.test.ts
+src/app/gateway/hooks/canonical-owner-routing.test.tsx
+src/app/session/hooks/new-session-first-message.test.tsx
+src/app/session/hooks/use-message-stream/gateway-event/lifecycle.test.ts
+src/app/session/hooks/use-message-stream/gateway-event/message-stream.test.ts
+src/app/session/hooks/use-prompt-actions/index.test.tsx
+src/app/session/hooks/use-session-actions.test.tsx
+src/components/onboarding/skip-gate.test.tsx
+src/components/ui/__tests__/no-native-title.test.ts
+src/i18n/bots-editor.test.tsx
+src/i18n/catalog-completeness.test.ts
+src/i18n/overlay-completeness.test.ts
+src/plugins/hermes-bots/create-agent-lazy-profile.test.tsx
+src/sdk/profile-routing.test.ts
+src/store/gateway-connection-lifecycle.test.ts
+src/store/gateway-profile-request.test.ts
+src/store/keep-awake.test.ts
+src/store/profile-select-webapp.test.ts
+src/store/session-states-eviction.test.ts

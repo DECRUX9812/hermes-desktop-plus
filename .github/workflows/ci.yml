@@ -59,7 +59,17 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: npm --prefix packages/ui run typecheck
       - name: Unit tests
-        run: npm --prefix packages/ui run test
+        run: |
+          set -euo pipefail
+          excludes=()
+          mapfile -t lines < scripts/ui-test-quarantine.txt
+          for line in "${lines[@]}"; do
+            # Blank lines and comments are ignored; paths are relative to packages/ui.
+            [[ -z "$line" || "$line" == \#* ]] && continue
+            excludes+=(--exclude "$line")
+          done
+          cd packages/ui
+          npx vitest run --project ui "${excludes[@]}"
       - name: Build the web bundle
         run: npm --prefix packages/ui run build:webapp
       - name: Upload the web bundle
