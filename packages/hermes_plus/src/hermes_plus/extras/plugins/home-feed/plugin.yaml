@@ -1,0 +1,46 @@
+name: home-feed
+version: "1.0.0"
+requires_hermes: ">=0.22.0"
+description: "Home Feed — the fork's Hark-style home surface: flat action cards over what needs you (command-room escalations, open group-rooms handoffs, overdue/due cron jobs), plus the 'Recent tasks' one-job-per-screen session cards. Sources are read-only: sessions from the profile's state.db, cron jobs from jobs.json, and the command-room/group-rooms public APIs when those plugins are registered — without them the feed degrades to what it can see."
+author: Hermes Desktop Plus contributors
+config_schema:
+  max_cards:
+    type: int
+    label: "Max feed cards"
+    description: "How many action cards the feed shows at once (the fork's MAX_FEED_ITEMS = 5)."
+    default: 5
+  recent_tasks_limit:
+    type: int
+    label: "Recent tasks limit"
+    description: "Task cards on the home screen: what needs you, then what is running, then what just finished, topped up with the most recent chats (the fork's BRIEF_ROW_LIMIT = 3)."
+    default: 3
+  feed_window_hours:
+    type: int
+    label: "Feed window (hours)"
+    description: "How far back needs-you cards (escalations, stalled sessions) still count as news."
+    default: 24
+  cron_due_window_minutes:
+    type: int
+    label: "Cron due window (minutes)"
+    description: "A scheduled job within this many minutes of its next run counts as due (the fork's CRON_DUE_WINDOW_MS = 15min)."
+    default: 15
+  include_command_room:
+    type: bool
+    label: "Command Room cards"
+    description: "Feed the open, un-snoozed command-room escalations in as needs-you cards when that plugin is registered."
+    default: true
+  include_group_rooms:
+    type: bool
+    label: "Group Rooms cards"
+    description: "Feed the group-rooms threads carrying open handoffs in as cards when that plugin is registered."
+    default: true
+  db_path:
+    type: str
+    label: "Database path"
+    description: "Explicit path for the plugin's sqlite file; empty means <data dir>/home-feed/home-feed.db under the profile home."
+    default: ""
+  debug:
+    type: bool
+    label: "Debug logging"
+    description: "Verbose plugin logging to the Hermes log."
+    default: false
