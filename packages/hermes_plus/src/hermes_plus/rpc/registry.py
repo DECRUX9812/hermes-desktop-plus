@@ -51,6 +51,37 @@ def methods() -> tuple[str, ...]:
     return tuple(sorted(_handlers))
 
 
+# Plugins/extensions register their own methods here through
+# `register_plugin_method` at register(ctx) time — the sanctioned door that keeps
+# a plugin's RPC surface in the plugin, out of core handler modules, and off the
+# contracted import-time surface that `methods()` pins.
+PLUGIN_METHOD_PREFIX = "plugin."
+
+
+def register_plugin_method(name: str, handler: Handler) -> None:
+    """Register one plugin method, `plugin.<plugin_id>.<action>`.
+
+    Handlers get the same (ctx, params) contract as core handlers and the same
+    dispatch (param dicts, JSON-safe results, RpcFault errors); `owns()` claims
+    a plugin method only once it is actually registered, so an unregistered
+    plugin's namespace keeps flowing upstream.
+    """
+    if not name.startswith(PLUGIN_METHOD_PREFIX) or name.count(".") < 2:
+        raise ValueError(f"{name} is not a plugin method name (plugin.<plugin_id>.<action>)")
+    if name in _handlers:
+        raise ValueError(f"{name} is registered twice")
+    _handlers[name] = handler
+
+
+def unregister_plugin_methods(prefix: str) -> int:
+    """Drop every method under one `plugin.<plugin_id>.` prefix (plugin unload /
+    re-register). Returns how many were removed."""
+    stale = [name for name in _handlers if name.startswith(prefix)]
+    for name in stale:
+        del _handlers[name]
+    return len(stale)
+
+
 def owns(name: str, capabilities: Any = None) -> bool:
     """Whether the plus gateway claims this method name or namespace."""
     if any(name.startswith(f"{namespace}.") for namespace in NAMESPACES):

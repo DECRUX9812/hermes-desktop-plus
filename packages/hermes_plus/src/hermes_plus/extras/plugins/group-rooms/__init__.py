@@ -87,12 +87,18 @@ def _store() -> RoomStore:
 
 
 def close() -> None:
-    """Close the sqlite store (tests and host shutdown)."""
+    """Close the sqlite store and drop the plugin's RPC methods (tests and host shutdown)."""
     global _STORE
     with _STORE_LOCK:
         if _STORE is not None:
             _STORE.close()
             _STORE = None
+    try:
+        from .rpc import unregister_rpc
+    except Exception:
+        pass
+    else:
+        unregister_rpc()
 
 
 # ── room API (knobs applied here, storage delegated to RoomStore) ────────────────────────
@@ -156,6 +162,18 @@ def register(ctx) -> None:
     if _STORE is not None:
         _STORE.close()
         _STORE = None
+    # The RPC surface registers through the sidecar registry's sanctioned plugin
+    # hook, here where every other feature wires up. Lazy import + guard: a host
+    # without the sidecar package still loads the room API, just with no RPC door.
+    try:
+        from .rpc import register_rpc
+    except Exception:
+        logger.debug("group-rooms: rpc module unavailable; RPC surface not registered")
+    else:
+        try:
+            register_rpc()
+        except Exception:
+            logger.exception("group-rooms: RPC registration failed; the room API continues without it")
     if _knob("debug"):
         logger.debug("group-rooms registered; db resolves to %s", _db_path())
 
