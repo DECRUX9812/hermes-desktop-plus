@@ -1,0 +1,46 @@
+name: command-room
+version: "1.0.0"
+requires_hermes: ">=0.22.0"
+description: "Command Room — the fork's CEO surface: a handoff protocol with escalations and the CEO board, catch-up/recaps/search/pins/snoozes, the 24h brief, consensus voting cards, seat budgets with OS alerts, and the rail's which-threads-moved indicator. Builds on the group-rooms plugin's rooms/threads/handoffs when that plugin is registered; its own state stays in this plugin's sqlite file."
+author: Hermes Desktop Plus contributors
+config_schema:
+  brief_window_hours:
+    type: int
+    label: "Brief window (hours)"
+    description: "How far back the 24h brief and the default catch-up anchor reach."
+    default: 24
+  default_seat_budget:
+    type: int
+    label: "Default seat budget"
+    description: "Spend units a seat with no explicit budget may use before further spends are blocked and alerted."
+    default: 100
+  escalation_threshold_minutes:
+    type: int
+    label: "Escalation threshold (minutes)"
+    description: "An open handoff sitting this long is escalated to the CEO (the fork's ESCALATE_AFTER_MS)."
+    default: 20
+  loop_handoffs:
+    type: int
+    label: "Loop threshold"
+    description: "How many open handoffs between the same two seats in one thread count as a loop worth escalating."
+    default: 3
+  consensus_quorum:
+    type: int
+    label: "Consensus quorum"
+    description: "Distinct voters a vote needs before it can settle (the fork's consensus card counts everyone asked)."
+    default: 2
+  os_alerts_enabled:
+    type: bool
+    label: "OS alerts"
+    description: "Whether blocked spends and budget trouble raise alerts the UI can surface as OS notifications."
+    default: true
+  db_path:
+    type: str
+    label: "Database path"
+    description: "Explicit path for the plugin's sqlite file; empty means <data dir>/command-room/command-room.db under the profile home."
+    default: ""
+  debug:
+    type: bool
+    label: "Debug logging"
+    description: "Verbose plugin logging to the Hermes log."
+    default: false
