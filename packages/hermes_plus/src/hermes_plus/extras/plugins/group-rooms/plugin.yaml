@@ -1,0 +1,37 @@
+name: group-rooms
+version: "1.0.0"
+requires_hermes: ">=0.22.0"
+description: "Group Rooms (Room 2.0) — rooms with multiple bot seats, one composer, threads, message routing and seat handoffs. Ported from the fork's hermes-bots group-chat architecture; state stays in the plugin's own sqlite file."
+author: Hermes Desktop Plus contributors
+config_schema:
+  max_seats:
+    type: int
+    label: "Max seats per room"
+    description: "Upper bound on bot seats in one room; further add_seat calls are refused."
+    default: 6
+  default_room_mode:
+    type: str
+    label: "Default room mode"
+    description: "Routing mode for new rooms: collab (every seat answers), round_robin (one seat per rotation step) or lead (the seat holding the lead role)."
+    choices: [collab, round_robin, lead]
+    default: collab
+  thread_rail_enabled:
+    type: bool
+    label: "Thread rail"
+    description: "Whether rooms expose the thread rail (Slack/Discord-style threads beside the room composer)."
+    default: true
+  max_message_chars:
+    type: int
+    label: "Max message length"
+    description: "Maximum characters accepted per posted message."
+    default: 8000
+  db_path:
+    type: str
+    label: "Database path"
+    description: "Explicit path for the plugin's sqlite file; empty means <data dir>/group-rooms/rooms.db under the profile home."
+    default: ""
+  debug:
+    type: bool
+    label: "Debug logging"
+    description: "Verbose plugin logging to the Hermes log."
+    default: false
