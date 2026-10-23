@@ -1,0 +1,46 @@
+name: activity
+version: "1.0.0"
+requires_hermes: ">=0.22.0"
+description: "Activity pane — the fork's Muse-style Activity surface as a plugin: recent activity rows (sessions, command-room escalations, open group-rooms handoffs, overdue cron) and the Now/Next/Done bot rail. Timestamp contract: every row's last_active is an integer UNIX SECONDS value; the UI converts seconds to milliseconds exactly once (x*1000) when formatting relative time. Sources are read-only: sessions from the profile's state.db, cron jobs from jobs.json, and the command-room/group-rooms public APIs when those plugins are registered — without them those rows degrade to empty."
+author: Hermes Desktop Plus contributors
+config_schema:
+  window_hours:
+    type: int
+    label: "Activity window (hours)"
+    description: "How far back an event still counts as recent activity; older rows are dropped."
+    default: 24
+  max_rows:
+    type: int
+    label: "Max activity rows"
+    description: "How many activity rows (and how many entries per Now/Next/Done rail bucket) the pane shows at once."
+    default: 20
+  now_next_done_enabled:
+    type: bool
+    label: "Now/Next/Done bot rail"
+    description: "Show the bot rail above the rows: Now (running work and things waiting on you), Next (upcoming cron runs), Done (finished conversations)."
+    default: true
+  now_window_minutes:
+    type: int
+    label: "Now window (minutes)"
+    description: "A session active within this many minutes counts as running (a Now rail entry) rather than finished."
+    default: 10
+  include_cron:
+    type: bool
+    label: "Cron rows"
+    description: "Feed overdue cron jobs in as Now rows and upcoming runs in as Next entries, read from the scheduler's jobs.json."
+    default: true
+  include_command_room:
+    type: bool
+    label: "Command Room rows"
+    description: "Feed open, un-snoozed command-room escalations in as Now rows when that plugin is registered."
+    default: true
+  include_group_rooms:
+    type: bool
+    label: "Group Rooms rows"
+    description: "Feed group-rooms threads carrying open handoffs in as Now rows when that plugin is registered."
+    default: true
+  debug:
+    type: bool
+    label: "Debug logging"
+    description: "Verbose plugin logging to the Hermes log."
+    default: false
