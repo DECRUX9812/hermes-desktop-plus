@@ -2515,3 +2515,18 @@ export { atom, computed } from 'nanostores'
 /** Markdown renderer (same pipeline core chat surfaces use) so plugins render
  *  message text as a preview instead of raw Markdown source. */
 export { Streamdown } from 'streamdown'
+
+/** Top-level navigation verbs for runtime desktop plugins: ESM link resolves
+ *  named imports (`import { navigate, openSession } from '@hermes/plugin-sdk'`)
+ *  against THIS module, not the `host` object, so bare `host.navigate` /
+ *  `host.openSession` members fail with "does not provide an export named …".
+ *  These delegate to the same `host` implementations, keeping one behavior.
+ *
+ *  (Renamed internally to `pluginOpenSession` to avoid clashing with the
+ *  imported app-core `openSession` from `@/app/open-session`.) */
+const pluginNavigate = (path: string) => host.navigate(path)
+const pluginOpenSession = (
+  storedSessionId: string,
+  options: PluginOpenSessionOptions = {}
+): Promise<void> => host.openSession(storedSessionId, options)
+export { pluginNavigate as navigate, pluginOpenSession as openSession }

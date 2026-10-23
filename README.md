@@ -22,13 +22,13 @@ nearly all of it downloading the sidecar's Python dependencies (about three minu
 in our test). Re-running it takes about ten seconds.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/DECRUX9812/hermes-desktop-plus/v0.1.1/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DECRUX9812/hermes-desktop-plus/v0.1.2/install.sh | sh
 ```
 
 Without the script:
 
 ```sh
-uv tool install https://github.com/DECRUX9812/hermes-desktop-plus/releases/download/v0.1.1/hermes_plus-0.1.1-py3-none-any.whl
+uv tool install https://github.com/DECRUX9812/hermes-desktop-plus/releases/download/v0.1.2/hermes_plus-0.1.2-py3-none-any.whl
 hermes-plus install
 ```
 

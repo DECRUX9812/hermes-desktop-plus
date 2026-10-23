@@ -116,6 +116,11 @@ class DashboardProcess:
         home = self._home()
         env["HERMES_HOME"] = str(home)
         env["HERMES_DASHBOARD_SESSION_TOKEN"] = self.token
+        # The internal stock dashboard child is loopback-only: a config
+        # dashboard.public_url (non-loopback) would otherwise engage stock's
+        # auth gate and reject the add-on's token WebSocket with 403.
+        # hermes-plus is the public face; the child never is.
+        env["HERMES_DASHBOARD_PUBLIC_URL"] = "http://127.0.0.1"
         if self.web_dist is not None:
             env["HERMES_WEB_DIST"] = str(self.web_dist)
         elif "HERMES_WEB_DIST" not in env:

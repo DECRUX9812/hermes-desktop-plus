@@ -433,3 +433,52 @@ describe('host.sessions session-list mutations', () => {
     expect($sessionColorOverrides.get()).toEqual({})
   })
 })
+
+// Runtime-fetched plugins do `import { navigate, openSession } from
+// '@hermes/plugin-sdk'`: ESM link resolves named imports against THIS module,
+// not the `host` object, so the top-level verbs must exist and delegate to the
+// same implementations (missing ones fail the load with "does not provide an
+// export named …").
+describe('top-level navigate/openSession named exports', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('are exported functions', async () => {
+    const sdk = await import('@/sdk')
+
+    expect(typeof sdk.navigate).toBe('function')
+    expect(typeof sdk.openSession).toBe('function')
+  })
+
+  it('navigate delegates to host.navigate with the same signature', async () => {
+    const sdk = await import('@/sdk')
+    const spy = vi.spyOn(host, 'navigate').mockReturnValue(undefined)
+
+    sdk.navigate('/command-center?section=system')
+
+    expect(spy).toHaveBeenCalledExactlyOnceWith('/command-center?section=system')
+  })
+
+  it('openSession delegates to host.openSession with the same signature', async () => {
+    const sdk = await import('@/sdk')
+    const spy = vi.spyOn(host, 'openSession').mockResolvedValue(undefined)
+
+    await sdk.openSession('session-1', {
+      route: { connectionId: 'conn-1', mode: 'local', profile: 'main', targetProfile: 'main' }
+    })
+
+    expect(spy).toHaveBeenCalledExactlyOnceWith('session-1', {
+      route: { connectionId: 'conn-1', mode: 'local', profile: 'main', targetProfile: 'main' }
+    })
+  })
+
+  it('openSession passes no options object when called with only a session id', async () => {
+    const sdk = await import('@/sdk')
+    const spy = vi.spyOn(host, 'openSession').mockResolvedValue(undefined)
+
+    await sdk.openSession('session-2')
+
+    expect(spy).toHaveBeenCalledExactlyOnceWith('session-2', {})
+  })
+})
