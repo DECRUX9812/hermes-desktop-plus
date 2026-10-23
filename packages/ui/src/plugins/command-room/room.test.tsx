@@ -1,22 +1,29 @@
 /**
  * The Command Room page against a mocked `@hermes/plugin-sdk` host: render the
- * CEO board, cast a consensus vote (the RPC must carry the right method and
- * params), and ack an escalation — every write hits the plugin's own
- * `plugin.command_room.*` RPC.
+ * CEO board, CALL a consensus vote (the card's option click is the owner's
+ * "Call it" — `vote.call`, never a ballot on the owner's behalf), and ack an
+ * escalation — every write hits the plugin's own `plugin.command_room.*` RPC.
+ * The VoteCard's fork visuals (bars scaled to the top count, voter names,
+ * per-word consensus chip tone, waiting-on footer, locale copy) are covered on
+ * the exported card directly.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { CommandRoom } from './room'
+import { CommandRoom, VoteCard } from './room'
+import { COMMAND_ROOM_LOCALES, type CommandRoomMessages } from './i18n'
+import type { VoteTally } from './room'
 
-const { requestMock, notifyErrorMock } = vi.hoisted(() => ({
-  requestMock: vi.fn(),
-  notifyErrorMock: vi.fn()
+const { requestMock, notifyErrorMock, translateMock } = vi.hoisted(() => ({
+  requestMock: vi.fn<(method: string, params?: Record<string, unknown>) => Promise<unknown>>(),
+  notifyErrorMock: vi.fn(),
+  translateMock: vi.fn<(key: string, ...args: unknown[]) => string>()
 }))
 
 vi.mock('@hermes/plugin-sdk', () => ({
-  host: { request: requestMock, notifyError: notifyErrorMock }
+  host: { request: requestMock, notifyError: notifyErrorMock },
+  usePluginI18n: () => translateMock
 }))
 
 const BOARD = {
@@ -43,13 +50,40 @@ const VOTES = {
   votes: [
     {
       id: 7, room: 'ops', question: 'ship friday?', options: ['ship', 'wait'], quorum: 2,
-      status: 'open', decided: '', counts: { ship: 1, wait: 0 }, voters: 1, quorum_met: false, consensus: 'majority'
+      asked: ['atlas', 'vex'], message_id: 12, thread_id: 3,
+      status: 'open', decided: '', counts: { ship: 1, wait: 0 }, voters: 1, quorum_met: false,
+      missing: ['vex'], consensus: 'majority',
+      ballots: [{ voter: 'atlas', option: 'ship' }]
     }
   ]
 }
 
+/** A two-vote room: 2-1 lead (bars 100%/50%), one member still out. */
+const CARD_VOTE: VoteTally = {
+  id: 9, room: 'ops', question: 'ship the rewrite or keep the old one?', options: ['ship', 'keep'],
+  quorum: 2, asked: ['atlas', 'vex', 'art'], message_id: 41, thread_id: 3,
+  status: 'open', decided: '', counts: { ship: 2, keep: 1 }, voters: 3, quorum_met: true,
+  missing: ['art'], consensus: 'majority',
+  ballots: [
+    { voter: 'atlas', option: 'ship' },
+    { voter: 'vex', option: 'keep' },
+    { voter: 'art', option: 'ship' }
+  ]
+}
+
+/** Translate against one of the plugin's own bundles, the way the SDK does. */
+function tFor(locale: keyof typeof COMMAND_ROOM_LOCALES) {
+  return (key: string, ...args: unknown[]) => {
+    const bundle = (COMMAND_ROOM_LOCALES[locale] ?? COMMAND_ROOM_LOCALES.en) as CommandRoomMessages
+    let node: unknown = bundle
+    for (const part of key.split('.')) node = (node as Record<string, unknown>)[part]
+    return typeof node === 'function' ? node(...(args as [])) : (node as string)
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  translateMock.mockImplementation(tFor('en'))
   requestMock.mockImplementation(async (method: string) => {
     if (method === 'plugin.command_room.config') {
       return {
@@ -100,21 +134,21 @@ describe('CommandRoom', () => {
     expect(requestMock).toHaveBeenCalledWith('plugin.command_room.moved.threads', { room: 'ops' })
   })
 
-  it('casts a consensus vote with the right method and params, then refreshes', async () => {
+  it('calls the vote with vote.call (never a ballot on the owner\'s behalf), then refreshes', async () => {
     render(<CommandRoom />)
 
-    const option = await screen.findByText('wait (0)')
-    fireEvent.click(option)
+    const call = await screen.findAllByTestId('command-vote-call')
+    fireEvent.click(call[0])
 
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith('plugin.command_room.vote.cast', {
+      expect(requestMock).toHaveBeenCalledWith('plugin.command_room.vote.call', {
         room: 'ops',
         vote_id: 7,
-        voter: 'user',
-        option: 'wait'
+        option: 'ship'
       })
     })
-    // The page re-reads the board and the vote list after the cast.
+    expect(requestMock).not.toHaveBeenCalledWith('plugin.command_room.vote.cast', expect.anything())
+    // The page re-reads the board and the vote list after the call.
     expect(requestMock).toHaveBeenCalledWith('plugin.command_room.votes.list', { room: 'ops' })
     expect(requestMock).toHaveBeenCalledWith('plugin.command_room.board.get', { room: 'ops' })
   })
@@ -170,5 +204,93 @@ describe('CommandRoom', () => {
       expect(requestMock).toHaveBeenCalledWith('plugin.command_room.board.get', { room: 'port' })
     })
     expect(requestMock).toHaveBeenCalledWith('plugin.group_rooms.rooms.list', {})
+  })
+})
+
+describe('VoteCard', () => {
+  it('draws per-option bars scaled to the top count, with the voter names', () => {
+    render(<VoteCard onCall={vi.fn()} vote={CARD_VOTE} />)
+
+    const options = screen.getAllByTestId('command-vote-option')
+    expect(options).toHaveLength(2)
+    // ship has 2 of the top count 2; keep has 1 — half the tallest bar.
+    const widths = options.map(option =>
+      (option.querySelector('[data-testid="command-vote-bar"]') as HTMLElement).style.width)
+    expect(widths).toEqual(['100%', '50%'])
+    expect(options[0].textContent).toContain('atlas, art picked this')
+    expect(options[1].textContent).toContain('vex picked this')
+  })
+
+  it('chips the consensus word with its own tone', () => {
+    const { rerender } = render(<VoteCard onCall={vi.fn()} vote={CARD_VOTE} />)
+
+    const chip = screen.getByTestId('command-vote-consensus')
+    expect(chip.textContent).toBe('Majority')
+    expect(chip.className).toContain('text-(--ui-accent)')
+
+    const asConsensus = (consensus: VoteTally['consensus']): VoteTally => ({
+      ...CARD_VOTE,
+      consensus,
+      missing: consensus === 'unanimous' || consensus === 'waiting' ? [] : CARD_VOTE.missing,
+      counts: consensus === 'waiting' ? { ship: 0, keep: 0 } : CARD_VOTE.counts,
+      ballots: consensus === 'waiting' ? [] : CARD_VOTE.ballots
+    })
+    rerender(<VoteCard onCall={vi.fn()} vote={asConsensus('split')} />)
+    expect(screen.getByTestId('command-vote-consensus').className).toContain('amber')
+
+    rerender(<VoteCard onCall={vi.fn()} vote={asConsensus('unanimous')} />)
+    expect(screen.getByTestId('command-vote-consensus').className).toContain('emerald')
+
+    rerender(<VoteCard onCall={vi.fn()} vote={asConsensus('waiting')} />)
+    expect(screen.getByTestId('command-vote-consensus').className).toContain('text-(--ui-text-secondary)')
+    expect(screen.getByTestId('command-vote-consensus').textContent).toBe('Waiting')
+  })
+
+  it('names who is still missing in the footer while the vote is open', () => {
+    render(<VoteCard onCall={vi.fn()} vote={CARD_VOTE} />)
+
+    expect(screen.getByTestId('command-vote-missing').textContent).toBe('waiting on art')
+    expect(screen.queryByTestId('command-vote-decided')).toBeNull()
+  })
+
+  it('styles the called option emerald and bold, and shows the decided marker', () => {
+    const called: VoteTally = {
+      ...CARD_VOTE,
+      status: 'decided',
+      decided: 'ship',
+      consensus: 'unanimous',
+      missing: []
+    }
+    render(<VoteCard onCall={vi.fn()} vote={called} />)
+
+    const options = screen.getAllByTestId('command-vote-option')
+    expect(options[0].querySelector('span')?.className).toContain('font-semibold')
+    expect(options[0].querySelector('span')?.className).toContain('emerald')
+    expect(options[1].querySelector('span')?.className).not.toContain('emerald')
+    // A decided card is read-only: no Call it buttons remain.
+    expect(screen.queryByTestId('command-vote-call')).toBeNull()
+    expect(screen.getByTestId('command-vote-decided').textContent).toBe('Decided: ship')
+  })
+
+  it('anchors the card under the message that asked', () => {
+    render(<VoteCard onCall={vi.fn()} vote={CARD_VOTE} />)
+
+    expect(screen.getByTestId('command-vote-card').getAttribute('data-message-id')).toBe('41')
+  })
+
+  it('speaks the active locale (ja), and zh-Hant carries its own copy', () => {
+    translateMock.mockImplementation(tFor('ja'))
+    const { unmount } = render(<VoteCard onCall={vi.fn()} vote={CARD_VOTE} />)
+
+    expect(screen.getByTestId('command-vote-card').textContent).toContain('チーム投票')
+    expect(screen.getByTestId('command-vote-missing').textContent).toBe('art が未投票')
+    expect(screen.getAllByTestId('command-vote-call')[0].textContent).toBe('決定する')
+    unmount()
+
+    translateMock.mockImplementation(tFor('zh-hant'))
+    render(<VoteCard onCall={vi.fn()} vote={CARD_VOTE} />)
+    expect(screen.getByTestId('command-vote-card').textContent).toContain('團隊投票')
+    expect(screen.getByTestId('command-vote-missing').textContent).toBe('art 還沒投')
+    expect(screen.getAllByTestId('command-vote-call')[0].textContent).toBe('拍板')
   })
 })

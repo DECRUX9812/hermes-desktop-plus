@@ -34,6 +34,13 @@ from .store import (
     CommandError,
     CommandNotFound,
     CommandStore,
+    DECIDED,
+    decide_line,
+    decided_line,
+    is_pass_text,
+    parse_decision_line,
+    pick_of,
+    vote_line,
 )
 
 # Must mirror the defaults declared in plugin.yaml's config_schema (the manifest
@@ -212,21 +219,121 @@ def pins(room: str) -> list[dict[str, Any]]:
 # ── consensus votes ──────────────────────────────────────────────────────────────────────
 
 
-def vote_create(room: str, question: str, options: list[str], *, quorum: int | None = None) -> dict[str, Any]:
-    return _store().vote_create(
-        room, question, options, quorum=int(quorum if quorum is not None else _knob("consensus_quorum")))
+def vote_create(room: str, question: str, options: list[str], *, quorum: int | None = None,
+                asked: list[str] | None = None) -> dict[str, Any]:
+    """Open a vote. When group-rooms is live the vote is born from the room:
+    the decide line is posted into the log (so the team sees the ask and the
+    derivation reads the vote back from that thread), and the asked roster is
+    the room's seats unless the caller named one. Without the integration the
+    caller's explicit ``asked`` list stands, else the vote is measured against
+    the quorum count."""
+    store = _store()
+    roster = [str(name) for name in (asked or [])]
+    source, message_id, thread_id = "", None, None
+    gr = _group_rooms()
+    if gr is not None:
+        if not roster:
+            roster = [seat["bot"] for seat in _room_state(room)["seats"]]
+        try:
+            posted = gr.post_message(room, gr.USER, decide_line(question, options))
+            source = f"group-rooms:message:{posted['id']}"
+            message_id = posted["id"]
+            thread_id = posted.get("thread_id")
+        except Exception:
+            logger.debug("command-room: could not post the decide line into %r", room)
+    return store.vote_create(
+        room, question, options, quorum=int(quorum if quorum is not None else _knob("consensus_quorum")),
+        asked=roster, source=source, message_id=message_id, thread_id=thread_id,
+    )
 
 
 def vote_cast(room: str, vote_id: int, voter: str, option: str) -> dict[str, Any]:
     return _store().vote_cast(room, vote_id, voter, option)
 
 
+def vote_call(room: str, vote_id: int, option: str) -> dict[str, Any]:
+    """The CEO's call — a separate act from voting, and the only one that
+    settles: the decision is recorded AND the `decided: <option>` line is
+    written into the room log (group-rooms), so the call outlives the session
+    and a hand-typed `decided:` parses the same. Owner-only by construction:
+    this surface is the CEO's own, and the card's option click lands here,
+    never in vote.cast."""
+    vote = _store().vote_call(room, vote_id, option)
+    gr = _group_rooms()
+    if gr is not None:
+        try:
+            gr.post_message(room, gr.USER, decided_line(option), thread_id=vote.get("thread_id"))
+        except Exception:
+            logger.debug("command-room: could not write the decided line into %r", room)
+    return vote
+
+
+def sync_votes(room: str) -> list[dict[str, Any]]:
+    """Derive the room's votes from its conversation (the fork's deriveRoomVotes):
+    each `@everyone decide:` line in the log opens a vote with the room's seats
+    as the asked roster; every later same-thread reply that names an option is a
+    ballot — the `vote: X` protocol word or plain words, longest label first —
+    pass texts never count, and the last pick wins; a user `decided: X` line
+    calls it. Pure over the log: replaying never duplicates a vote (votes dedup
+    on the line's message id) nor flips a settled call (a second call is
+    refused and ignored)."""
+    store = _store()
+    gr = _group_rooms()
+    if gr is None:
+        return store.votes(room)
+    state = _room_state(room)
+    messages = state["messages"]
+    roster = [seat["bot"] for seat in state["seats"]]
+    quorum = int(_knob("consensus_quorum"))
+    opened: list[tuple[dict[str, Any], list[str]]] = []
+    for message in messages:
+        parsed = parse_decision_line(str(message.get("text") or ""))
+        if not parsed:
+            continue
+        vote = store.vote_create(
+            room, parsed["question"], parsed["options"], quorum=quorum, asked=roster,
+            source=f"group-rooms:message:{message['id']}", message_id=message["id"],
+            thread_id=message.get("thread_id"),
+        )
+        opened.append((vote, parsed["options"]))
+    for vote, options in opened:
+        anchor = int(vote.get("message_id") or 0)
+        thread_id = vote.get("thread_id")
+        for later in messages:
+            if int(later["id"]) <= anchor or later.get("thread_id") != thread_id:
+                continue
+            text = str(later.get("text") or "").strip()
+            sender = str(later.get("sender") or "")
+            if not text or not sender:
+                continue
+            if sender == gr.USER:
+                # The user calling it: the card's button, or the same words by hand.
+                match = DECIDED.search(text)
+                called = pick_of(match.group(1), options) if match else ""
+                if called:
+                    try:
+                        store.vote_call(room, vote["id"], called)
+                    except CommandError:
+                        pass  # already decided: the first call in the log stands
+                continue
+            if is_pass_text(text):
+                continue
+            pick = pick_of(text, options)
+            if pick:
+                try:
+                    store.vote_cast(room, vote["id"], sender, pick)
+                except CommandError:
+                    pass  # off-ballot or post-call noise; the log replay stays best effort
+    return store.votes(room)
+
+
 def vote_tally(room: str, vote_id: int) -> dict[str, Any]:
+    sync_votes(room)
     return _store().vote_tally(vote_id, room=room)
 
 
 def votes(room: str) -> list[dict[str, Any]]:
-    return _store().votes(room)
+    return sync_votes(room)
 
 
 # ── seat budgets ─────────────────────────────────────────────────────────────────────────
@@ -499,5 +606,5 @@ __all__ = [
     "alerts", "board", "brief", "budget_set", "budget_spend", "budget_status", "catchup", "close",
     "config", "escalation_ack", "escalation_create", "escalation_list", "escalation_snooze",
     "moved_threads", "pin_add", "pin_remove", "pins", "recap", "register", "search",
-    "sync_room", "vote_cast", "vote_create", "vote_tally", "votes",
+    "sync_room", "sync_votes", "vote_call", "vote_cast", "vote_create", "vote_tally", "votes",
 ]

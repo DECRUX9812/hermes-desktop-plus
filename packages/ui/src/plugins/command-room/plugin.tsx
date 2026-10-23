@@ -22,6 +22,7 @@ import {
 } from '@hermes/plugin-sdk'
 
 import { CommandRoom } from './room'
+import { COMMAND_ROOM_LOCALES } from './i18n'
 
 const plugin: HermesPlugin = {
   id: 'command-room',
@@ -29,6 +30,7 @@ const plugin: HermesPlugin = {
   description: 'Escalations, the CEO board, consensus votes, the 24h brief and seat budgets.',
   defaultEnabled: true,
   register(ctx) {
+    ctx.i18n.register(COMMAND_ROOM_LOCALES)
     ctx.registerMany([
       {
         id: 'page',

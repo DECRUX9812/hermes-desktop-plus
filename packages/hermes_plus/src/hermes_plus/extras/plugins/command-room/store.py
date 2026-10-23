@@ -17,6 +17,7 @@ stays testable and host-agnostic.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -56,6 +57,10 @@ CREATE TABLE IF NOT EXISTS votes (
     question TEXT NOT NULL,
     options TEXT NOT NULL,
     quorum INTEGER NOT NULL,
+    asked TEXT NOT NULL DEFAULT '[]',
+    source TEXT NOT NULL DEFAULT '',
+    message_id INTEGER,
+    thread_id INTEGER,
     status TEXT NOT NULL DEFAULT 'open',
     decided TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
@@ -99,6 +104,85 @@ CREATE TABLE IF NOT EXISTS thread_seen (
 """
 
 
+# ── the room's decision protocol (ported from the fork's group-room-votes.ts) ───
+# A decision is one line anyone writes in the room:
+#
+#     @everyone decide: ship the rewrite or keep the old one? · options: ship / keep
+#
+# Members answer in that thread — either the protocol word ("vote: ship") or
+# plain words naming an option — and the user records the outcome with a
+# "decided: <option>" line (the card's Call it button, or the same words by
+# hand). Protocol words are never translated.
+
+DECIDE = re.compile(r"(?:^|\s)@everyone\s+decide\s*:\s*(.+)", re.IGNORECASE)
+FIELD_SPLIT = re.compile(r"\s*[·|;]\s*")
+OPTIONS_FIELD = re.compile(r"^options?\s*:\s*", re.IGNORECASE)
+VOTE = re.compile(r"\b(?:vote|pick|voting)\s*:\s*(.+)$", re.IGNORECASE)
+# The user recording the outcome, in their own words or the card's.
+DECIDED = re.compile(r"(?:^|\s)(?:@everyone\s+)?decide[sd]?\s*:\s*(.+)", re.IGNORECASE)
+PASS_TEXT = re.compile(r"^\(?\s*pass\s*\)?\.?$", re.IGNORECASE)
+
+
+def split_options(text: str) -> list[str]:
+    """Option labels split on " / ", " | " or " · " — the template's own shapes."""
+    return [part.strip() for part in re.split(r"\s*(?:/|\||·)\s*", str(text or "")) if part.strip()]
+
+
+def names_option(text: str, option: str) -> bool:
+    """An option label matched as a word."""
+    if not option:
+        return False
+    return re.search(rf"(^|[^\w]){re.escape(option)}([^\w]|$)", str(text or ""), re.IGNORECASE) is not None
+
+
+def parse_decision_line(text: str) -> dict[str, Any] | None:
+    """One "decide:" line → its question and options, or None when it isn't one."""
+    for line in str(text or "").split("\n"):
+        match = DECIDE.search(line)
+        if not match:
+            continue
+        parts = [part.strip() for part in FIELD_SPLIT.split(match.group(1))]
+        options_part = next((part for part in parts if OPTIONS_FIELD.match(part)), None)
+        question = " · ".join(part for part in parts if not OPTIONS_FIELD.match(part)).strip()
+        options = split_options(OPTIONS_FIELD.sub("", options_part, count=1)) if options_part else []
+        if question:
+            return {"question": question, "options": options}
+    return None
+
+
+def pick_of(text: str, options: list[str]) -> str:
+    """The option a reply picks, or '' when it names none.
+
+    Longest label first: "ship now" must not lose to its own prefix."""
+    match = VOTE.search(str(text or ""))
+    said = match.group(1).strip() if match else str(text or "").strip()
+    for option in sorted((str(option) for option in options), key=len, reverse=True):
+        if names_option(said, option):
+            return option
+    return ""
+
+
+def is_pass_text(text: str) -> bool:
+    '''"(pass)" never counts as a pick; neither does silence.'''
+    trimmed = str(text or "").strip()
+    return not trimmed or PASS_TEXT.match(trimmed) is not None
+
+
+def decide_line(question: str, options: list[str]) -> str:
+    """A decision line in the exact shape parse_decision_line reads back."""
+    return f"@everyone decide: {question} · options: {' / '.join(options)}"
+
+
+def decided_line(option: str) -> str:
+    """Recording the outcome — the card's Call it button, and the words that
+    read the same when someone types them by hand."""
+    return f"decided: {option}"
+
+
+def vote_line(option: str) -> str:
+    return f"vote: {option}"
+
+
 class CommandError(Exception):
     """Caller-visible command-room failure (bad kind, unknown vote, overspend, ...)."""
 
@@ -127,6 +211,17 @@ class CommandStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
+        # Databases written before the asked roster / room anchor existed carry on:
+        # the new columns are additive, defaults match a vote with no roster.
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(votes)")}
+        for column, decl in (
+            ("asked", "TEXT NOT NULL DEFAULT '[]'"),
+            ("source", "TEXT NOT NULL DEFAULT ''"),
+            ("message_id", "INTEGER"),
+            ("thread_id", "INTEGER"),
+        ):
+            if column not in columns:
+                self._conn.execute(f"ALTER TABLE votes ADD COLUMN {column} {decl}")
         self._conn.commit()
 
     def close(self) -> None:
@@ -268,7 +363,14 @@ class CommandStore:
 
     # ── consensus votes ──────────────────────────────────────────────────────────────────
 
-    def vote_create(self, room: str, question: str, options: list[str], *, quorum: int) -> dict[str, Any]:
+    def vote_create(
+        self, room: str, question: str, options: list[str], *, quorum: int, asked: list[str] | None = None,
+        source: str = "", message_id: int | None = None, thread_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Open a vote. ``asked`` is the roster the consensus is measured
+        against (the room's seats, or whoever was explicitly asked); ``source``
+        dedups a vote derived from a room-log line, and ``message_id`` anchors
+        the card under the message that asked."""
         question = str(question or "").strip()
         if not question:
             raise CommandError("vote question must not be empty")
@@ -281,12 +383,23 @@ class CommandStore:
         quorum = int(quorum)
         if quorum < 1:
             raise CommandError("quorum must be at least 1")
+        roster = [str(name) for name in (asked or []) if str(name)]
+        deduped = False
         with self._lock, self._conn:
-            cursor = self._conn.execute(
-                "INSERT INTO votes (room, question, options, quorum, created_at) VALUES (?, ?, ?, ?, ?)",
-                (str(room), question, json.dumps(options), quorum, _now()),
-            )
-            vote_id = cursor.lastrowid
+            if source:
+                existing = self._conn.execute(
+                    "SELECT * FROM votes WHERE source = ?", (str(source),)).fetchone()
+                if existing is not None:
+                    vote_id = int(existing["id"])
+                    deduped = True
+            if not deduped:
+                cursor = self._conn.execute(
+                    "INSERT INTO votes (room, question, options, quorum, asked, source, message_id,"
+                    " thread_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (str(room), question, json.dumps(options), quorum, json.dumps(roster), str(source or ""),
+                     message_id, thread_id, _now()),
+                )
+                vote_id = cursor.lastrowid
         return self.vote_tally(vote_id)
 
     def _vote_row(self, conn: sqlite3.Connection, room: str, vote_id: int) -> sqlite3.Row:
@@ -316,10 +429,30 @@ class CommandStore:
             )
         return self.vote_tally(vote_id, room=room)
 
+    def vote_call(self, room: str, vote_id: int, option: str) -> dict[str, Any]:
+        """The owner's call — the ONLY way a vote settles. Unanimity lights the
+        chip; it never decides. (The room-log write-back of the `decided:` line
+        lives in the plugin layer, so a hand-typed line doesn't echo twice.)"""
+        option = str(option or "").strip()
+        with self._lock, self._conn:
+            row = self._vote_row(self._conn, room, vote_id)
+            if row["status"] != "open":
+                raise CommandError(f"vote {vote_id} is already decided")
+            options = json.loads(row["options"])
+            if option not in options:
+                raise CommandError(f"option {option!r} is not on this ballot; expected one of {', '.join(options)}")
+            self._conn.execute(
+                "UPDATE votes SET status = 'decided', decided = ?, decided_at = ? WHERE id = ?",
+                (option, _now(), int(vote_id)),
+            )
+        return self.vote_tally(vote_id, room=room)
+
     def vote_tally(self, vote_id: int, *, room: str | None = None) -> dict[str, Any]:
-        """Where the team stands: per-option counts, the fork's consensus word
-        (waiting / unanimous / majority / split), and the quorum check. A
-        unanimous vote that meets quorum settles itself."""
+        """Where the team stands: per-option counts, voter ballots, and the
+        fork's consensus word — measured against everyone ASKED, not just the
+        ballots cast, so a 2-of-5 lead never reads as a team that has decided.
+        Unanimous needs every asked voice; nothing settles here (a vote is
+        decided only by the owner's ``vote_call``)."""
         with self._lock:
             row = self._vote_row(self._conn, room, vote_id)
             ballots = [
@@ -329,36 +462,40 @@ class CommandStore:
         counts = {option: 0 for option in json.loads(row["options"])}
         for ballot in ballots:
             counts[ballot["option"]] = counts.get(ballot["option"], 0) + 1
-        voters = len(ballots)
-        quorum_met = voters >= row["quorum"]
+        voters = {ballot["voter"] for ballot in ballots}
+        asked = [str(name) for name in json.loads(row["asked"] or "[]")]
+        # The card's "waiting on": asked names that have not picked yet.
+        missing = [name for name in asked if name not in voters]
+        # Without a roster the vote is measured against the quorum count instead
+        # (the config knob keeps its meaning when no room roster is known).
+        asked_n = len(asked) if asked else max(int(row["quorum"]), 1)
         picks = [ballot["option"] for ballot in ballots]
         top = max(counts.values()) if picks else 0
-        leaders = [option for option, n in counts.items() if n == top and n > 0]
+        leaders = sum(1 for n in counts.values() if n == top and n > 0)
         if not picks:
             consensus = "waiting"
-        elif quorum_met and len(leaders) == 1 and top == voters:
-            consensus = "unanimous"
-        elif top * 2 > voters:
-            consensus = "majority"
         else:
-            consensus = "split"
+            # Nobody left to ask and one option carries every pick.
+            if not missing and len(set(picks)) == 1 and len(voters) >= asked_n:
+                consensus = "unanimous"
+            elif top * 2 > asked_n:
+                consensus = "majority"
+            # A tie for the lead, or no option past a quarter of the room.
+            elif len(set(picks)) > 1 and leaders > 1:
+                consensus = "split"
+            else:
+                consensus = "majority"
 
         out = self._vote_dict(row)
+        out["asked"] = asked
         out.update({
             "counts": counts,
-            "voters": voters,
-            "quorum_met": quorum_met,
+            "voters": len(ballots),
+            "quorum_met": len(ballots) >= int(row["quorum"]),
+            "missing": missing,
             "consensus": consensus,
             "ballots": [{"voter": b["voter"], "option": b["option"]} for b in ballots],
         })
-        if consensus == "unanimous" and row["status"] == "open":
-            with self._lock, self._conn:
-                self._conn.execute(
-                    "UPDATE votes SET status = 'decided', decided = ?, decided_at = ? WHERE id = ?",
-                    (leaders[0], _now(), int(vote_id)),
-                )
-            out["status"] = "decided"
-            out["decided"] = leaders[0]
         return out
 
     def votes(self, room: str) -> list[dict[str, Any]]:

@@ -1,7 +1,8 @@
 """Command Room plugin proof: the plugin loads through register() with a fake ctx,
 honours its config_schema defaults (and explicit settings), and runs the CEO
 surface end to end over the registered RPC — escalations into the board, a
-consensus vote through its quorum, a blocked overspend with its alert, pins,
+consensus vote measured against everyone asked (chat-born ballots included) that
+settles only on the owner's call, a blocked overspend with its alert, pins,
 snoozes, search, the 24h brief window, and which threads moved (synced from the
 registered group-rooms plugin's handoffs, not duplicated)."""
 
@@ -92,13 +93,14 @@ def test_manifest_declares_the_command_knobs(plugin) -> None:
 
 def test_register_lands_the_plugin_methods(plugin, wired) -> None:
     names = [name for name in methods() if name.startswith("plugin.command_room.")]
-    assert len(names) == 23
+    assert len(names) == 24
     for surface in (
         "plugin.command_room.escalations.create", "plugin.command_room.escalations.ack",
         "plugin.command_room.escalations.list", "plugin.command_room.escalations.snooze",
         "plugin.command_room.sync", "plugin.command_room.board.get",
         "plugin.command_room.pin.add", "plugin.command_room.pin.remove", "plugin.command_room.pins.list",
-        "plugin.command_room.vote.create", "plugin.command_room.vote.cast", "plugin.command_room.vote.tally",
+        "plugin.command_room.vote.create", "plugin.command_room.vote.call", "plugin.command_room.vote.cast",
+        "plugin.command_room.vote.tally",
         "plugin.command_room.votes.list", "plugin.command_room.budget.set", "plugin.command_room.budget.spend",
         "plugin.command_room.budget.status", "plugin.command_room.alerts.list", "plugin.command_room.search",
         "plugin.command_room.catchup", "plugin.command_room.recap", "plugin.command_room.brief",
@@ -118,7 +120,8 @@ def test_schema_defaults_are_honoured(plugin, tmp_path: Path) -> None:
             "brief_window_hours": 24, "default_seat_budget": 100,
             "escalation_threshold_minutes": 20, "consensus_quorum": 2, "os_alerts_enabled": True,
         }
-        # quorum default 2: one ballot leads but can't settle, two agree.
+        # quorum stands in for the roster when none is known: one ballot leads
+        # but the second voice is still asked for.
         vote = plugin.vote_create("ops", "ship or hold?", ["ship", "hold"])
         assert vote["consensus"] == "waiting"
         vote = plugin.vote_cast("ops", vote["id"], "atlas", "ship")
@@ -140,14 +143,18 @@ def test_settings_override_schema_defaults(plugin, tmp_path: Path) -> None:
         assert config["brief_window_hours"] == 6 and config["consensus_quorum"] == 3
         assert config["default_seat_budget"] == 5
 
-        # quorum 3: two agreeing ballots can't settle it yet...
+        # quorum 3 stands in for the roster when none is known: two agreeing
+        # ballots lead, but the third voice is still asked for...
         vote = plugin.vote_create("ops", "merge now?", ["yes", "no"])
         for voter in ("atlas", "vex"):
             vote = plugin.vote_cast("ops", vote["id"], voter, "yes")
             assert vote["status"] == "open" and vote["quorum_met"] is False
-        # ...and the third unanimous ballot does.
+        # ...and the third unanimous ballot lights the chip but does NOT settle:
+        # a vote is decided only by the owner's call.
         vote = plugin.vote_cast("ops", vote["id"], "third", "yes")
-        assert vote["status"] == "decided" and vote["decided"] == "yes" and vote["consensus"] == "unanimous"
+        assert vote["status"] == "open" and vote["consensus"] == "unanimous"
+        vote = plugin.vote_call("ops", vote["id"], "yes")
+        assert vote["status"] == "decided" and vote["decided"] == "yes"
 
         # budget 5 default: 5 fits, 1 more is blocked.
         plugin.budget_spend("ops", "vex", 5)
@@ -185,8 +192,11 @@ async def test_rpc_escalation_reaches_the_board(plugin, wired) -> None:
 
 async def test_rpc_vote_quorum_tally(plugin, wired) -> None:
     vote = (await _rpc(wired, "plugin.command_room.vote.create",
-                       {"room": "ops", "question": "ship friday?", "options": ["ship", "wait"]}))["result"]["vote"]
-    assert vote["quorum"] == 2  # consensus_quorum default
+                       {"room": "ops", "question": "ship friday?", "options": ["ship", "wait"],
+                        "asked": ["atlas", "vex", "art"]}))["result"]["vote"]
+    assert vote["quorum"] == 2  # consensus_quorum default (roster overrides the measure)
+    assert vote["asked"] == ["atlas", "vex", "art"]
+    assert vote["missing"] == ["atlas", "vex", "art"] and vote["consensus"] == "waiting"
 
     vote = (await _rpc(wired, "plugin.command_room.vote.cast",
                        {"room": "ops", "vote_id": vote["id"], "voter": "atlas", "option": "ship"}))["result"]["vote"]
@@ -208,10 +218,141 @@ async def test_rpc_vote_quorum_tally(plugin, wired) -> None:
     assert vote["counts"] == {"ship": 1, "wait": 1}
     vote = (await _rpc(wired, "plugin.command_room.vote.cast",
                        {"room": "ops", "vote_id": vote["id"], "voter": "vex", "option": "ship"}))["result"]["vote"]
-    assert vote["status"] == "decided" and vote["decided"] == "ship"
+    # 2 of 3 asked, one still out: a majority, and STILL open — unanimity never
+    # decides on its own.
+    assert vote["consensus"] == "majority" and vote["status"] == "open"
+    assert vote["missing"] == ["art"]
+
+    vote = (await _rpc(wired, "plugin.command_room.vote.cast",
+                       {"room": "ops", "vote_id": vote["id"], "voter": "art", "option": "ship"}))["result"]["vote"]
+    assert vote["consensus"] == "unanimous" and vote["status"] == "open" and vote["missing"] == []
+
+    # The owner's call is the only act that settles it — even against the tally.
+    vote = (await _rpc(wired, "plugin.command_room.vote.call",
+                       {"room": "ops", "vote_id": vote["id"], "option": "wait"}))["result"]["vote"]
+    assert vote["status"] == "decided" and vote["decided"] == "wait"
+
+    # The first call stands; calling it twice is refused.
+    reply = await _rpc(wired, "plugin.command_room.vote.call",
+                       {"room": "ops", "vote_id": vote["id"], "option": "ship"})
+    assert reply["error"]["code"] == COMMAND_REFUSED
+
     tally = (await _rpc(wired, "plugin.command_room.vote.tally",
                         {"room": "ops", "vote_id": vote["id"]}))["result"]["vote"]
-    assert tally["voters"] == 2 and tally["quorum_met"] is True
+    assert tally["voters"] == 3 and tally["quorum_met"] is True and tally["decided"] == "wait"
+
+
+def test_decision_protocol_round_trip(plugin) -> None:
+    """The decide-line emitter and parser round-trip, and the fork's ballot
+    word-matching rules came over whole (longest label first, pass texts)."""
+    line = plugin.decide_line("ship the rewrite or keep the old one?", ["ship", "keep"])
+    assert plugin.parse_decision_line(line) == {
+        "question": "ship the rewrite or keep the old one?", "options": ["ship", "keep"]}
+    # Fields split on · | ; and the options field is spelled either way.
+    assert plugin.parse_decision_line("@everyone decide: tea? · options: green / black") == {
+        "question": "tea?", "options": ["green", "black"]}
+    assert plugin.parse_decision_line("@everyone decide: tea? | option: green / black") == {
+        "question": "tea?", "options": ["green", "black"]}
+
+    # Anything that is not a decide line parses to None.
+    assert plugin.parse_decision_line("@coder handoff: unify replies · due: 30m") is None
+    assert plugin.parse_decision_line("decide later, tired") is None
+    assert plugin.parse_decision_line("") is None
+
+    # Pass texts never count as a pick; silence neither.
+    assert plugin.is_pass_text("(pass)") and plugin.is_pass_text("Pass.") and plugin.is_pass_text("")
+    assert not plugin.is_pass_text("pass the salt")
+
+    # Longest label first, protocol word or plain words, else ''.
+    assert plugin.pick_of("ship now — waiting buys us nothing", ["ship", "ship now"]) == "ship now"
+    assert plugin.pick_of("voting: hold", ["ship", "hold"]) == "hold"
+    assert plugin.pick_of("nothing to see here", ["ship", "hold"]) == ""
+
+
+async def test_votes_are_born_from_room_chat_and_decided_only_by_the_owner(plugin, tmp_path: Path) -> None:
+    """The fork's room semantics, end to end over the group-rooms integration:
+    votes open from `@everyone decide:` lines (asked = the room's seats, card
+    anchored to the asking message), bots ballot by talking, and nothing — not
+    even unanimity — settles until the owner calls it, which writes the
+    `decided:` line into the room log for a hand-typed line to parse the same."""
+    group_rooms = _load_plugin("group_rooms_plugin", BASE / "group-rooms")
+    gr_ctx = FakeCtx()
+    gr_ctx.data_dir = tmp_path / "gr"
+    group_rooms.register(gr_ctx)
+    try:
+        group_rooms.create_room("ops")
+        group_rooms.add_seat("ops", "atlas")
+        group_rooms.add_seat("ops", "vex")
+        thread = group_rooms.start_thread("ops", title="the rewrite")
+        ask = group_rooms.post_message(
+            "ops", "user",
+            plugin.decide_line("ship the rewrite or keep the old one?", ["ship", "keep"]),
+            thread_id=thread["id"])
+
+        ctx = FakeCtx()
+        ctx.data_dir = tmp_path / "cr"
+        plugin.register(ctx)
+        try:
+            votes = (await _rpc(ctx, "plugin.command_room.votes.list", {"room": "ops"}))["result"]["votes"]
+            assert len(votes) == 1
+            vote = votes[0]
+            assert vote["question"] == "ship the rewrite or keep the old one?"
+            assert vote["options"] == ["ship", "keep"]
+            assert vote["asked"] == ["atlas", "vex"]  # the room's seats were asked
+            assert vote["message_id"] == ask["id"]  # anchored under the line that asked
+            assert vote["missing"] == ["atlas", "vex"] and vote["consensus"] == "waiting"
+
+            # Bots vote by talking: plain words count, a pass never does.
+            group_rooms.post_message("ops", "atlas", "ship it — the rewrite is cleaner", thread_id=thread["id"])
+            group_rooms.post_message("ops", "vex", "(pass)", thread_id=thread["id"])
+            votes = (await _rpc(ctx, "plugin.command_room.votes.list", {"room": "ops"}))["result"]["votes"]
+            vote = votes[0]
+            assert vote["ballots"] == [{"voter": "atlas", "option": "ship"}]
+            assert vote["missing"] == ["vex"] and vote["consensus"] == "majority" and vote["status"] == "open"
+
+            # A second decide line in the same thread opens its own vote.
+            ask2 = group_rooms.post_message(
+                "ops", "user",
+                plugin.decide_line("which rollout?", ["ship", "ship now", "hold"]), thread_id=thread["id"])
+            # Longest label first: "ship now" never votes for "ship".
+            group_rooms.post_message("ops", "atlas", "ship now — waiting buys us nothing", thread_id=thread["id"])
+            votes = (await _rpc(ctx, "plugin.command_room.votes.list", {"room": "ops"}))["result"]["votes"]
+            vote2 = next(row for row in votes if row["message_id"] == ask2["id"])
+            assert vote2["ballots"] == [{"voter": "atlas", "option": "ship now"}]
+
+            # The protocol word counts too, and the last pick wins.
+            group_rooms.post_message("ops", "vex", plugin.vote_line("ship"), thread_id=thread["id"])
+            group_rooms.post_message("ops", "vex", "hold — the old one is battle tested", thread_id=thread["id"])
+            votes = (await _rpc(ctx, "plugin.command_room.votes.list", {"room": "ops"}))["result"]["votes"]
+            vote2 = next(row for row in votes if row["message_id"] == ask2["id"])
+            assert {ballot["voter"]: ballot["option"] for ballot in vote2["ballots"]} == {
+                "atlas": "ship now", "vex": "hold"}
+
+            # Unanimous chat still does NOT settle — the owner's word is missing.
+            group_rooms.post_message("ops", "atlas", "hold, fine", thread_id=thread["id"])
+            votes = (await _rpc(ctx, "plugin.command_room.votes.list", {"room": "ops"}))["result"]["votes"]
+            vote2 = next(row for row in votes if row["message_id"] == ask2["id"])
+            assert vote2["consensus"] == "unanimous" and vote2["status"] == "open"
+
+            # The owner calls it over the RPC: recorded AND written into the room log.
+            called = (await _rpc(ctx, "plugin.command_room.vote.call",
+                                 {"room": "ops", "vote_id": vote2["id"], "option": "hold"}))["result"]["vote"]
+            assert called["status"] == "decided" and called["decided"] == "hold"
+            log = [message["text"] for message in group_rooms.room_state("ops")["messages"]
+                   if message["thread_id"] == thread["id"]]
+            assert "decided: hold" in log
+
+            # A hand-typed decided line parses the same — here it settles the first vote.
+            group_rooms.post_message("ops", "user", "Decided: ship, the risk is worth it", thread_id=thread["id"])
+            votes = (await _rpc(ctx, "plugin.command_room.votes.list", {"room": "ops"}))["result"]["votes"]
+            vote = next(row for row in votes if row["message_id"] == ask["id"])
+            assert vote["status"] == "decided" and vote["decided"] == "ship"
+        finally:
+            plugin.close()
+    finally:
+        group_rooms.close()
+        assert unregister_plugin_methods("plugin.group_rooms.") == 0
+        assert unregister_plugin_methods("plugin.command_room.") == 0
 
 
 async def test_rpc_budget_overspend_blocked_and_alerted(plugin, wired) -> None:

@@ -70,6 +70,15 @@ def _options(params: dict[str, Any]) -> list[str]:
     return [str(option) for option in raw]
 
 
+def _names(params: dict[str, Any], key: str) -> list[str]:
+    raw = params.get(key)
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise RpcFault(INVALID_PARAMS, f"{key} must be a list of names")
+    return [str(name) for name in raw]
+
+
 def _plugin() -> Any:
     """The loaded plugin module (this package's ``__init__``), late-bound so the
     handlers always read the CURRENT registration's knobs and store — the module
@@ -165,6 +174,17 @@ def vote_create(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
         _required(params, "question"),
         _options(params),
         quorum=_optional_int(params, "quorum"),
+        asked=_names(params, "asked"),
+    )}
+
+
+def vote_call(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+    """The owner's call — a vote settles ONLY here, never on unanimity."""
+    return {"vote": _domain(
+        _plugin().vote_call,
+        _required(params, "room"),
+        _int(params, "vote_id"),
+        _required(params, "option"),
     )}
 
 
@@ -257,6 +277,7 @@ _HANDLERS: dict[str, Handler] = {
     "pin.remove": pin_remove,
     "pins.list": pins_list,
     "vote.create": vote_create,
+    "vote.call": vote_call,
     "vote.cast": vote_cast,
     "vote.tally": vote_tally,
     "votes.list": votes_list,

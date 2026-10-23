@@ -27,7 +27,7 @@ config_schema:
   consensus_quorum:
     type: int
     label: "Consensus quorum"
-    description: "Distinct voters a vote needs before it can settle (the fork's consensus card counts everyone asked)."
+    description: "Fallback asked-count for votes with no room roster (no group-rooms integration and no explicit asked list). Consensus is always measured against everyone asked, and a vote settles only by the owner's call."
     default: 2
   os_alerts_enabled:
     type: bool

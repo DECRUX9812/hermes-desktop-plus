@@ -10,6 +10,8 @@
 import { host } from '@hermes/plugin-sdk'
 import { useCallback, useEffect, useState } from 'react'
 
+import { useVoteCopy } from './i18n'
+
 export interface CommandRoomConfig {
   brief_window_hours: number
   default_seat_budget: number
@@ -51,12 +53,20 @@ export interface VoteTally {
   question: string
   options: string[]
   quorum: number
+  /** Everyone asked: the room's seats, or the explicit asked list. */
+  asked: string[]
+  /** The group-rooms message that asked — the card anchors under it. */
+  message_id: null | number
+  thread_id: null | number
   status: 'decided' | 'open'
   decided: string
   counts: Record<string, number>
   voters: number
   quorum_met: boolean
+  /** Asked names that have not picked yet — the card's "waiting on". */
+  missing: string[]
   consensus: 'majority' | 'split' | 'unanimous' | 'waiting'
+  ballots: Array<{ voter: string; option: string }>
 }
 
 export interface CatchUpLine {
@@ -179,8 +189,10 @@ export function useCommandRoom() {
       act(() => request('plugin.command_room.escalations.ack', { room, escalation_id: escalationId, note })),
     snooze: (escalationId: number, minutes = 60) =>
       act(() => request('plugin.command_room.escalations.snooze', { room, escalation_id: escalationId, minutes })),
-    castVote: (voteId: number, option: string) =>
-      act(() => request('plugin.command_room.vote.cast', { room, vote_id: voteId, voter: 'user', option }))
+    // Calling it is the owner's act, separate from any ballot: the decision is
+    // recorded AND the `decided: <option>` line lands in the room log.
+    callVote: (voteId: number, option: string) =>
+      act(() => request('plugin.command_room.vote.call', { room, vote_id: voteId, option }))
   }
 }
 
@@ -257,28 +269,109 @@ export function EscalationsList({ escalations, onAck, onSnooze }: {
   )
 }
 
-export function VoteCard({ vote, onCast }: { vote: VoteTally; onCast: (voteId: number, option: string) => void }) {
+/** Where the team stands, option by option — ported from the fork's VoteCard
+ *  (group-room-cards.tsx): a bar per option scaled to the top count, who is on
+ *  it, the consensus word with its own tone, and — while the decision is open —
+ *  the per-option "Call it" that records the owner's word in the room. */
+const VOTE_TONE: Record<VoteTally['consensus'], string> = {
+  majority: 'bg-(--ui-accent)/12 text-(--ui-accent)',
+  split: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  unanimous: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  waiting: 'bg-(--ui-bg-tertiary) text-(--ui-text-secondary)'
+}
+
+export function VoteCard({ vote, onCall }: { vote: VoteTally; onCall: (voteId: number, option: string) => void }) {
+  const v = useVoteCopy()
+  // The tallest bar sets the scale, so bars compare against each other.
+  const top = Math.max(0, ...Object.values(vote.counts))
+  const votersByOption = new Map<string, string[]>()
+
+  for (const ballot of vote.ballots) {
+    votersByOption.set(ballot.option, [...(votersByOption.get(ballot.option) ?? []), ballot.voter])
+  }
+
   return (
-    <div data-consensus={vote.consensus} data-testid="command-vote-card">
-      <span>{vote.question}</span>
-      <span> — {vote.status === 'decided' ? `decided: ${vote.decided}` : vote.consensus}</span>
-      <span>
-        {' '}(quorum {vote.quorum_met ? 'met' : 'waiting'}, {vote.voters} of {vote.quorum})
-      </span>
-      {vote.status === 'open' && (
-        <div role="group" aria-label={`Vote: ${vote.question}`}>
-          {vote.options.map(option => (
-            <button
-              data-testid="vote-option"
-              key={option}
-              onClick={() => onCast(vote.id, option)}
-              type="button"
-            >
-              {option} ({vote.counts[option] ?? 0})
-            </button>
-          ))}
-        </div>
-      )}
+    <div
+      className="overflow-hidden rounded-xl border border-(--ui-stroke-secondary)"
+      data-consensus={vote.consensus}
+      data-message-id={vote.message_id ?? undefined}
+      data-testid="command-vote-card"
+    >
+      <div className="flex flex-wrap items-center gap-2 border-b border-(--ui-stroke-secondary) bg-(--ui-bg-tertiary) px-3 py-1.5">
+        <span className="text-[0.75rem] font-semibold text-foreground">{v.vote.title}</span>
+        <span
+          className={`ml-auto rounded-full px-2 py-px text-[0.625rem] font-semibold ${VOTE_TONE[vote.consensus]}`}
+          data-testid="command-vote-consensus"
+        >
+          {v.vote.consensus[vote.consensus]}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5 px-3 py-2">
+        <span className="text-[0.8125rem] font-medium leading-snug text-foreground">{vote.question}</span>
+        {vote.options.map(option => {
+          const voters = votersByOption.get(option) ?? []
+          const isCalled = vote.status === 'decided' && vote.decided === option
+          const width = top ? Math.round(((vote.counts[option] ?? 0) / top) * 100) : 0
+
+          return (
+            <div className="flex items-center gap-2" data-option={option} data-testid="command-vote-option" key={option}>
+              <div className="relative min-w-0 flex-1 overflow-hidden rounded-md bg-(--ui-bg-tertiary)">
+                {/* The bar is the count, so a glance reads the shape of the
+                    room before any name is legible. */}
+                <div
+                  aria-hidden
+                  className={`absolute inset-y-0 left-0 h-full transition-[width] ${
+                    isCalled ? 'bg-emerald-500/35' : 'bg-(--ui-accent)/18'}`}
+                  data-testid="command-vote-bar"
+                  style={{ width: `${width}%` }}
+                />
+                <div className="relative flex flex-wrap items-center gap-x-2 px-2 py-1">
+                  <span
+                    className={`min-w-0 truncate text-[0.75rem] ${
+                      isCalled ? 'font-semibold text-emerald-700 dark:text-emerald-300' : 'text-foreground'}`}
+                  >
+                    {option}
+                  </span>
+                  {voters.length ? (
+                    <span className="truncate text-[0.625rem] text-(--ui-text-tertiary)">
+                      {v.vote.picked(voters.join(', '))}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              {/* Calling it is the user's alone — the card records their word
+                  in the room, it never records one on their behalf. */}
+              {vote.status === 'open' ? (
+                <button
+                  className="rounded-md border border-(--ui-stroke-secondary) px-2 py-1 text-[0.6875rem] font-medium text-foreground hover:bg-(--ui-bg-tertiary)"
+                  data-testid="command-vote-call"
+                  onClick={() => onCall(vote.id, option)}
+                  type="button"
+                >
+                  {v.vote.callIt}
+                </button>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-3 px-3 pb-2 text-[0.625rem] text-(--ui-text-quaternary)">
+        {vote.status === 'decided' ? (
+          <span
+            className="font-semibold text-emerald-700 dark:text-emerald-300"
+            data-testid="command-vote-decided"
+          >
+            {v.vote.decided(vote.decided)}
+          </span>
+        ) : (
+          <>
+            {vote.missing.length ? (
+              <span data-testid="command-vote-missing">{v.vote.missing(vote.missing.join(', '))}</span>
+            ) : null}
+            <span>{v.vote.callHint}</span>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -327,7 +420,7 @@ export function CommandRoom() {
       <section aria-label="Consensus votes" data-testid="command-room-votes">
         <h2>Votes</h2>
         {view.votes.length === 0 && <p>No open decisions.</p>}
-        {view.votes.map(vote => <VoteCard key={vote.id} onCast={view.castVote} vote={vote} />)}
+        {view.votes.map(vote => <VoteCard key={vote.id} onCall={view.callVote} vote={vote} />)}
       </section>
       {view.catchup && <CatchUpPanel catchup={view.catchup} />}
       {view.config && !view.config.os_alerts_enabled && (
