@@ -1,0 +1,41 @@
+name: vscode
+version: "1.0.0"
+requires_hermes: ">=0.22.0"
+description: "VS Code pane — the fork's Code pane (code-pane.ts + the Electron openVsCode preload) as a browser-capable plugin. The fork spawns the user's own VS Code and serves it on loopback from the Electron main process; the browser add-on has no preload and this plugin never spawns a process. The browser equivalent: a configured code-server/openvscode-server URL embedded beside the chat in a sandboxed iframe pointed at the session's workspace folder (?folder=...), plus a vscode://file deep-link fallback that hands the folder to the desktop's own VS Code when no server is configured. Workspace resolution: one folder per session — <workspace_root>/<session_id> when that directory exists, otherwise workspace_root itself (an empty root falls back to the profile home). Every folder, explicit or derived from a session id, is resolved and must stay under workspace_root; anything that escapes (.. traversal, symlinks, a session id shaped like a path) is rejected as invalid params — the plugin spawns no processes and reads nothing outside the fence."
+author: Hermes Desktop Plus contributors
+config_schema:
+  server_url:
+    type: str
+    label: "code-server URL"
+    description: "Base URL of a running code-server or openvscode-server (e.g. http://127.0.0.1:8080). Empty means no embed: the pane degrades to the 'Open in VS Code' deep-link fallback. The plugin never starts a server."
+    default: ""
+  workspace_root:
+    type: str
+    label: "Workspace root"
+    description: "The only folder tree the pane may open: per-session workspaces resolve to <workspace_root>/<session_id> when it exists, else the root itself. Empty falls back to the profile home."
+    default: ""
+  open_side:
+    type: str
+    label: "Pane side"
+    description: "Which side of the chat the pane docks on: right or left."
+    default: "right"
+  default_width:
+    type: int
+    label: "Pane width (px)"
+    description: "The pane's preferred width in pixels when it docks beside the chat."
+    default: 560
+  deep_link_enabled:
+    type: bool
+    label: "Open in VS Code fallback"
+    description: "Offer the vscode://file deep link that hands the workspace folder to the desktop's installed VS Code — the only door when no code-server URL is configured."
+    default: true
+  cli_pane_enabled:
+    type: bool
+    label: "Hermes CLI toggle"
+    description: "Show the Hermes CLI toggle beside the VS Code one in the pane header. The plugin SDK exposes no terminal host API, so the CLI view states where to find the host terminal instead of spawning one."
+    default: true
+  debug:
+    type: bool
+    label: "Debug logging"
+    description: "Verbose plugin logging to the Hermes log."
+    default: false
