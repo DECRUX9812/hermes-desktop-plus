@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hermes-plus"
-version = "0.1.2"
+version = "0.2.0"
 description = "Hermes Desktop Plus: the desktop/web app add-on for stock Hermes Agent"
 readme = "README.md"
 license = "MIT"

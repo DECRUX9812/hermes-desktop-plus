@@ -7,9 +7,8 @@
  * surface is gated on the plugin's own `thread_rail_enabled` config knob read
  * through the same RPC — no core UI or backend file is touched.
  *
- * On by default like the workboard: a nav row under Browse and a `/group-rooms`
- * route, nothing more. It never auto-opens, and Capabilities ▸ Plugins can
- * still switch it off.
+ * Opt-in: a nav row under Browse and a `/group-rooms` route, nothing more. It
+ * never auto-opens, and Capabilities ▸ Plugins can still switch it off.
  */
 
 import {
@@ -26,7 +25,7 @@ const plugin: HermesPlugin = {
   id: 'group-rooms',
   name: 'Group Rooms',
   description: 'Rooms with bot seats, threads and a shared composer — the Room 2.0 thread rail.',
-  defaultEnabled: true,
+  defaultEnabled: false,
   register(ctx) {
     ctx.registerMany([
       {

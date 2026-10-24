@@ -29,7 +29,7 @@ const plugin: HermesPlugin = {
   name: 'VS Code',
   description:
     'The Code pane: a code-server embed (or a vscode:// deep link) beside the chat, opened on the session workspace.',
-  defaultEnabled: true,
+  defaultEnabled: false,
   register(ctx) {
     ctx.registerMany([
       {

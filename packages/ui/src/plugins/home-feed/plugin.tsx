@@ -6,9 +6,8 @@
  * `plugin.home_feed.*` JSON-RPC methods the plugin's Python side registers
  * itself at register(ctx) time — no core UI or backend file is touched.
  *
- * On by default like the workboard: a nav row under Browse and a
- * `/home-feed` route, nothing more. It never auto-opens, and Capabilities ▸
- * Plugins can still switch it off.
+ * Opt-in: a nav row under Browse and a `/home-feed` route, nothing more. It
+ * never auto-opens, and Capabilities ▸ Plugins can still switch it off.
  */
 
 import {
@@ -25,7 +24,7 @@ const plugin: HermesPlugin = {
   id: 'home-feed',
   name: 'Home Feed',
   description: 'Action cards over what needs you, and the Recent tasks row.',
-  defaultEnabled: true,
+  defaultEnabled: false,
   register(ctx) {
     ctx.registerMany([
       {

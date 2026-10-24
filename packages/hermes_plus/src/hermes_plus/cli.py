@@ -467,6 +467,36 @@ def _check_hermes_env(hermes_bin: str | None, h_home: Path) -> dict[str, Any]:
     }
 
 
+def _reclassify_compat_from_raw(inst: Any, raw_version: str) -> Any | None:
+    """Re-run the compatibility check from raw `hermes --version` text.
+
+    The adapter's probe runs the binary against a scrubbed environment and a
+    throwaway home; a cold runtime can make that probe time out while a direct
+    call succeeds, leaving a parsed-version None and a spurious "could not
+    parse" WARN. When the raw text the doctor already collected does parse,
+    rebuild the install record with the recovered version and re-classify.
+    Returns None when the raw text does not parse either (or anything fails).
+    """
+    try:
+        from dataclasses import replace
+
+        from hermes_plus.adapter.version import parse_version_output
+        from hermes_plus.adapter.compat import check_compat
+
+        version, version_tuple, commit = parse_version_output(raw_version)
+        if version_tuple is None:
+            return None
+        repaired = replace(
+            inst,
+            version=version,
+            version_tuple=version_tuple,
+            upstream_commit=getattr(inst, "upstream_commit", None) or commit,
+        )
+        return check_compat(repaired)
+    except Exception:
+        return None
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Run health checks on environment, dependencies, and configuration."""
     checks: list[dict[str, Any]] = []
@@ -526,7 +556,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             "hint": "Install Hermes Agent or run install.sh with HERMES_PLUS_INSTALL_HERMES=1.",
         })
 
-    # Check 2: compat status
+    # Check 2: compat status. When the adapter's probe left the version
+    # unparsed but the direct `hermes --version` fallback above did parse,
+    # re-classify from that raw text before warning about it.
+    if (compat_status == "untested" and "Could not parse" in compat_msg
+            and hermes_ver and hermes_ver != "unknown" and inst is not None):
+        reclassified = _reclassify_compat_from_raw(inst, hermes_ver)
+        if reclassified is not None:
+            compat_status = reclassified.status
+            compat_msg = reclassified.message
     if compat_status == "supported":
         checks.append({
             "name": "hermes_compat",

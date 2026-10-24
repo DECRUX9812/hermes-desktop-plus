@@ -8,9 +8,8 @@
  * `plugin.group_rooms.*` for the room list) — no core UI or backend file is
  * touched.
  *
- * On by default like the workboard: a nav row under Browse and a
- * `/command-room` route, nothing more. It never auto-opens, and Capabilities ▸
- * Plugins can still switch it off.
+ * Opt-in: a nav row under Browse and a `/command-room` route, nothing more. It
+ * never auto-opens, and Capabilities ▸ Plugins can still switch it off.
  */
 
 import {
@@ -28,7 +27,7 @@ const plugin: HermesPlugin = {
   id: 'command-room',
   name: 'Command Room',
   description: 'Escalations, the CEO board, consensus votes, the 24h brief and seat budgets.',
-  defaultEnabled: true,
+  defaultEnabled: false,
   register(ctx) {
     ctx.i18n.register(COMMAND_ROOM_LOCALES)
     ctx.registerMany([

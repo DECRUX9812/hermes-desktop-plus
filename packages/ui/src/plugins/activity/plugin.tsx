@@ -6,9 +6,9 @@
  * plugin's Python side registers itself at register(ctx) time — no core UI or
  * backend file is touched.
  *
- * On by default like the home feed: a nav row under Browse and an
- * `/activity` route (the fork's `#/activity`), nothing more. It never
- * auto-opens, and Capabilities ▸ Plugins can still switch it off.
+ * Opt-in: a nav row under Browse and an `/activity` route (the fork's
+ * `#/activity`), nothing more. It never auto-opens, and Capabilities ▸ Plugins
+ * can still switch it off.
  */
 
 import {
@@ -25,7 +25,7 @@ const plugin: HermesPlugin = {
   id: 'activity',
   name: 'Activity',
   description: 'Recent activity rows and the Now/Next/Done bot rail.',
-  defaultEnabled: true,
+  defaultEnabled: false,
   register(ctx) {
     ctx.registerMany([
       {

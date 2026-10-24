@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,28 @@ from . import hooks, paths, policies, prompts, spool, tools
 
 log = logging.getLogger(__name__)
 
-VERSION = "0.1.0"
+# Kept in sync with plugin.yaml's `version:`; the fallback when the manifest
+# next to this file cannot be read (a stripped install must keep reporting).
+FALLBACK_VERSION = "0.2.0"
+_VERSION_RE = re.compile(r'^\s*version:\s*["\']?([^"\'\s]+)', re.MULTILINE)
+
+
+def _version_from_plugin_yaml(path: Path) -> str | None:
+    """The manifest's `version:` value (stdlib-only parse; the bridge never
+    imports yaml), or None when the file is missing or unparsable."""
+    try:
+        match = _VERSION_RE.search(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    return match.group(1) if match else None
+
+
+def _bridge_version() -> str:
+    """The bridge's real version: its own plugin.yaml, then the fallback."""
+    return _version_from_plugin_yaml(Path(__file__).with_name("plugin.yaml")) or FALLBACK_VERSION
+
+
+VERSION = _bridge_version()
 PLUGIN_NAME = "hermes-plus"
 
 
