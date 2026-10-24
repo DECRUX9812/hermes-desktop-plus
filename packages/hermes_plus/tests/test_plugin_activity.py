@@ -131,6 +131,8 @@ def no_sibling_plugins():
              for name in ("command_room_plugin", "group_rooms_plugin")
              if name in sys.modules}
     yield
+    for name in ("command_room_plugin", "group_rooms_plugin"):
+        sys.modules.pop(name, None)  # drop any fake this test planted
     sys.modules.update(saved)
 
 
